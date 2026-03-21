@@ -46,6 +46,7 @@ type LoginScreenProps = {
 
 export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
   const { signIn, signUp } = useAuth();
+  const passwordInputRef = useRef<TextInput>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -54,6 +55,8 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
   const bob = useRef(new Animated.Value(-12)).current;
   const catDecorFloat = useRef(new Animated.Value(-8)).current;
   const dogDecorFloat = useRef(new Animated.Value(10)).current;
+  const screenOpacity = useRef(new Animated.Value(1)).current;
+  const screenScale = useRef(new Animated.Value(1)).current;
 
   React.useEffect(() => {
     const loop = Animated.loop(
@@ -105,7 +108,22 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
     if (authError) {
       setError(authError);
     } else {
-      onSignedIn?.();
+      Animated.parallel([
+        Animated.timing(screenOpacity, {
+          toValue: 0,
+          duration: 260,
+          useNativeDriver: true,
+        }),
+        Animated.timing(screenScale, {
+          toValue: 0.985,
+          duration: 260,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        onSignedIn?.();
+        screenOpacity.setValue(1);
+        screenScale.setValue(1);
+      });
     }
   };
 
@@ -128,7 +146,7 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
   };
 
   return (
-    <View style={styles.loginScreen}>
+    <Animated.View style={[styles.loginScreen, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
       <StatusBar style="dark" />
       <FloatingDecor hideBottomPaw hiddenIds={['d3', 'd4', 'd5']} flowDirection="down" />
 
@@ -138,15 +156,15 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
         <Text style={styles.brandSubtitle}>BY VIRNELO</Text>
       </View>
 
-      <Animated.View style={[styles.illustrationWrap, { transform: [{ translateY: bob }] }]}> 
+      <Animated.View style={[styles.illustrationWrap, { transform: [{ translateY: bob }] }]}>
         <SvgUri uri={loginIllustratorUri} width={168} height={168} />
       </Animated.View>
 
-      <Animated.View pointerEvents="none" style={[styles.catDecor, { transform: [{ translateY: catDecorFloat }] }]}> 
+      <Animated.View pointerEvents="none" style={[styles.catDecor, { transform: [{ translateY: catDecorFloat }] }]}>
         <SvgUri uri={pczDecorUri} width={30} height={30} />
       </Animated.View>
 
-      <Animated.View pointerEvents="none" style={[styles.dogDecor, { transform: [{ translateY: dogDecorFloat }] }]}> 
+      <Animated.View pointerEvents="none" style={[styles.dogDecor, { transform: [{ translateY: dogDecorFloat }] }]}>
         <SvgUri uri={dogDecorUri} width={30} height={30} />
       </Animated.View>
 
@@ -162,6 +180,9 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
+          returnKeyType="next"
+          blurOnSubmit={false}
+          onSubmitEditing={() => passwordInputRef.current?.focus()}
           placeholder="you@domain.com"
           placeholderTextColor="#a7a7a7"
           style={styles.input}
@@ -169,9 +190,12 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
 
         <Text style={[styles.inputLabel, styles.passwordLabel]}>Password</Text>
         <TextInput
+          ref={passwordInputRef}
           value={password}
           onChangeText={setPassword}
           secureTextEntry
+          returnKeyType="done"
+          onSubmitEditing={onContinue}
           placeholder="Enter password"
           placeholderTextColor="#a7a7a7"
           style={styles.input}
@@ -204,7 +228,7 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
           By continuing, you agree to our Terms and Privacy Policy.
         </Text>
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -325,5 +349,4 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
 });
-
 
