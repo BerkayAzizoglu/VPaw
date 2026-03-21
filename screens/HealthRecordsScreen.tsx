@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Pressable,
@@ -8,6 +8,8 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { useLocale } from '../hooks/useLocale';
+import { getWording } from '../lib/wording';
 
 type HealthRecordsScreenProps = {
   onBack: () => void;
@@ -79,6 +81,9 @@ function StatPill({ kind, text }: { kind: 'record' | 'pulse' | 'clock'; text: st
 }
 
 export default function HealthRecordsScreen({ onBack }: HealthRecordsScreenProps) {
+  const { locale } = useLocale();
+  const copy = getWording(locale).healthRecords;
+
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
@@ -87,26 +92,26 @@ export default function HealthRecordsScreen({ onBack }: HealthRecordsScreenProps
           <Pressable style={styles.backBtn} onPress={onBack}>
             <Icon kind="back" size={22} color="#7a7a7a" />
           </Pressable>
-          <Text style={styles.headerTitle}>Health Records</Text>
+          <Text style={styles.headerTitle}>{copy.title}</Text>
           <View style={styles.headerPh} />
         </View>
 
-        <Text style={styles.pageTitle}>Health Overview</Text>
+        <Text style={styles.pageTitle}>{copy.overview}</Text>
 
         <View style={styles.statsRow}>
-          <StatPill kind="record" text="6 Records" />
-          <StatPill kind="pulse" text="2 Active" />
-          <StatPill kind="clock" text="Up to date" />
+          <StatPill kind="record" text={copy.recordsCount} />
+          <StatPill kind="pulse" text={copy.activeCount} />
+          <StatPill kind="clock" text={copy.upToDate} />
         </View>
 
         <View style={styles.segmentWrap}>
-          <View style={styles.segmentActive}><Text style={styles.segmentActiveText}>Allergies</Text></View>
-          <Text style={styles.segmentText}>Diagnoses</Text>
-          <Text style={styles.segmentText}>Lab Results</Text>
+          <View style={styles.segmentActive}><Text style={styles.segmentActiveText}>{copy.allergies}</Text></View>
+          <Text style={styles.segmentText}>{copy.diagnoses}</Text>
+          <Text style={styles.segmentText}>{copy.labResults}</Text>
         </View>
 
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionHeadText}>ACTIVE</Text>
+          <Text style={styles.sectionHeadText}>{copy.activeSection}</Text>
           <View style={styles.sectionLine} />
         </View>
 
@@ -115,31 +120,31 @@ export default function HealthRecordsScreen({ onBack }: HealthRecordsScreenProps
             <View style={styles.cardTitleRow}>
               <View style={styles.cardIconDanger}><Icon kind="alert" size={22} color="#c96a6a" /></View>
               <View>
-                <Text style={styles.cardTitle}>Chicken Protein</Text>
-                <Text style={styles.cardDate}>Oct 12, 2025</Text>
+                <Text style={styles.cardTitle}>{copy.activeTitle}</Text>
+                <Text style={styles.cardDate}>{copy.activeDate}</Text>
               </View>
             </View>
           </View>
 
-          <Text style={styles.cardBody}>Severe itching and paw biting{`\n`}when consumed.</Text>
+          <Text style={styles.cardBody}>{copy.activeBody}</Text>
 
           <View style={styles.cardDivider} />
 
           <View style={styles.cardBottomRow}>
-            <View style={styles.activePill}><Text style={styles.activePillText}>Active</Text></View>
+            <View style={styles.activePill}><Text style={styles.activePillText}>{copy.activeBadge}</Text></View>
             <View style={styles.severityWrap}>
               <View style={styles.severityDots}>
                 <View style={styles.dotDanger} />
                 <View style={styles.dotDanger} />
                 <View style={styles.dotDanger} />
               </View>
-              <Text style={styles.severityText}>High</Text>
+              <Text style={styles.severityText}>{copy.activeSeverity}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.sectionHead}>
-          <Text style={styles.sectionHeadText}>HISTORY</Text>
+          <Text style={styles.sectionHeadText}>{copy.historySection}</Text>
           <View style={styles.sectionLine} />
         </View>
 
@@ -148,25 +153,25 @@ export default function HealthRecordsScreen({ onBack }: HealthRecordsScreenProps
             <View style={styles.cardTitleRow}>
               <View style={styles.cardIconNeutral}><Icon kind="alert" size={22} color="#9a9a9a" /></View>
               <View>
-                <Text style={styles.cardTitleMuted}>Flea Bites</Text>
-                <Text style={styles.cardDateMuted}>Jun 05, 2024</Text>
+                <Text style={styles.cardTitleMuted}>{copy.historyTitle}</Text>
+                <Text style={styles.cardDateMuted}>{copy.historyDate}</Text>
               </View>
             </View>
           </View>
 
-          <Text style={styles.cardBodyMuted}>Treated with seasonal preventative.</Text>
+          <Text style={styles.cardBodyMuted}>{copy.historyBody}</Text>
 
           <View style={styles.cardDivider} />
 
           <View style={styles.cardBottomRow}>
-            <View style={styles.resolvedPill}><Text style={styles.resolvedPillText}>Resolved</Text></View>
+            <View style={styles.resolvedPill}><Text style={styles.resolvedPillText}>{copy.resolvedBadge}</Text></View>
             <View style={styles.severityWrapMuted}>
               <View style={styles.severityDots}>
                 <View style={styles.dotWarn} />
                 <View style={styles.dotWarn} />
                 <View style={styles.dotEmpty} />
               </View>
-              <Text style={styles.severityText}>Medium</Text>
+              <Text style={styles.severityText}>{copy.historySeverity}</Text>
             </View>
           </View>
         </View>
@@ -174,7 +179,7 @@ export default function HealthRecordsScreen({ onBack }: HealthRecordsScreenProps
 
       <Pressable style={styles.addBtn}>
         <Icon kind="plus" size={20} color="#faf8f5" />
-        <Text style={styles.addBtnText}>Add Record</Text>
+        <Text style={styles.addBtnText}>{copy.addRecord}</Text>
       </Pressable>
     </View>
   );

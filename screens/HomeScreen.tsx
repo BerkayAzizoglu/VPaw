@@ -19,6 +19,10 @@ import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import { Activity, ChevronRight, ClipboardList, FileText, Mars, PawPrint, Pencil, Syringe, Venus } from 'lucide-react-native';
+import type { PetProfile } from '../components/AuthGate';
+import type { WeightPoint } from './WeightTrackingScreen';
+import { useLocale } from '../hooks/useLocale';
+import { useAppSettings } from '../hooks/useAppSettings';
 
 const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
 const AVATAR_IMAGE = 'https://www.figma.com/api/mcp/asset/c1377527-400c-4e5e-8c97-bd4806f77781';
@@ -30,6 +34,7 @@ type HomePetData = {
   id: PetId;
   name: string;
   breed: string;
+  coatPattern: string;
   age: string;
   gender: 'male' | 'female';
   heroImage: string;
@@ -51,15 +56,19 @@ type HomeScreenProps = {
   onOpenHealthRecords?: (petId?: string) => void;
   onOpenVetVisits?: (petId?: string) => void;
   onOpenPetEdit?: (petId?: string) => void;
+  onOpenPetPassport?: (petId?: string) => void;
+  petProfiles?: Record<'luna' | 'milo', PetProfile>;
+  weightsByPet?: Record<'luna' | 'milo', WeightPoint[]>;
   activePetId?: string;
   onChangeActivePet?: (petId: string) => void;
 };
 
-const PETS: HomePetData[] = [
+const BASE_PETS: HomePetData[] = [
   {
     id: 'luna',
     name: 'Luna',
     breed: 'Golden Retriever',
+    coatPattern: 'Solid',
     age: '3 years old',
     gender: 'female',
     heroImage: 'https://www.figma.com/api/mcp/asset/6f25c37a-f633-4891-ba3b-0fab066dac17',
@@ -81,6 +90,7 @@ const PETS: HomePetData[] = [
     id: 'milo',
     name: 'Milo',
     breed: 'British Shorthair',
+    coatPattern: 'Tabby',
     age: '2 years old',
     gender: 'male',
     heroImage: 'https://images.unsplash.com/photo-1511044568932-338cba0ad803?q=80&w=1200&auto=format&fit=crop',
@@ -99,6 +109,52 @@ const PETS: HomePetData[] = [
     ],
   },
 ];
+function formatPetAge(birthDate: string, locale: 'en' | 'tr') {
+  const now = new Date();
+  const [y, m, d] = birthDate.split('-').map((n) => Number(n));
+  const year = Number.isFinite(y) ? y : now.getFullYear();
+  const month = Number.isFinite(m) ? m : 1;
+  const day = Number.isFinite(d) ? d : 1;
+  let years = now.getFullYear() - year;
+  let months = now.getMonth() + 1 - month;
+  if (now.getDate() < day) months -= 1;
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+  years = Math.max(0, years);
+  months = Math.max(0, months);
+  if (locale === 'tr') return `${years} yıl ${months} ay`;
+  return `${years} years ${months} months`;
+}
+function parseWeightKg(value: string) {
+  const parsed = Number(value.replace(',', '.').split(' ')[0]);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatWeightByUnit(weightKg: number, unit: 'kg' | 'lb') {
+  if (unit === 'lb') return `${(weightKg * 2.20462).toFixed(1)} lb`;
+  return `${weightKg.toFixed(1)} kg`;
+}
+
+function formatDeltaByUnit(deltaKg: number, unit: 'kg' | 'lb') {
+  const converted = unit === 'lb' ? deltaKg * 2.20462 : deltaKg;
+  const label = unit === 'lb' ? 'lb' : 'kg';
+  return `${converted >= 0 ? '+' : ''}${converted.toFixed(1)} ${label}`;
+}
+function buildSmoothPath(points: Array<{ x: number; y: number }>) {
+  if (points.length === 0) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i += 1) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const cpx = (prev.x + curr.x) / 2;
+    path += ` Q ${cpx} ${prev.y}, ${curr.x} ${curr.y}`;
+  }
+  return path;
+}
 
 export default function HomeScreen({
   onOpenProfile,
@@ -107,9 +163,15 @@ export default function HomeScreen({
   onOpenHealthRecords,
   onOpenVetVisits,
   onOpenPetEdit,
+  onOpenPetPassport,
+  petProfiles,
+  weightsByPet,
   activePetId,
   onChangeActivePet,
 }: HomeScreenProps) {
+  const { locale } = useLocale();
+  const { settings } = useAppSettings();
+  const isTr = locale === 'tr';
   const [fontsLoaded] = useFonts({
     Nunito_600SemiBold,
     Montserrat_700Bold,
@@ -118,6 +180,8 @@ export default function HomeScreen({
   const enterOpacity = useRef(new Animated.Value(0)).current;
   const enterTranslateY = useRef(new Animated.Value(14)).current;
   const cardDragY = useRef(new Animated.Value(0)).current;
+  const switchFade = useRef(new Animated.Value(1)).current;
+  const switchScale = useRef(new Animated.Value(1)).current;
   const [isGestureActive, setIsGestureActive] = useState(false);
   const [petLockEnabled, setPetLockEnabled] = useState(false);
   const [lockHydrated, setLockHydrated] = useState(false);
@@ -161,14 +225,87 @@ export default function HomeScreen({
     AsyncStorage.setItem(PET_LOCK_STORAGE_KEY, petLockEnabled ? '1' : '0').catch(() => {});
   }, [lockHydrated, petLockEnabled]);
 
-  const activeIndex = useMemo(() => {
-    const idx = PETS.findIndex((p) => p.id === activePetId);
-    return idx >= 0 ? idx : 0;
-  }, [activePetId]);
+  const pets = useMemo<HomePetData[]>(() => {
+    return BASE_PETS.map((p) => {
+      const profile = petProfiles?.[p.id];
+      const history = weightsByPet?.[p.id] ?? [];
+      const latest = history[history.length - 1];
+      const prev = history[history.length - 2];
 
-  const activePet = PETS[activeIndex];
-  const backPet = PETS[(activeIndex + 1) % PETS.length];
-  const prevPet = PETS[(activeIndex - 1 + PETS.length) % PETS.length];
+            let computedWeight = formatWeightByUnit(parseWeightKg(p.weight), settings.weightUnit);
+      let computedDelta = formatDeltaByUnit(parseWeightKg(p.weightDelta), settings.weightUnit);
+
+      if (latest) {
+        computedWeight = formatWeightByUnit(latest.value, settings.weightUnit);
+        if (prev) {
+          const delta = latest.value - prev.value;
+          computedDelta = formatDeltaByUnit(Math.abs(delta) < 0.01 ? 0 : delta, settings.weightUnit);
+        } else {
+          computedDelta = formatDeltaByUnit(0, settings.weightUnit);
+        }
+      }
+
+      if (!profile) {
+        return {
+          ...p,
+          weight: computedWeight,
+          weightDelta: computedDelta,
+        };
+      }
+
+      return {
+        ...p,
+        name: profile.name,
+        breed: profile.breed,
+        coatPattern: profile.coatPattern,
+        age: formatPetAge(profile.birthDate, locale),
+        gender: profile.gender,
+        heroImage: profile.image,
+        weight: computedWeight,
+        weightDelta: computedDelta,
+      };
+    });
+  }, [locale, petProfiles, settings.weightUnit, weightsByPet]);
+
+  const activeIndex = useMemo(() => {
+    const idx = pets.findIndex((p) => p.id === activePetId);
+    return idx >= 0 ? idx : 0;
+  }, [activePetId, pets]);
+
+  const activePet = pets[activeIndex];
+  const backPet = pets[(activeIndex + 1) % pets.length];
+  const prevPet = pets[(activeIndex - 1 + pets.length) % pets.length];
+
+  const activeWeightHistory = (weightsByPet?.[activePet.id] ?? []).slice(-6);
+
+  const weightSpark = useMemo(() => {
+    const chartW = 106;
+    const chartH = 42;
+    const inset = 2;
+    const values = (activeWeightHistory.length > 0 ? activeWeightHistory : [{ value: Number(activePet.weight.split(' ')[0]) || 0 }]).map((p) => p.value);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const span = Math.max(0.1, max - min);
+    const usableW = chartW - inset * 2;
+    const usableH = chartH - inset * 2;
+
+    const points = values.map((v, i) => {
+      const x = inset + (values.length > 1 ? (usableW * i) / (values.length - 1) : usableW / 2);
+      const y = inset + (1 - (v - min) / span) * usableH;
+      return { x, y };
+    });
+
+    const linePath = buildSmoothPath(points);
+    const areaPath = `${linePath} L ${chartW - inset} ${chartH - inset} L ${inset} ${chartH - inset} Z`;
+
+    return {
+      linePath,
+      areaPath,
+      latestDate: activeWeightHistory[activeWeightHistory.length - 1]?.date,
+    };
+  }, [activePet.id, activePet.weight, activeWeightHistory]);
+
+  const weightUpdatedText = weightSpark.latestDate ?? (isTr ? 'Son güncelleme bugün' : 'Last updated today');
 
   useEffect(() => {
     setFrontImageLoaded(false);
@@ -183,27 +320,48 @@ export default function HomeScreen({
     }).start(() => setIsGestureActive(false));
   };
 
+  const finishSwitch = (nextPetId: PetId, settleFrom: number) => {
+    onChangeActivePet?.(nextPetId);
+    cardDragY.setValue(settleFrom);
+    switchFade.setValue(0.86);
+    switchScale.setValue(0.985);
+    Animated.parallel([
+      Animated.spring(cardDragY, {
+        toValue: 0,
+        tension: 72,
+        friction: 10,
+        useNativeDriver: true,
+      }),
+      Animated.timing(switchFade, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(switchScale, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start(() => setIsGestureActive(false));
+  };
+
   const commitSwitchDown = () => {
     Animated.timing(cardDragY, {
       toValue: 190,
-      duration: 170,
+      duration: 150,
       useNativeDriver: true,
     }).start(() => {
-      onChangeActivePet?.(backPet.id);
-      cardDragY.setValue(0);
-      setIsGestureActive(false);
+      finishSwitch(backPet.id, -42);
     });
   };
 
   const commitSwitchUp = () => {
     Animated.timing(cardDragY, {
       toValue: -140,
-      duration: 170,
+      duration: 150,
       useNativeDriver: true,
     }).start(() => {
-      onChangeActivePet?.(prevPet.id);
-      cardDragY.setValue(0);
-      setIsGestureActive(false);
+      finishSwitch(prevPet.id, 42);
     });
   };
 
@@ -259,7 +417,7 @@ export default function HomeScreen({
 
         <View style={styles.heroStackWrap}>
           <View style={styles.backCardWrap}>
-            <ImageBackground source={{ uri: backPet.heroImage }} style={[styles.heroCardBack, !frontImageLoaded && styles.heroCardBackHidden]} imageStyle={styles.heroImageBack}>
+            <ImageBackground key={`back-${backPet.id}-${backPet.heroImage}`} source={{ uri: backPet.heroImage }} style={[styles.heroCardBack, !frontImageLoaded && styles.heroCardBackHidden]} imageStyle={styles.heroImageBack}>
               <View style={styles.heroBottomBack}>
                 <Text style={styles.heroNameBack}>{backPet.name}</Text>
               </View>
@@ -268,16 +426,16 @@ export default function HomeScreen({
 
           <Animated.View
             {...cardPanResponder.panHandlers}
-            style={[styles.frontCardWrap, { transform: [{ translateY: cardDragY }] }]}
+            style={[styles.frontCardWrap, { opacity: switchFade, transform: [{ translateY: cardDragY }, { scale: switchScale }] }]}
           >
-            <ImageBackground source={{ uri: activePet.heroImage }} style={styles.heroCard} imageStyle={styles.heroImage} onLoadEnd={() => setFrontImageLoaded(true)}>
+            <ImageBackground key={`front-${activePet.id}-${activePet.heroImage}`} source={{ uri: activePet.heroImage }} style={styles.heroCard} imageStyle={styles.heroImage} onLoadEnd={() => setFrontImageLoaded(true)}>
                             <Pressable style={styles.heroEditBtn} onPress={() => onOpenPetEdit?.(activePet.id)}>
                 <Pencil size={15} color="rgba(255,255,255,0.9)" strokeWidth={2.4} />
               </Pressable>
 <View style={styles.heroBottom}>
                 <Text style={styles.heroName}>{activePet.name}</Text>
                 <View style={styles.heroMetaRow}>
-                  <Text style={styles.heroBreedPill}>{activePet.breed}</Text>
+                  <Text style={styles.heroBreedPill}>{activePet.breed === 'Other' ? (activePet.coatPattern === 'Other' ? 'Other' : activePet.coatPattern) : activePet.breed}</Text>
                   <Text style={styles.heroMeta}>{activePet.age}</Text>
                 </View>
               </View>
@@ -287,14 +445,14 @@ export default function HomeScreen({
 
         <View style={styles.controlRow}>
           <View style={styles.petDots}>
-{PETS.map((pet, idx) => (
+{pets.map((pet, idx) => (
               <Text key={pet.id} style={[styles.petNumber, activePet.id === pet.id && styles.petNumberActive]}>
                 {idx + 1}
               </Text>
             ))}
           </View>
           <View style={styles.lockWrap}>
-            <Text style={styles.lockText}>Pet lock</Text>
+            <Text style={styles.lockText}>{isTr ? 'Hayvan kilidi' : 'Pet lock'}</Text>
             <View style={styles.lockSwitchWrap}>
               {petLockEnabled ? (
                 <View style={styles.lockPawMark} pointerEvents="none">
@@ -314,18 +472,18 @@ export default function HomeScreen({
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>Health Overview</Text>
+        <Text style={styles.sectionTitle}>{isTr ? 'Sağlık Özeti' : 'Health Overview'}</Text>
 
         <Pressable style={styles.weightCard} onPress={() => onOpenPetProfile?.(activePet.id)}>
           <View style={styles.weightHeader}>
-            <Text style={styles.weightHeaderText}>WEIGHT PROFILE</Text>
+            <Text style={styles.weightHeaderText}>{isTr ? 'KILO PROFILI' : 'WEIGHT PROFILE'}</Text>
             <Text style={styles.weightPill}>{activePet.weightDelta}</Text>
           </View>
 
           <View style={styles.weightMainRow}>
             <View style={styles.weightLeftCol}>
               <Text style={styles.weightValue}>{activePet.weight}</Text>
-              <Text style={styles.weightSub}>Ideal weight maintained</Text>
+              <Text style={styles.weightSub}>{isTr ? 'İdeal kilo korunuyor' : 'Ideal weight maintained'}</Text>
             </View>
 
             <View style={styles.sparkWrap}>
@@ -336,9 +494,9 @@ export default function HomeScreen({
                     <Stop offset="1" stopColor="#c8ddc8" stopOpacity="0" />
                   </LinearGradient>
                 </Defs>
-                <Path d="M2 34 C 14 29, 24 24, 34 23 C 43 22, 49 26, 58 21 C 68 16, 76 12, 84 15 C 92 18, 98 14, 104 11 L 104 40 L 2 40 Z" fill="url(#weightArea)" />
+                <Path d={weightSpark.areaPath} fill="url(#weightArea)" />
                 <Path
-                  d="M2 34 C 14 29, 24 24, 34 23 C 43 22, 49 26, 58 21 C 68 16, 76 12, 84 15 C 92 18, 98 14, 104 11"
+                  d={weightSpark.linePath}
                   stroke="#9cbf9c"
                   strokeWidth={2.6}
                   fill="none"
@@ -347,20 +505,20 @@ export default function HomeScreen({
               </Svg>
             </View>
           </View>
-          <Text style={styles.weightSub2}>Last updated today</Text>
+          <Text style={styles.weightSub2}>{weightUpdatedText}</Text>
         </Pressable>
 
         <View style={styles.gridRow}>
           <MiniCard
             icon={<Syringe size={14} color="#777" strokeWidth={2} />}
-            title="VACCINES"
+            title={isTr ? 'ASILAR' : 'VACCINES'}
             value={activePet.vaccines}
             sub={activePet.vaccinesSub}
             onPress={() => onOpenVaccinations?.(activePet.id)}
           />
           <MiniCard
             icon={<Activity size={14} color="#777" strokeWidth={2} />}
-            title="VET VISITS"
+            title={isTr ? 'VETERINER ZIYARETLERI' : 'VET VISITS'}
             value={activePet.vetVisits}
             sub={activePet.vetVisitsSub}
             onPress={() => onOpenVetVisits?.(activePet.id)}
@@ -368,10 +526,16 @@ export default function HomeScreen({
         </View>
 
         <View style={styles.gridRow}>
-          <MiniCard icon={<FileText size={14} color="#777" strokeWidth={2} />} title="PASSPORT" value="Export" sub="PDF Document" />
+          <MiniCard
+            icon={<FileText size={14} color="#777" strokeWidth={2} />}
+            title={isTr ? 'SAĞLIK PASAPORTU' : 'HEALTH PASSPORT'}
+            value={isTr ? 'Dışa Aktar' : 'Export'}
+            sub={isTr ? 'PDF Belgesi' : 'PDF Document'}
+            onPress={() => onOpenPetPassport?.(activePet.id)}
+          />
           <MiniCard
             icon={<ClipboardList size={14} color="#777" strokeWidth={2} />}
-            title="RECORDS"
+            title={isTr ? 'KAYITLAR' : 'RECORDS'}
             value={activePet.records}
             sub={activePet.recordsSub}
             onPress={() => onOpenHealthRecords?.(activePet.id)}
@@ -379,8 +543,8 @@ export default function HomeScreen({
         </View>
 
         <View style={styles.upcomingHeader}>
-          <Text style={styles.sectionTitle}>Upcoming</Text>
-          <Text style={styles.seeAll}>See all</Text>
+          <Text style={styles.sectionTitle}>{isTr ? 'Yaklaşan' : 'Upcoming'}</Text>
+          <Text style={styles.seeAll}>{isTr ? 'Tümünü gör' : 'See all'}</Text>
         </View>
 
         <View style={styles.upcomingCard}>
@@ -527,8 +691,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     justifyContent: 'flex-end',
-    borderWidth: 2,
-    borderColor: '#b89447',
   },
   heroImage: {
     borderRadius: 20,
@@ -851,6 +1013,27 @@ const styles = StyleSheet.create({
     color: '#8c8c8c',
   },
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

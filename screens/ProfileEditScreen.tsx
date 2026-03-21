@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   ActivityIndicator,
@@ -12,6 +12,8 @@ import {
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { useAuth } from '../hooks/useAuth';
+import { useLocale } from '../hooks/useLocale';
+import { getWording } from '../lib/wording';
 import { supabase } from '../lib/supabase';
 
 type ProfileEditScreenProps = {
@@ -42,6 +44,9 @@ function Icon({ name, size = 22, color = '#6f6f6f' }: { name: 'back' | 'save'; s
 
 export default function ProfileEditScreen({ onBack, onSaved }: ProfileEditScreenProps) {
   const { user } = useAuth();
+  const { locale } = useLocale();
+  const copy = getWording(locale).profileEdit;
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState('');
@@ -94,7 +99,7 @@ export default function ProfileEditScreen({ onBack, onSaved }: ProfileEditScreen
     setSaving(false);
 
     if (error) {
-      Alert.alert('Save failed', 'Profil bilgileri kaydedilemedi. Lütfen tekrar dene.');
+      Alert.alert(copy.saveFailedTitle, copy.saveFailedBody);
       return;
     }
 
@@ -110,7 +115,7 @@ export default function ProfileEditScreen({ onBack, onSaved }: ProfileEditScreen
           <Pressable style={styles.iconBtn} onPress={onBack}>
             <Icon name="back" />
           </Pressable>
-          <Text style={styles.title}>Edit Profile</Text>
+          <Text style={styles.title}>{copy.title}</Text>
           <Pressable style={styles.iconBtn} onPress={handleSave}>
             <Icon name="save" color={saving ? '#b9b9b9' : '#6f6f6f'} />
           </Pressable>
@@ -122,21 +127,21 @@ export default function ProfileEditScreen({ onBack, onSaved }: ProfileEditScreen
           </View>
         ) : (
           <View style={styles.formCard}>
-            <Text style={styles.label}>Name Surname</Text>
+            <Text style={styles.label}>{copy.nameLabel}</Text>
             <TextInput
               value={fullName}
               onChangeText={setFullName}
-              placeholder="Name Surname"
+              placeholder={copy.namePlaceholder}
               placeholderTextColor="#a8a8a8"
               style={styles.input}
               autoCapitalize="words"
             />
 
-            <Text style={[styles.label, styles.labelGap]}>Avatar URL</Text>
+            <Text style={[styles.label, styles.labelGap]}>{copy.avatarLabel}</Text>
             <TextInput
               value={avatarUrl}
               onChangeText={setAvatarUrl}
-              placeholder="https://..."
+              placeholder={copy.avatarPlaceholder}
               placeholderTextColor="#a8a8a8"
               style={styles.input}
               autoCapitalize="none"
@@ -144,7 +149,7 @@ export default function ProfileEditScreen({ onBack, onSaved }: ProfileEditScreen
             />
 
             <Pressable style={[styles.saveBtn, saving && styles.saveBtnDisabled]} onPress={handleSave} disabled={saving}>
-              <Text style={styles.saveBtnText}>{saving ? 'Saving...' : 'Save'}</Text>
+              <Text style={styles.saveBtnText}>{saving ? copy.saving : copy.save}</Text>
             </Pressable>
           </View>
         )}

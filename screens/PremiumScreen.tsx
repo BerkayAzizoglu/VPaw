@@ -1,4 +1,4 @@
-﻿import React from 'react';
+import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   ImageBackground,
@@ -9,6 +9,8 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { useLocale } from '../hooks/useLocale';
+import { getWording } from '../lib/wording';
 
 const HERO_IMAGE = 'https://www.figma.com/api/mcp/asset/a2048b0f-f9f0-482d-a0fe-39eacf8fd35e';
 
@@ -24,21 +26,6 @@ type CompareRow = {
   pro: string | 'check';
   proAccent?: boolean;
 };
-
-const FEATURES: Array<{ title: string; desc: string; icon: FeatureIcon; tall?: boolean }> = [
-  { title: 'Unlimited Pets', desc: 'Add as many furry friends as you want.', icon: 'pets' },
-  { title: 'Full Health History', desc: 'Lifetime access to all medical records.', icon: 'shield' },
-  { title: 'PDF Passport Export', desc: 'Generate official documents for travel.', icon: 'passport' },
-  { title: 'AI Health Insights', desc: "Smart analysis of your pet's health data.", icon: 'ai', tall: true },
-  { title: 'Smart Reminders', desc: 'Never miss a vaccination or pill again.', icon: 'reminder' },
-];
-
-const COMPARISON_ROWS: CompareRow[] = [
-  { label: 'Pet Profiles', free: '1', pro: 'Unlimited', proAccent: true },
-  { label: 'Health Records', free: '3 months', pro: 'Lifetime', proAccent: true },
-  { label: 'PDF Export', free: 'dot', pro: 'check' },
-  { label: 'AI Insights', free: 'dot', pro: 'check' },
-];
 
 function PremiumIcon({ name, size = 20, color = '#c48d42' }: { name: FeatureIcon | 'sparkles' | 'check' | 'back'; size?: number; color?: string }) {
   if (name === 'back') {
@@ -112,7 +99,7 @@ function PremiumIcon({ name, size = 20, color = '#c48d42' }: { name: FeatureIcon
   );
 }
 
-function FeatureCard({ item }: { item: (typeof FEATURES)[number] }) {
+function FeatureCard({ item }: { item: { title: string; desc: string; icon: FeatureIcon; tall?: boolean } }) {
   return (
     <View style={[styles.featureCard, item.tall && styles.featureCardTall]}>
       <View style={styles.featureIconWrap}>
@@ -139,6 +126,24 @@ function CheckPill() {
 }
 
 export default function PremiumScreen({ onBack }: PremiumScreenProps) {
+  const { locale } = useLocale();
+  const copy = getWording(locale).premium;
+
+  const features: Array<{ title: string; desc: string; icon: FeatureIcon; tall?: boolean }> = [
+    { title: copy.features.unlimitedPetsTitle, desc: copy.features.unlimitedPetsDesc, icon: 'pets' },
+    { title: copy.features.fullHealthTitle, desc: copy.features.fullHealthDesc, icon: 'shield' },
+    { title: copy.features.pdfPassportTitle, desc: copy.features.pdfPassportDesc, icon: 'passport' },
+    { title: copy.features.aiTitle, desc: copy.features.aiDesc, icon: 'ai', tall: true },
+    { title: copy.features.remindersTitle, desc: copy.features.remindersDesc, icon: 'reminder' },
+  ];
+
+  const comparisonRows: CompareRow[] = [
+    { label: copy.table.petProfiles, free: copy.table.one, pro: copy.table.unlimited, proAccent: true },
+    { label: copy.table.healthRecords, free: copy.table.threeMonths, pro: copy.table.lifetime, proAccent: true },
+    { label: copy.table.pdfExport, free: 'dot', pro: 'check' },
+    { label: copy.table.aiInsights, free: 'dot', pro: 'check' },
+  ];
+
   return (
     <View style={styles.screen}>
       <StatusBar style="light" />
@@ -151,16 +156,14 @@ export default function PremiumScreen({ onBack }: PremiumScreenProps) {
         <View style={styles.mainContent}>
           <View style={styles.badge}>
             <PremiumIcon name="sparkles" size={12} color="#c48d42" />
-            <Text style={styles.badgeText}>V-Paw Premium</Text>
+            <Text style={styles.badgeText}>{copy.badge}</Text>
           </View>
 
-          <Text style={styles.heading}>Give your pet the{`\n`}care they deserve</Text>
-          <Text style={styles.subHeading}>
-            Unlock the ultimate toolkit to manage{`\n`}your pet's health, records, and daily life{`\n`}with ease.
-          </Text>
+          <Text style={styles.heading}>{copy.heading}</Text>
+          <Text style={styles.subHeading}>{copy.subheading}</Text>
 
           <View style={styles.featureList}>
-            {FEATURES.map((item) => (
+            {features.map((item) => (
               <FeatureCard key={item.title} item={item} />
             ))}
           </View>
@@ -168,15 +171,15 @@ export default function PremiumScreen({ onBack }: PremiumScreenProps) {
           <View style={styles.tableCard}>
             <View style={styles.tableHeader}>
               <Text style={styles.headerSpacer} />
-              <Text style={styles.freeHeader}>FREE</Text>
+              <Text style={styles.freeHeader}>{copy.table.free}</Text>
               <View style={styles.proHeaderWrap}>
                 <PremiumIcon name="sparkles" size={10} color="#c48d42" />
-                <Text style={styles.proHeader}>PRO</Text>
+                <Text style={styles.proHeader}>{copy.table.pro}</Text>
               </View>
             </View>
 
-            {COMPARISON_ROWS.map((row, idx) => (
-              <View key={row.label} style={[styles.tableRow, idx !== COMPARISON_ROWS.length - 1 && styles.tableRowBorder]}>
+            {comparisonRows.map((row, idx) => (
+              <View key={row.label} style={[styles.tableRow, idx !== comparisonRows.length - 1 && styles.tableRowBorder]}>
                 <Text style={styles.rowLabel}>{row.label}</Text>
                 <View style={styles.rowCellCenter}>
                   {row.free === 'dot' ? <Dot /> : <Text style={styles.freeCellText}>{row.free}</Text>}
@@ -198,10 +201,10 @@ export default function PremiumScreen({ onBack }: PremiumScreenProps) {
         <View style={styles.bottomGradient} />
         <Pressable style={styles.upgradeBtn}>
           <PremiumIcon name="sparkles" size={18} color="#faf8f5" />
-          <Text style={styles.upgradeText}>Upgrade for $4.99/mo</Text>
+          <Text style={styles.upgradeText}>{copy.upgrade}</Text>
         </Pressable>
         <Pressable onPress={onBack}>
-          <Text style={styles.maybeLater}>Maybe later</Text>
+          <Text style={styles.maybeLater}>{copy.maybeLater}</Text>
         </Pressable>
       </View>
     </View>
@@ -481,4 +484,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-

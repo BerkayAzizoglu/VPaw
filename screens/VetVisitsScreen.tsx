@@ -8,6 +8,8 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { useLocale } from '../hooks/useLocale';
+import { getWording } from '../lib/wording';
 
 type VetVisitsScreenProps = {
   onBack: () => void;
@@ -25,40 +27,6 @@ type VisitItem = {
   attachments: string[];
   attachPlaceholder?: boolean;
 };
-
-const VISITS: VisitItem[] = [
-  {
-    id: 'v1',
-    icon: 'stethoscope',
-    date: 'Mar 5, 2026',
-    title: 'Annual Checkup\n& Vaccines',
-    clinic: 'Downtown Vet Clinic',
-    doctor: 'Dr. Sarah Jenkins',
-    amount: '$145.00',
-    attachments: ['Checkup_Results...', 'Invoice.pdf'],
-  },
-  {
-    id: 'v2',
-    icon: 'pulse',
-    date: 'Oct 12, 2025',
-    title: 'Ear Infection Follow-up',
-    clinic: 'Downtown Vet Clinic',
-    doctor: 'Dr. Sarah Jenkins',
-    paymentText: 'Add\npayment',
-    attachments: ['Prescription.pd...'],
-  },
-  {
-    id: 'v3',
-    icon: 'stethoscope',
-    date: 'Mar 10, 2025',
-    title: 'Annual Checkup',
-    clinic: 'City Pet Hospital',
-    doctor: 'Dr. Emily Chen',
-    amount: '$120.00',
-    attachments: [],
-    attachPlaceholder: true,
-  },
-];
 
 function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethoscope' | 'wallet' | 'clinic' | 'file' | 'plus' | 'pulse'; size?: number; color?: string }) {
   if (kind === 'back') {
@@ -142,7 +110,7 @@ function AttachmentChip({ label }: { label: string }) {
   );
 }
 
-function TimelineCard({ item }: { item: VisitItem }) {
+function TimelineCard({ item, attachDocuments }: { item: VisitItem; attachDocuments: string }) {
   return (
     <View style={styles.timelineRow}>
       <View style={styles.timelineIconWrap}>
@@ -183,7 +151,7 @@ function TimelineCard({ item }: { item: VisitItem }) {
 
         {item.attachPlaceholder ? (
           <Pressable style={styles.attachPlaceholder}>
-            <Text style={styles.attachPlaceholderText}>+ Attach documents or photos</Text>
+            <Text style={styles.attachPlaceholderText}>{attachDocuments}</Text>
           </Pressable>
         ) : (
           <View style={styles.attachmentsWrap}>
@@ -198,6 +166,43 @@ function TimelineCard({ item }: { item: VisitItem }) {
 }
 
 export default function VetVisitsScreen({ onBack }: VetVisitsScreenProps) {
+  const { locale } = useLocale();
+  const copy = getWording(locale).vetVisits;
+
+  const visits: VisitItem[] = [
+    {
+      id: 'v1',
+      icon: 'stethoscope',
+      date: copy.visits.v1Date,
+      title: copy.visits.v1Title,
+      clinic: copy.visits.v1Clinic,
+      doctor: copy.visits.v1Doctor,
+      amount: '$145.00',
+      attachments: ['Checkup_Results...', 'Invoice.pdf'],
+    },
+    {
+      id: 'v2',
+      icon: 'pulse',
+      date: copy.visits.v2Date,
+      title: copy.visits.v2Title,
+      clinic: copy.visits.v2Clinic,
+      doctor: copy.visits.v2Doctor,
+      paymentText: copy.addPayment,
+      attachments: ['Prescription.pd...'],
+    },
+    {
+      id: 'v3',
+      icon: 'stethoscope',
+      date: copy.visits.v3Date,
+      title: copy.visits.v3Title,
+      clinic: copy.visits.v3Clinic,
+      doctor: copy.visits.v3Doctor,
+      amount: '$120.00',
+      attachments: [],
+      attachPlaceholder: true,
+    },
+  ];
+
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
@@ -206,23 +211,23 @@ export default function VetVisitsScreen({ onBack }: VetVisitsScreenProps) {
           <Pressable style={styles.backBtn} onPress={onBack}>
             <Icon kind="back" size={22} color="#7a7a7a" />
           </Pressable>
-          <Text style={styles.headerTitle}>Vet Visits</Text>
+          <Text style={styles.headerTitle}>{copy.title}</Text>
           <View style={styles.headerPlaceholder} />
         </View>
 
         <View style={styles.titleWrap}>
-          <Text style={styles.title}>Medical History</Text>
+          <Text style={styles.title}>{copy.medicalHistory}</Text>
           <View style={styles.statsRow}>
-            <StatPill icon="stethoscope" text="3 Visits" />
-            <StatPill icon="wallet" text="$265 Total" />
+            <StatPill icon="stethoscope" text={copy.visitsCount} />
+            <StatPill icon="wallet" text={copy.totalCost} />
           </View>
         </View>
 
         <View style={styles.timelineWrap}>
           <View style={styles.timelineLine} />
           <View style={styles.cardsColumn}>
-            {VISITS.map((item) => (
-              <TimelineCard key={item.id} item={item} />
+            {visits.map((item) => (
+              <TimelineCard key={item.id} item={item} attachDocuments={copy.attachDocuments} />
             ))}
           </View>
         </View>
@@ -230,7 +235,7 @@ export default function VetVisitsScreen({ onBack }: VetVisitsScreenProps) {
 
       <Pressable style={styles.addBtn}>
         <Icon kind="plus" size={20} color="#faf8f5" />
-        <Text style={styles.addBtnText}>Add Visit</Text>
+        <Text style={styles.addBtnText}>{copy.addVisit}</Text>
       </Pressable>
     </View>
   );

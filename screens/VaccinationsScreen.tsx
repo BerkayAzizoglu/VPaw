@@ -8,6 +8,8 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { useLocale } from '../hooks/useLocale';
+import { getWording } from '../lib/wording';
 
 type VaccinationsScreenProps = {
   onBack: () => void;
@@ -20,37 +22,6 @@ type HistoryItem = {
   dueDate: string;
   tint?: 'danger' | 'neutral';
 };
-
-const HISTORY: HistoryItem[] = [
-  {
-    name: 'Bordetella',
-    subtitle: 'Kennel Cough',
-    status: 'overdue',
-    dueDate: 'Feb 20, 2026',
-    tint: 'danger',
-  },
-  {
-    name: 'Rabies',
-    subtitle: '1-year vaccine',
-    status: 'dueSoon',
-    dueDate: 'Apr 12, 2026',
-    tint: 'neutral',
-  },
-  {
-    name: 'DHPP',
-    subtitle: 'Distemper, Parvo, etc.',
-    status: 'upToDate',
-    dueDate: 'Jan 15, 2027',
-    tint: 'neutral',
-  },
-  {
-    name: 'Leptospirosis',
-    subtitle: 'Bacterial infection',
-    status: 'upToDate',
-    dueDate: 'Mar 10, 2027',
-    tint: 'neutral',
-  },
-];
 
 function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' | 'warning' | 'clock' | 'check' | 'syringe' | 'arrow'; size?: number; color?: string }) {
   if (kind === 'back') {
@@ -113,11 +84,11 @@ function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' 
   );
 }
 
-function StatusPill({ status }: { status: HistoryItem['status'] }) {
+function StatusPill({ status, labels }: { status: HistoryItem['status']; labels: { overdue: string; dueSoon: string; upToDate: string } }) {
   if (status === 'overdue') {
     return (
       <View style={[styles.pill, styles.pillDanger]}>
-        <Text style={[styles.pillText, styles.pillTextDanger]}>Overdue</Text>
+        <Text style={[styles.pillText, styles.pillTextDanger]}>{labels.overdue}</Text>
       </View>
     );
   }
@@ -125,19 +96,19 @@ function StatusPill({ status }: { status: HistoryItem['status'] }) {
   if (status === 'dueSoon') {
     return (
       <View style={[styles.pill, styles.pillWarn]}>
-        <Text style={[styles.pillText, styles.pillTextWarn]}>Due soon</Text>
+        <Text style={[styles.pillText, styles.pillTextWarn]}>{labels.dueSoon}</Text>
       </View>
     );
   }
 
   return (
     <View style={[styles.pill, styles.pillSafe]}>
-      <Text style={[styles.pillText, styles.pillTextSafe]}>Up to date</Text>
+      <Text style={[styles.pillText, styles.pillTextSafe]}>{labels.upToDate}</Text>
     </View>
   );
 }
 
-function HistoryCard({ item }: { item: HistoryItem }) {
+function HistoryCard({ item, statusLabels, dueDateLabel }: { item: HistoryItem; statusLabels: { overdue: string; dueSoon: string; upToDate: string }; dueDateLabel: string }) {
   const iconColor = item.status === 'overdue' ? '#c96a6a' : item.status === 'dueSoon' ? '#c48d42' : '#718562';
   const iconKind = item.status === 'overdue' ? 'warning' : item.status === 'dueSoon' ? 'clock' : 'shield';
 
@@ -153,13 +124,13 @@ function HistoryCard({ item }: { item: HistoryItem }) {
             <Text style={styles.historySubtitle}>{item.subtitle}</Text>
           </View>
         </View>
-        <StatusPill status={item.status} />
+        <StatusPill status={item.status} labels={statusLabels} />
       </View>
 
       <View style={styles.historyDivider} />
 
       <View style={styles.historyBottom}>
-        <Text style={styles.historyDueLabel}>Due Date</Text>
+        <Text style={styles.historyDueLabel}>{dueDateLabel}</Text>
         <Text style={styles.historyDueValue}>{item.dueDate}</Text>
       </View>
     </View>
@@ -167,6 +138,16 @@ function HistoryCard({ item }: { item: HistoryItem }) {
 }
 
 export default function VaccinationsScreen({ onBack }: VaccinationsScreenProps) {
+  const { locale } = useLocale();
+  const copy = getWording(locale).vaccinations;
+
+  const history: HistoryItem[] = [
+    { name: 'Bordetella', subtitle: copy.history.bordetellaSub, status: 'overdue', dueDate: copy.history.bordetellaDate, tint: 'danger' },
+    { name: copy.nextCard.name, subtitle: copy.history.rabiesSub, status: 'dueSoon', dueDate: copy.history.rabiesDate, tint: 'neutral' },
+    { name: 'DHPP', subtitle: copy.history.dhppSub, status: 'upToDate', dueDate: copy.history.dhppDate, tint: 'neutral' },
+    { name: 'Leptospirosis', subtitle: copy.history.leptoSub, status: 'upToDate', dueDate: copy.history.leptoDate, tint: 'neutral' },
+  ];
+
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
@@ -175,15 +156,15 @@ export default function VaccinationsScreen({ onBack }: VaccinationsScreenProps) 
           <Pressable style={styles.backBtn} onPress={onBack}>
             <Icon kind="back" size={22} color="#7a7a7a" />
           </Pressable>
-          <Text style={styles.headerTitle}>Vaccinations</Text>
+          <Text style={styles.headerTitle}>{copy.title}</Text>
           <View style={styles.headerPlaceholder} />
         </View>
 
         <View style={styles.attentionCard}>
           <View style={styles.attentionTop}>
             <View style={styles.attentionTexts}>
-              <Text style={styles.attentionTitle}>Needs{`\n`}Attention</Text>
-              <Text style={styles.attentionSub}>Let's ensure your pet{`\n`}stays fully protected and{`\n`}healthy.</Text>
+              <Text style={styles.attentionTitle}>{copy.needsAttention}</Text>
+              <Text style={styles.attentionSub}>{copy.needsAttentionBody}</Text>
             </View>
             <View style={styles.attentionIconWrap}>
               <Icon kind="shield" size={28} color="#c96a6a" />
@@ -195,47 +176,47 @@ export default function VaccinationsScreen({ onBack }: VaccinationsScreenProps) 
           <View style={styles.attentionPillsRow}>
             <View style={[styles.pill, styles.pillDanger]}>
               <Icon kind="warning" size={15} color="#b55858" />
-              <Text style={[styles.pillText, styles.pillTextDanger]}>1 Overdue</Text>
+              <Text style={[styles.pillText, styles.pillTextDanger]}>{copy.oneOverdue}</Text>
             </View>
             <View style={[styles.pill, styles.pillWarn]}>
               <Icon kind="clock" size={15} color="#ad762d" />
-              <Text style={[styles.pillText, styles.pillTextWarn]}>1 Due soon</Text>
+              <Text style={[styles.pillText, styles.pillTextWarn]}>{copy.oneDueSoon}</Text>
             </View>
           </View>
 
           <Pressable style={styles.resolveLink}>
-            <Text style={styles.resolveText}>Resolve</Text>
+            <Text style={styles.resolveText}>{copy.resolve}</Text>
             <Icon kind="arrow" size={16} color="#c96a6a" />
           </Pressable>
         </View>
 
-        <Text style={styles.sectionLabel}>NEXT UP</Text>
+        <Text style={styles.sectionLabel}>{copy.nextUp}</Text>
         <View style={styles.nextCard}>
           <View style={styles.nextAccent} />
           <View style={styles.nextIconWrap}>
             <Icon kind="syringe" size={28} color="#c48d42" />
           </View>
           <View style={styles.nextMain}>
-            <Text style={styles.nextTitle}>Rabies</Text>
-            <Text style={styles.nextSub}>1-year vaccine</Text>
+            <Text style={styles.nextTitle}>{copy.nextCard.name}</Text>
+            <Text style={styles.nextSub}>{copy.nextCard.subtitle}</Text>
           </View>
           <View style={styles.nextRight}>
-            <Text style={styles.nextDate}>Apr 12</Text>
-            <Text style={styles.nextSoon}>in 3 weeks</Text>
+            <Text style={styles.nextDate}>{copy.nextCard.date}</Text>
+            <Text style={styles.nextSoon}>{copy.nextCard.inWeeks}</Text>
           </View>
         </View>
 
-        <Text style={styles.sectionLabel}>VACCINE HISTORY</Text>
+        <Text style={styles.sectionLabel}>{copy.vaccineHistory}</Text>
         <View style={styles.historyList}>
-          {HISTORY.map((item) => (
-            <HistoryCard key={item.name} item={item} />
+          {history.map((item) => (
+            <HistoryCard key={`${item.name}-${item.dueDate}`} item={item} statusLabels={copy.statuses} dueDateLabel={copy.dueDate} />
           ))}
         </View>
       </ScrollView>
 
       <Pressable style={styles.addBtn}>
         <Text style={styles.addPlus}>+</Text>
-        <Text style={styles.addText}>Add Vaccination</Text>
+        <Text style={styles.addText}>{copy.addVaccination}</Text>
       </Pressable>
     </View>
   );

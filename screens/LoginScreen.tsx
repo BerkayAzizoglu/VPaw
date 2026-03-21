@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+﻿import React, { useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Animated,
@@ -12,6 +12,7 @@ import {
 import Svg, { Path, SvgUri } from 'react-native-svg';
 import FloatingDecor from '../components/FloatingDecor';
 import { useAuth } from '../hooks/useAuth';
+import { useLocale } from '../hooks/useLocale';
 
 const loginIllustratorUri = Image.resolveAssetSource(require('../assets/vpaw-login-illustrator.svg')).uri;
 const loginFigmaLogoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
@@ -46,6 +47,8 @@ type LoginScreenProps = {
 
 export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
   const { signIn, signUp } = useAuth();
+  const { locale } = useLocale();
+  const isTr = locale === 'tr';
   const passwordInputRef = useRef<TextInput>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -97,7 +100,7 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
   const onContinue = async () => {
     setError(null);
     if (!email.trim() || !password) {
-      setError('Please enter email and password.');
+      setError(isTr ? 'Lütfen e-posta ve şifre girin.' : 'Please enter email and password.');
       return;
     }
 
@@ -130,7 +133,7 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
   const onSignUp = async () => {
     setError(null);
     if (!email.trim() || !password) {
-      setError('Enter email and password to create an account.');
+      setError(isTr ? 'Hesap oluşturmak için e-posta ve şifre girin.' : 'Enter email and password to create an account.');
       return;
     }
 
@@ -141,7 +144,7 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
     if (authError) {
       setError(authError);
     } else {
-      setError('Sign up successful. If required, verify email then tap Sign In.');
+      setError(isTr ? 'Kayıt başarılı. Gerekirse e-postanı doğrula, sonra Giriş Yap\'a dokun.' : 'Sign up successful. If required, verify email then tap Sign In.');
     }
   };
 
@@ -169,12 +172,12 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
       </Animated.View>
 
       <View style={styles.copyBlock}>
-        <Text style={styles.headline}>Care, intelligently{`\n`}simplified.</Text>
-        <Text style={styles.subheadline}>Everything your pet needs,{`\n`}in one place.</Text>
+        <Text style={styles.headline}>{isTr ? 'Bakımı akıllı şekilde yönet.' : 'Care, intelligently\nsimplified.'}</Text>
+        <Text style={styles.subheadline}>{isTr ? 'Hayvanın için gereken her şey, tek yerde.' : 'Everything your pet needs,\nin one place.'}</Text>
       </View>
 
       <View style={styles.authCard}>
-        <Text style={styles.inputLabel}>Email</Text>
+        <Text style={styles.inputLabel}>{isTr ? 'E-posta' : 'Email'}</Text>
         <TextInput
           value={email}
           onChangeText={setEmail}
@@ -183,12 +186,12 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
           returnKeyType="next"
           blurOnSubmit={false}
           onSubmitEditing={() => passwordInputRef.current?.focus()}
-          placeholder="you@domain.com"
+          placeholder={isTr ? 'sen@alanadi.com' : 'you@domain.com'}
           placeholderTextColor="#a7a7a7"
           style={styles.input}
         />
 
-        <Text style={[styles.inputLabel, styles.passwordLabel]}>Password</Text>
+        <Text style={[styles.inputLabel, styles.passwordLabel]}>{isTr ? 'Şifre' : 'Password'}</Text>
         <TextInput
           ref={passwordInputRef}
           value={password}
@@ -196,7 +199,7 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
           secureTextEntry
           returnKeyType="done"
           onSubmitEditing={onContinue}
-          placeholder="Enter password"
+          placeholder={isTr ? 'Şifre gir' : 'Enter password'}
           placeholderTextColor="#a7a7a7"
           style={styles.input}
         />
@@ -204,7 +207,7 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
 
       <View style={styles.ctaBlock}>
         <Pressable style={[styles.primaryButton, loading && { opacity: 0.75 }]} disabled={loading} onPress={onContinue}>
-          <Text style={styles.primaryButtonText}>{loading ? 'Please wait...' : 'Sign In'}</Text>
+          <Text style={styles.primaryButtonText}>{loading ? (isTr ? 'Lütfen bekle...' : 'Please wait...') : (isTr ? 'Giriş Yap' : 'Sign In')}</Text>
         </Pressable>
 
         <View style={styles.socialRow}>
@@ -219,13 +222,13 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
         </View>
 
         <Pressable style={styles.signUpButton} disabled={loading} onPress={onSignUp}>
-          <Text style={styles.signUpButtonText}>Sign up with Email</Text>
+          <Text style={styles.signUpButtonText}>{isTr ? 'E-posta ile Kayıt Ol' : 'Sign up with Email'}</Text>
         </Pressable>
 
         {error ? <Text style={styles.feedbackText}>{error}</Text> : null}
 
         <Text style={styles.authLegalText}>
-          By continuing, you agree to our Terms and Privacy Policy.
+          {isTr ? 'Devam ederek Koşullar ve Gizlilik Politikası\'nı kabul edersin.' : 'By continuing, you agree to our Terms and Privacy Policy.'}
         </Text>
       </View>
     </Animated.View>
@@ -349,4 +352,7 @@ const styles = StyleSheet.create({
     maxWidth: 320,
   },
 });
+
+
+
 
