@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
+import { getLocalItem, setLocalItem } from '../lib/localStore';
 import { useAuth } from '../hooks/useAuth';
 import { useLocale } from '../hooks/useLocale';
 import LoginScreen from '../screens/LoginScreen';
@@ -151,8 +151,15 @@ const INITIAL_PET_PROFILES: Record<PetId, PetProfile> = {
   },
 };
 
-const ACTIVE_PET_STORAGE_KEY = 'vpaw_active_pet_id';
 const PET_PROFILES_STORAGE_KEY = 'vpaw_pet_profiles';
+const RUNTIME_STATE_STORAGE_KEY = 'vpaw_runtime_state';
+const ACTIVE_PET_STORAGE_KEY = 'vpaw_active_pet_id';
+const PET_LOCK_STORAGE_KEY = 'vpaw_pet_lock_enabled';
+
+type RuntimeState = {
+  activePetId: PetId;
+  petLockEnabled: boolean;
+};
 
 function normalizePetProfiles(raw: unknown): Record<PetId, PetProfile> {
   if (!raw || typeof raw !== 'object') return INITIAL_PET_PROFILES;
@@ -227,20 +234,43 @@ export default function AuthGate() {
   const [weightsByPet, setWeightsByPet] = useState<Record<PetId, WeightPoint[]>>(INITIAL_WEIGHTS);
   const [petProfiles, setPetProfiles] = useState<Record<PetId, PetProfile>>(INITIAL_PET_PROFILES);
   const [petHydrated, setPetHydrated] = useState(false);
+  const [petLockEnabled, setPetLockEnabled] = useState(false);
+  const [petLockHydrated, setPetLockHydrated] = useState(false);
+  const [runtimeDebug, setRuntimeDebug] = useState('');
+  const [cloudHydrated, setCloudHydrated] = useState(false);
+  const activePetRef = useRef<PetId>('luna');
+  const petLockRef = useRef(false);
+
+  const persistRuntimeState = (nextActivePetId: PetId, nextPetLockEnabled: boolean) => {
+    Promise.all([
+      setLocalItem(
+        RUNTIME_STATE_STORAGE_KEY,
+        JSON.stringify({ activePetId: nextActivePetId, petLockEnabled: nextPetLockEnabled } satisfies RuntimeState),
+      ),
+      setLocalItem(ACTIVE_PET_STORAGE_KEY, nextActivePetId),
+      setLocalItem(PET_LOCK_STORAGE_KEY, nextPetLockEnabled ? '1' : '0'),
+    ]).catch(() => {});
+  };
 
   const setActivePetWithPersist = (petId: PetId) => {
+    activePetRef.current = petId;
     setActivePetId(petId);
-    AsyncStorage.setItem(ACTIVE_PET_STORAGE_KEY, petId).catch(() => {});
+    persistRuntimeState(petId, petLockRef.current);
+  };
+
+  const setPetLockWithPersist = (enabled: boolean) => {
+    petLockRef.current = enabled;
+    setPetLockEnabled(enabled);
+    persistRuntimeState(activePetRef.current, enabled);
   };
 
   const setPetProfilesWithPersist = (updater: Record<PetId, PetProfile> | ((prev: Record<PetId, PetProfile>) => Record<PetId, PetProfile>)) => {
     setPetProfiles((prev) => {
       const next = typeof updater === 'function' ? (updater as (prev: Record<PetId, PetProfile>) => Record<PetId, PetProfile>)(prev) : updater;
-      AsyncStorage.setItem(PET_PROFILES_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
+      setLocalItem(PET_PROFILES_STORAGE_KEY, JSON.stringify(next)).catch(() => {});
       return next;
     });
   };
-  const [cloudHydrated, setCloudHydrated] = useState(false);
 
   useEffect(() => {
     setRoute('home');
@@ -248,18 +278,39 @@ export default function AuthGate() {
 
   useEffect(() => {
     let mounted = true;
+
     const loadPersistedState = async () => {
       try {
-        const [activeRaw, profilesRaw] = await Promise.all([
-          AsyncStorage.getItem(ACTIVE_PET_STORAGE_KEY),
-          AsyncStorage.getItem(PET_PROFILES_STORAGE_KEY),
+        const [profilesRaw, runtimeRaw, activeRaw, petLockRaw] = await Promise.all([
+          getLocalItem(PET_PROFILES_STORAGE_KEY),
+          getLocalItem(RUNTIME_STATE_STORAGE_KEY),
+          getLocalItem(ACTIVE_PET_STORAGE_KEY),
+          getLocalItem(PET_LOCK_STORAGE_KEY),
         ]);
+
+        let safeActivePet: PetId = activeRaw === 'milo' ? 'milo' : 'luna';
+        let safePetLock = petLockRaw === '1' || petLockRaw === 'true';
+
+        if (runtimeRaw) {
+          try {
+            const parsedRuntime = JSON.parse(runtimeRaw) as Partial<RuntimeState>;
+            if ((parsedRuntime.activePetId === 'luna' || parsedRuntime.activePetId === 'milo') && typeof parsedRuntime.petLockEnabled === 'boolean') {
+              safeActivePet = parsedRuntime.activePetId;
+              safePetLock = parsedRuntime.petLockEnabled;
+            }
+          } catch {
+            // keep fallback keys
+          }
+        }
 
         if (!mounted) return;
 
-        if (activeRaw === 'luna' || activeRaw === 'milo') {
-          setActivePetWithPersist(activeRaw);
-        }
+        activePetRef.current = safeActivePet;
+        petLockRef.current = safePetLock;
+        setActivePetId(safeActivePet);
+        setPetLockEnabled(safePetLock);
+        setRuntimeDebug(`runtime: ${safeActivePet}/${safePetLock ? 'lock-on' : 'lock-off'}`);
+        persistRuntimeState(safeActivePet, safePetLock);
 
         if (profilesRaw) {
           try {
@@ -270,7 +321,10 @@ export default function AuthGate() {
           }
         }
       } finally {
-        if (mounted) setPetHydrated(true);
+        if (mounted) {
+          setPetHydrated(true);
+          setPetLockHydrated(true);
+        }
       }
     };
 
@@ -282,12 +336,7 @@ export default function AuthGate() {
 
   useEffect(() => {
     if (!petHydrated) return;
-    AsyncStorage.setItem(ACTIVE_PET_STORAGE_KEY, activePetId).catch(() => {});
-  }, [activePetId, petHydrated]);
-
-  useEffect(() => {
-    if (!petHydrated) return;
-    AsyncStorage.setItem(PET_PROFILES_STORAGE_KEY, JSON.stringify(petProfiles)).catch(() => {});
+    setLocalItem(PET_PROFILES_STORAGE_KEY, JSON.stringify(petProfiles)).catch(() => {});
   }, [petProfiles, petHydrated]);
 
   useEffect(() => {
@@ -300,7 +349,6 @@ export default function AuthGate() {
       }
 
       const remote = await fetchPetProfilesFromCloud(session.user.id);
-
       if (!mounted) return;
 
       if (remote) {
@@ -320,6 +368,16 @@ export default function AuthGate() {
     if (!petHydrated || !cloudHydrated || !session?.user?.id) return;
     savePetProfilesToCloud(session.user.id, petProfiles).catch(() => {});
   }, [cloudHydrated, petHydrated, petProfiles, session?.user?.id]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'background' || nextState === 'inactive') {
+        persistRuntimeState(activePetRef.current, petLockRef.current);
+      }
+    });
+
+    return () => sub.remove();
+  }, [activePetId, petLockEnabled]);
 
   const openSubRoute = (target: 'vaccinations' | 'healthRecords' | 'vetVisits', backTo: AppRoute) => {
     setSubBackRoute(backTo);
@@ -356,10 +414,11 @@ export default function AuthGate() {
     });
   };
 
-  if (loading || !petHydrated) {
+  if (loading || !petHydrated || !petLockHydrated) {
     return (
       <View style={styles.loadingWrap}>
         <ActivityIndicator size="large" color="#2d2d2d" />
+        {__DEV__ && runtimeDebug ? <Text style={styles.runtimeDebug}>{runtimeDebug}</Text> : null}
       </View>
     );
   }
@@ -502,6 +561,8 @@ export default function AuthGate() {
       weightsByPet={weightsByPet}
       activePetId={activePetId}
       onChangeActivePet={(petId) => setActivePetWithPersist(petId as PetId)}
+      petLockEnabled={petLockEnabled}
+      onChangePetLockEnabled={(next) => setPetLockWithPersist(next)}
     />
   );
 }
@@ -513,10 +574,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  runtimeDebug: {
+    marginTop: 8,
+    color: '#8b8b8b',
+    fontSize: 12,
+  },
 });
-
-
-
-
-
-

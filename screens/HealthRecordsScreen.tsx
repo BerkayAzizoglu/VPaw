@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,9 +11,13 @@ import {
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
 import { getWording } from '../lib/wording';
+import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 
 type HealthRecordsScreenProps = {
   onBack: () => void;
+  onAddRecord?: () => void;
+  status?: 'ready' | ScreenStateMode;
+  onRetry?: () => void;
 };
 
 function Icon({ kind, size = 20, color = '#7a7a7a' }: { kind: 'back' | 'record' | 'pulse' | 'clock' | 'alert' | 'plus'; size?: number; color?: string }) {
@@ -80,9 +85,70 @@ function StatPill({ kind, text }: { kind: 'record' | 'pulse' | 'clock'; text: st
   );
 }
 
-export default function HealthRecordsScreen({ onBack }: HealthRecordsScreenProps) {
+export default function HealthRecordsScreen({ onBack, onAddRecord, status = 'ready', onRetry }: HealthRecordsScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).healthRecords;
+  const isTr = locale === 'tr';
+  const [activeSegment, setActiveSegment] = useState<'allergies' | 'diagnoses' | 'labResults'>('allergies');
+
+  const segmentContent = useMemo(() => {
+    if (activeSegment === 'diagnoses') {
+      return {
+        activeTitle: isTr ? 'Hafif Artrit' : 'Mild Arthritis',
+        activeDate: isTr ? '18 Oca 2026' : 'Jan 18, 2026',
+        activeBody: isTr ? 'Soðuk havalarda eklem hassasiyeti\ngözlemleniyor.' : 'Joint sensitivity observed\nduring cold weather.',
+        activeBadge: isTr ? 'Takipte' : 'Monitoring',
+        activeSeverity: isTr ? 'Orta' : 'Medium',
+        historyTitle: isTr ? 'Kulak Enfeksiyonu' : 'Ear Infection',
+        historyDate: isTr ? '12 Eki 2025' : 'Oct 12, 2025',
+        historyBody: isTr ? 'Tedavi tamamlandý ve tekrar etmedi.' : 'Treatment completed with no recurrence.',
+        resolvedBadge: isTr ? 'Çözüldü' : 'Resolved',
+        historySeverity: isTr ? 'Düþük' : 'Low',
+      };
+    }
+
+    if (activeSegment === 'labResults') {
+      return {
+        activeTitle: isTr ? 'Karaciðer Paneli' : 'Liver Panel',
+        activeDate: isTr ? '03 Þub 2026' : 'Feb 03, 2026',
+        activeBody: isTr ? 'Deðerler referans aralýkta,\n3 ay sonra tekrar önerilir.' : 'Values are within reference range,\nrepeat in 3 months is recommended.',
+        activeBadge: isTr ? 'Normal' : 'Normal',
+        activeSeverity: isTr ? 'Düþük' : 'Low',
+        historyTitle: isTr ? 'Hemogram' : 'Complete Blood Count',
+        historyDate: isTr ? '05 Haz 2024' : 'Jun 05, 2024',
+        historyBody: isTr ? 'Önceki test deðerleri stabil seyretmiþ.' : 'Previous test values were stable.',
+        resolvedBadge: isTr ? 'Arþiv' : 'Archived',
+        historySeverity: isTr ? 'Düþük' : 'Low',
+      };
+    }
+
+    return {
+      activeTitle: copy.activeTitle,
+      activeDate: copy.activeDate,
+      activeBody: copy.activeBody,
+      activeBadge: copy.activeBadge,
+      activeSeverity: copy.activeSeverity,
+      historyTitle: copy.historyTitle,
+      historyDate: copy.historyDate,
+      historyBody: copy.historyBody,
+      resolvedBadge: copy.resolvedBadge,
+      historySeverity: copy.historySeverity,
+    };
+  }, [activeSegment, copy, isTr]);
+
+  const screenState = status;
+  const showMainContent = screenState === 'ready';
+  const showAddButton = screenState !== 'loading' && screenState !== 'error';
+  const stateTitle = screenState === 'loading'
+    ? (isTr ? 'Saðlýk kayýtlarý yükleniyor' : 'Loading health records')
+    : screenState === 'empty'
+      ? (isTr ? 'Henüz saðlýk kaydý yok' : 'No health records yet')
+      : (isTr ? 'Saðlýk kayýtlarý alýnamadý' : 'Could not load health records');
+  const stateBody = screenState === 'loading'
+    ? (isTr ? 'Kayýtlar hazýrlanýyor, lütfen kýsa bir süre bekleyin.' : 'Preparing records, please wait a moment.')
+    : screenState === 'empty'
+      ? (isTr ? 'Ýlk kayýt eklendiðinde bu alan otomatik olarak dolacaktýr.' : 'This area will populate automatically once the first record is added.')
+      : (isTr ? 'Baðlantýyý kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
 
   return (
     <View style={styles.screen}>
@@ -96,91 +162,122 @@ export default function HealthRecordsScreen({ onBack }: HealthRecordsScreenProps
           <View style={styles.headerPh} />
         </View>
 
-        <Text style={styles.pageTitle}>{copy.overview}</Text>
+        {showMainContent ? (
+          <>
+            <Text style={styles.pageTitle}>{copy.overview}</Text>
 
-        <View style={styles.statsRow}>
-          <StatPill kind="record" text={copy.recordsCount} />
-          <StatPill kind="pulse" text={copy.activeCount} />
-          <StatPill kind="clock" text={copy.upToDate} />
-        </View>
+            <View style={styles.statsRow}>
+              <StatPill kind="record" text={copy.recordsCount} />
+              <StatPill kind="pulse" text={copy.activeCount} />
+              <StatPill kind="clock" text={copy.upToDate} />
+            </View>
+            <View style={styles.segmentWrap}>
+              <Pressable style={[styles.segmentPill, activeSegment === 'allergies' && styles.segmentActive]} onPress={() => setActiveSegment('allergies')}>
+                <Text style={activeSegment === 'allergies' ? styles.segmentActiveText : styles.segmentText}>{copy.allergies}</Text>
+              </Pressable>
+              <Pressable style={[styles.segmentPill, activeSegment === 'diagnoses' && styles.segmentActive]} onPress={() => setActiveSegment('diagnoses')}>
+                <Text style={activeSegment === 'diagnoses' ? styles.segmentActiveText : styles.segmentText}>{copy.diagnoses}</Text>
+              </Pressable>
+              <Pressable style={[styles.segmentPill, activeSegment === 'labResults' && styles.segmentActive]} onPress={() => setActiveSegment('labResults')}>
+                <Text style={activeSegment === 'labResults' ? styles.segmentActiveText : styles.segmentText}>{copy.labResults}</Text>
+              </Pressable>
+            </View>
 
-        <View style={styles.segmentWrap}>
-          <View style={styles.segmentActive}><Text style={styles.segmentActiveText}>{copy.allergies}</Text></View>
-          <Text style={styles.segmentText}>{copy.diagnoses}</Text>
-          <Text style={styles.segmentText}>{copy.labResults}</Text>
-        </View>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionHeadText}>{copy.activeSection}</Text>
+              <View style={styles.sectionLine} />
+            </View>
 
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionHeadText}>{copy.activeSection}</Text>
-          <View style={styles.sectionLine} />
-        </View>
+            <View style={styles.activeCard}>
+              <View style={styles.cardTopRow}>
+                <View style={styles.cardTitleRow}>
+                  <View style={styles.cardIconDanger}><Icon kind="alert" size={22} color="#c96a6a" /></View>
+                  <View>
+                    <Text style={styles.cardTitle}>{segmentContent.activeTitle}</Text>
+                    <Text style={styles.cardDate}>{segmentContent.activeDate}</Text>
+                  </View>
+                </View>
+              </View>
 
-        <View style={styles.activeCard}>
-          <View style={styles.cardTopRow}>
-            <View style={styles.cardTitleRow}>
-              <View style={styles.cardIconDanger}><Icon kind="alert" size={22} color="#c96a6a" /></View>
-              <View>
-                <Text style={styles.cardTitle}>{copy.activeTitle}</Text>
-                <Text style={styles.cardDate}>{copy.activeDate}</Text>
+              <Text style={styles.cardBody}>{segmentContent.activeBody}</Text>
+
+              <View style={styles.cardDivider} />
+
+              <View style={styles.cardBottomRow}>
+                <View style={styles.activePill}><Text style={styles.activePillText}>{segmentContent.activeBadge}</Text></View>
+                <View style={styles.severityWrap}>
+                  <View style={styles.severityDots}>
+                    <View style={styles.dotDanger} />
+                    <View style={styles.dotDanger} />
+                    <View style={styles.dotDanger} />
+                  </View>
+                  <Text style={styles.severityText}>{segmentContent.activeSeverity}</Text>
+                </View>
               </View>
             </View>
-          </View>
 
-          <Text style={styles.cardBody}>{copy.activeBody}</Text>
-
-          <View style={styles.cardDivider} />
-
-          <View style={styles.cardBottomRow}>
-            <View style={styles.activePill}><Text style={styles.activePillText}>{copy.activeBadge}</Text></View>
-            <View style={styles.severityWrap}>
-              <View style={styles.severityDots}>
-                <View style={styles.dotDanger} />
-                <View style={styles.dotDanger} />
-                <View style={styles.dotDanger} />
-              </View>
-              <Text style={styles.severityText}>{copy.activeSeverity}</Text>
+            <View style={styles.sectionHead}>
+              <Text style={styles.sectionHeadText}>{copy.historySection}</Text>
+              <View style={styles.sectionLine} />
             </View>
-          </View>
-        </View>
 
-        <View style={styles.sectionHead}>
-          <Text style={styles.sectionHeadText}>{copy.historySection}</Text>
-          <View style={styles.sectionLine} />
-        </View>
+            <View style={styles.historyCard}>
+              <View style={styles.cardTopRow}>
+                <View style={styles.cardTitleRow}>
+                  <View style={styles.cardIconNeutral}><Icon kind="alert" size={22} color="#9a9a9a" /></View>
+                  <View>
+                    <Text style={styles.cardTitleMuted}>{segmentContent.historyTitle}</Text>
+                    <Text style={styles.cardDateMuted}>{segmentContent.historyDate}</Text>
+                  </View>
+                </View>
+              </View>
 
-        <View style={styles.historyCard}>
-          <View style={styles.cardTopRow}>
-            <View style={styles.cardTitleRow}>
-              <View style={styles.cardIconNeutral}><Icon kind="alert" size={22} color="#9a9a9a" /></View>
-              <View>
-                <Text style={styles.cardTitleMuted}>{copy.historyTitle}</Text>
-                <Text style={styles.cardDateMuted}>{copy.historyDate}</Text>
+              <Text style={styles.cardBodyMuted}>{segmentContent.historyBody}</Text>
+
+              <View style={styles.cardDivider} />
+
+              <View style={styles.cardBottomRow}>
+                <View style={styles.resolvedPill}><Text style={styles.resolvedPillText}>{segmentContent.resolvedBadge}</Text></View>
+                <View style={styles.severityWrapMuted}>
+                  <View style={styles.severityDots}>
+                    <View style={styles.dotWarn} />
+                    <View style={styles.dotWarn} />
+                    <View style={styles.dotEmpty} />
+                  </View>
+                  <Text style={styles.severityText}>{segmentContent.historySeverity}</Text>
+                </View>
               </View>
             </View>
-          </View>
-
-          <Text style={styles.cardBodyMuted}>{copy.historyBody}</Text>
-
-          <View style={styles.cardDivider} />
-
-          <View style={styles.cardBottomRow}>
-            <View style={styles.resolvedPill}><Text style={styles.resolvedPillText}>{copy.resolvedBadge}</Text></View>
-            <View style={styles.severityWrapMuted}>
-              <View style={styles.severityDots}>
-                <View style={styles.dotWarn} />
-                <View style={styles.dotWarn} />
-                <View style={styles.dotEmpty} />
-              </View>
-              <Text style={styles.severityText}>{copy.historySeverity}</Text>
-            </View>
-          </View>
-        </View>
+          </>
+        ) : (
+          <ScreenStateCard
+            mode={screenState as ScreenStateMode}
+            title={stateTitle}
+            body={stateBody}
+            actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : undefined}
+            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lütfen kýsa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
+          />
+        )}
       </ScrollView>
 
-      <Pressable style={styles.addBtn}>
-        <Icon kind="plus" size={20} color="#faf8f5" />
-        <Text style={styles.addBtnText}>{copy.addRecord}</Text>
-      </Pressable>
+      {showAddButton ? (
+        <Pressable
+          style={styles.addBtn}
+          onPress={() => {
+            if (onAddRecord) {
+              onAddRecord();
+              return;
+            }
+            Alert.alert(
+              isTr ? 'Yakýnda' : 'Coming soon',
+              isTr ? 'Kayýt ekleme akýþý bir sonraki adýmda aktif edilecek.' : 'Add record flow will be enabled in the next step.',
+            );
+          }}
+        >
+          <Icon kind="plus" size={20} color="#faf8f5" />
+          <Text style={styles.addBtnText}>{copy.addRecord}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -264,6 +361,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 4,
+  },
+  segmentPill: {
+    width: 107,
+    height: 41,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   segmentActive: {
     width: 107,
@@ -534,3 +638,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+

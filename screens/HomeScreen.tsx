@@ -1,4 +1,4 @@
-ï»¿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Animated,
@@ -12,13 +12,12 @@ import {
   Text,
   View,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts } from 'expo-font';
 import { Nunito_600SemiBold } from '@expo-google-fonts/nunito';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
-import { Activity, ChevronRight, ClipboardList, FileText, Mars, PawPrint, Pencil, Syringe, Venus } from 'lucide-react-native';
+import { ChevronRight, FileText, HeartPulse, Mars, PawPrint, Pencil, Stethoscope, Syringe, Venus } from 'lucide-react-native';
 import type { PetProfile } from '../components/AuthGate';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
@@ -26,7 +25,6 @@ import { useAppSettings } from '../hooks/useAppSettings';
 
 const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
 const AVATAR_IMAGE = 'https://www.figma.com/api/mcp/asset/c1377527-400c-4e5e-8c97-bd4806f77781';
-const PET_LOCK_STORAGE_KEY = 'vpaw_pet_lock_enabled';
 
 type PetId = 'luna' | 'milo';
 
@@ -61,6 +59,8 @@ type HomeScreenProps = {
   weightsByPet?: Record<'luna' | 'milo', WeightPoint[]>;
   activePetId?: string;
   onChangeActivePet?: (petId: string) => void;
+  petLockEnabled?: boolean;
+  onChangePetLockEnabled?: (enabled: boolean) => void;
 };
 
 const BASE_PETS: HomePetData[] = [
@@ -81,9 +81,9 @@ const BASE_PETS: HomePetData[] = [
     records: '4 types',
     recordsSub: 'Log health',
     upcoming: [
-      { title: 'Annual checkup', date: 'March 28, 2026 Â· 10:30 AM' },
+      { title: 'Annual checkup', date: 'March 28, 2026 · 10:30 AM' },
       { title: 'Flea & tick prevention', date: 'April 1, 2026' },
-      { title: 'Grooming appointment', date: 'April 15, 2026 Â· 2:00 PM' },
+      { title: 'Grooming appointment', date: 'April 15, 2026 · 2:00 PM' },
     ],
   },
   {
@@ -103,8 +103,8 @@ const BASE_PETS: HomePetData[] = [
     records: '3 types',
     recordsSub: 'Track notes',
     upcoming: [
-      { title: 'Weight review', date: 'March 30, 2026 Â· 09:30 AM' },
-      { title: 'Dental check', date: 'April 5, 2026 Â· 2:00 PM' },
+      { title: 'Weight review', date: 'March 30, 2026 · 09:30 AM' },
+      { title: 'Dental check', date: 'April 5, 2026 · 2:00 PM' },
       { title: 'Vaccine reminder', date: 'April 12, 2026' },
     ],
   },
@@ -124,7 +124,7 @@ function formatPetAge(birthDate: string, locale: 'en' | 'tr') {
   }
   years = Math.max(0, years);
   months = Math.max(0, months);
-  if (locale === 'tr') return `${years} yÄ±l ${months} ay`;
+  if (locale === 'tr') return `${years} yýl ${months} ay`;
   return `${years} years ${months} months`;
 }
 function parseWeightKg(value: string) {
@@ -168,6 +168,8 @@ export default function HomeScreen({
   weightsByPet,
   activePetId,
   onChangeActivePet,
+  petLockEnabled,
+  onChangePetLockEnabled,
 }: HomeScreenProps) {
   const { locale } = useLocale();
   const { settings } = useAppSettings();
@@ -183,8 +185,7 @@ export default function HomeScreen({
   const switchFade = useRef(new Animated.Value(1)).current;
   const switchScale = useRef(new Animated.Value(1)).current;
   const [isGestureActive, setIsGestureActive] = useState(false);
-  const [petLockEnabled, setPetLockEnabled] = useState(false);
-  const [lockHydrated, setLockHydrated] = useState(false);
+  const isPetLockEnabled = petLockEnabled ?? false;
   const [frontImageLoaded, setFrontImageLoaded] = useState(false);
 
   useEffect(() => {
@@ -201,29 +202,6 @@ export default function HomeScreen({
       }),
     ]).start();
   }, [enterOpacity, enterTranslateY]);
-  useEffect(() => {
-    let mounted = true;
-
-    const loadPetLock = async () => {
-      try {
-        const raw = await AsyncStorage.getItem(PET_LOCK_STORAGE_KEY);
-        if (!mounted) return;
-        if (raw != null) setPetLockEnabled(raw === '1');
-      } finally {
-        if (mounted) setLockHydrated(true);
-      }
-    };
-
-    loadPetLock();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!lockHydrated) return;
-    AsyncStorage.setItem(PET_LOCK_STORAGE_KEY, petLockEnabled ? '1' : '0').catch(() => {});
-  }, [lockHydrated, petLockEnabled]);
 
   const pets = useMemo<HomePetData[]>(() => {
     return BASE_PETS.map((p) => {
@@ -305,7 +283,7 @@ export default function HomeScreen({
     };
   }, [activePet.id, activePet.weight, activeWeightHistory]);
 
-  const weightUpdatedText = weightSpark.latestDate ?? (isTr ? 'Son gÃ¼ncelleme bugÃ¼n' : 'Last updated today');
+  const weightUpdatedText = weightSpark.latestDate ?? (isTr ? 'Son güncelleme bugün' : 'Last updated today');
 
   useEffect(() => {
     setFrontImageLoaded(false);
@@ -369,8 +347,8 @@ export default function HomeScreen({
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_, gesture) => !petLockEnabled && Math.abs(gesture.dy) > 6,
-        onMoveShouldSetPanResponderCapture: (_, gesture) => !petLockEnabled && Math.abs(gesture.dy) > 6,
+        onMoveShouldSetPanResponder: (_, gesture) => !isPetLockEnabled && Math.abs(gesture.dy) > 6,
+        onMoveShouldSetPanResponderCapture: (_, gesture) => !isPetLockEnabled && Math.abs(gesture.dy) > 6,
         onPanResponderGrant: () => setIsGestureActive(true),
         onPanResponderMove: (_, gesture) => {
           const nextY = Math.max(-130, Math.min(160, gesture.dy));
@@ -390,7 +368,7 @@ export default function HomeScreen({
         onPanResponderTerminate: resetCard,
         onPanResponderTerminationRequest: () => false,
       }),
-    [backPet.id, cardDragY, onChangeActivePet, petLockEnabled, prevPet.id],
+    [backPet.id, cardDragY, isPetLockEnabled, onChangeActivePet, prevPet.id],
   );
 
   return (
@@ -454,16 +432,16 @@ export default function HomeScreen({
           <View style={styles.lockWrap}>
             <Text style={styles.lockText}>{isTr ? 'Hayvan kilidi' : 'Pet lock'}</Text>
             <View style={styles.lockSwitchWrap}>
-              {petLockEnabled ? (
+              {isPetLockEnabled ? (
                 <View style={styles.lockPawMark} pointerEvents="none">
                   <PawPrint size={9} color="#5f7f59" strokeWidth={3.1} />
                 </View>
               ) : null}
               <View style={styles.lockSwitchScale}>
                 <Switch
-                  value={petLockEnabled}
-                  onValueChange={setPetLockEnabled}
-                  thumbColor={petLockEnabled ? '#ffffff' : '#f4f4f4'}
+                  value={isPetLockEnabled}
+                  onValueChange={(next) => onChangePetLockEnabled?.(next)}
+                  thumbColor={isPetLockEnabled ? '#ffffff' : '#f4f4f4'}
                   trackColor={{ false: '#d8d8d8', true: '#6e8f66' }}
                   ios_backgroundColor="#d8d8d8"
                 />
@@ -472,7 +450,7 @@ export default function HomeScreen({
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>{isTr ? 'SaÄŸlÄ±k Ã–zeti' : 'Health Overview'}</Text>
+        <Text style={styles.sectionTitle}>{isTr ? 'Saðlýk Özeti' : 'Health Overview'}</Text>
 
         <Pressable style={styles.weightCard} onPress={() => onOpenPetProfile?.(activePet.id)}>
           <View style={styles.weightHeader}>
@@ -483,7 +461,7 @@ export default function HomeScreen({
           <View style={styles.weightMainRow}>
             <View style={styles.weightLeftCol}>
               <Text style={styles.weightValue}>{activePet.weight}</Text>
-              <Text style={styles.weightSub}>{isTr ? 'Ä°deal kilo korunuyor' : 'Ideal weight maintained'}</Text>
+              <Text style={styles.weightSub}>{isTr ? 'Ýdeal kilo korunuyor' : 'Ideal weight maintained'}</Text>
             </View>
 
             <View style={styles.sparkWrap}>
@@ -517,8 +495,8 @@ export default function HomeScreen({
             onPress={() => onOpenVaccinations?.(activePet.id)}
           />
           <MiniCard
-            icon={<Activity size={14} color="#777" strokeWidth={2} />}
-            title={isTr ? 'VETERINER ZIYARETLERI' : 'VET VISITS'}
+            icon={<Stethoscope size={14} color="#6f7b63" strokeWidth={2.2} />}
+            title={isTr ? 'VETERINER' : 'VET'}
             value={activePet.vetVisits}
             sub={activePet.vetVisitsSub}
             onPress={() => onOpenVetVisits?.(activePet.id)}
@@ -528,14 +506,14 @@ export default function HomeScreen({
         <View style={styles.gridRow}>
           <MiniCard
             icon={<FileText size={14} color="#777" strokeWidth={2} />}
-            title={isTr ? 'SAÄžLIK PASAPORTU' : 'HEALTH PASSPORT'}
-            value={isTr ? 'DÄ±ÅŸa Aktar' : 'Export'}
+            title={isTr ? 'SAÐLIK PASAPORTU' : 'HEALTH PASSPORT'}
+            value={isTr ? 'Dýþa Aktar' : 'Export'}
             sub={isTr ? 'PDF Belgesi' : 'PDF Document'}
             onPress={() => onOpenPetPassport?.(activePet.id)}
           />
           <MiniCard
-            icon={<ClipboardList size={14} color="#777" strokeWidth={2} />}
-            title={isTr ? 'KAYITLAR' : 'RECORDS'}
+            icon={<HeartPulse size={14} color="#c96a6a" strokeWidth={2.2} />}
+            title={isTr ? 'SAGLIK KAYITLARI' : 'HEALTH RECORDS'}
             value={activePet.records}
             sub={activePet.recordsSub}
             onPress={() => onOpenHealthRecords?.(activePet.id)}
@@ -543,8 +521,8 @@ export default function HomeScreen({
         </View>
 
         <View style={styles.upcomingHeader}>
-          <Text style={styles.sectionTitle}>{isTr ? 'YaklaÅŸan' : 'Upcoming'}</Text>
-          <Text style={styles.seeAll}>{isTr ? 'TÃ¼mÃ¼nÃ¼ gÃ¶r' : 'See all'}</Text>
+          <Text style={styles.sectionTitle}>{isTr ? 'Yaklaþan' : 'Upcoming'}</Text>
+          <Text style={styles.seeAll}>{isTr ? 'Tümünü gör' : 'See all'}</Text>
         </View>
 
         <View style={styles.upcomingCard}>
@@ -1013,6 +991,10 @@ const styles = StyleSheet.create({
     color: '#8c8c8c',
   },
 });
+
+
+
+
 
 
 

@@ -1,6 +1,7 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,9 +11,14 @@ import {
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
 import { getWording } from '../lib/wording';
+import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 
 type VaccinationsScreenProps = {
   onBack: () => void;
+  onResolve?: () => void;
+  onAddVaccination?: () => void;
+  status?: 'ready' | ScreenStateMode;
+  onRetry?: () => void;
 };
 
 type HistoryItem = {
@@ -137,9 +143,10 @@ function HistoryCard({ item, statusLabels, dueDateLabel }: { item: HistoryItem; 
   );
 }
 
-export default function VaccinationsScreen({ onBack }: VaccinationsScreenProps) {
+export default function VaccinationsScreen({ onBack, onResolve, onAddVaccination, status = 'ready', onRetry }: VaccinationsScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).vaccinations;
+  const isTr = locale === 'tr';
 
   const history: HistoryItem[] = [
     { name: 'Bordetella', subtitle: copy.history.bordetellaSub, status: 'overdue', dueDate: copy.history.bordetellaDate, tint: 'danger' },
@@ -147,6 +154,20 @@ export default function VaccinationsScreen({ onBack }: VaccinationsScreenProps) 
     { name: 'DHPP', subtitle: copy.history.dhppSub, status: 'upToDate', dueDate: copy.history.dhppDate, tint: 'neutral' },
     { name: 'Leptospirosis', subtitle: copy.history.leptoSub, status: 'upToDate', dueDate: copy.history.leptoDate, tint: 'neutral' },
   ];
+
+  const screenState = status;
+  const showMainContent = screenState === 'ready';
+  const showAddButton = screenState !== 'loading' && screenState !== 'error';
+  const stateTitle = screenState === 'loading'
+    ? (isTr ? 'Aþýlar yükleniyor' : 'Loading vaccinations')
+    : screenState === 'empty'
+      ? (isTr ? 'Henüz aþý kaydý yok' : 'No vaccination records yet')
+      : (isTr ? 'Aþý kayýtlarý alýnamadý' : 'Could not load vaccinations');
+  const stateBody = screenState === 'loading'
+    ? (isTr ? 'Kayýtlar hazýrlanýyor, lütfen kýsa bir süre bekleyin.' : 'Preparing records, please wait a moment.')
+    : screenState === 'empty'
+      ? (isTr ? 'Ýlk aþý kaydýný eklediðinizde bu alan otomatik olarak dolacaktýr.' : 'This area will populate automatically once you add the first vaccination.')
+      : (isTr ? 'Baðlantýyý kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
 
   return (
     <View style={styles.screen}>
@@ -160,64 +181,102 @@ export default function VaccinationsScreen({ onBack }: VaccinationsScreenProps) 
           <View style={styles.headerPlaceholder} />
         </View>
 
-        <View style={styles.attentionCard}>
-          <View style={styles.attentionTop}>
-            <View style={styles.attentionTexts}>
-              <Text style={styles.attentionTitle}>{copy.needsAttention}</Text>
-              <Text style={styles.attentionSub}>{copy.needsAttentionBody}</Text>
+        {showMainContent ? (
+          <>
+            <View style={styles.attentionCard}>
+              <View style={styles.attentionTop}>
+                <View style={styles.attentionTexts}>
+                  <Text style={styles.attentionTitle}>{copy.needsAttention}</Text>
+                  <Text style={styles.attentionSub}>{copy.needsAttentionBody}</Text>
+                </View>
+                <View style={styles.attentionIconWrap}>
+                  <Icon kind="shield" size={28} color="#c96a6a" />
+                </View>
+              </View>
+
+              <View style={styles.attentionDivider} />
+
+              <View style={styles.attentionPillsRow}>
+                <View style={[styles.pill, styles.pillDanger]}>
+                  <Icon kind="warning" size={15} color="#b55858" />
+                  <Text style={[styles.pillText, styles.pillTextDanger]}>{copy.oneOverdue}</Text>
+                </View>
+                <View style={[styles.pill, styles.pillWarn]}>
+                  <Icon kind="clock" size={15} color="#ad762d" />
+                  <Text style={[styles.pillText, styles.pillTextWarn]}>{copy.oneDueSoon}</Text>
+                </View>
+              </View>
+
+              <Pressable
+                style={styles.resolveLink}
+                onPress={() => {
+                  if (onResolve) {
+                    onResolve();
+                    return;
+                  }
+                  Alert.alert(
+                    isTr ? 'Yakýnda' : 'Coming soon',
+                    isTr ? 'Bu iþlem bir sonraki adýmda aktif edilecek.' : 'This action will be enabled in the next step.',
+                  );
+                }}
+              >
+                <Text style={styles.resolveText}>{copy.resolve}</Text>
+                <Icon kind="arrow" size={16} color="#c96a6a" />
+              </Pressable>
             </View>
-            <View style={styles.attentionIconWrap}>
-              <Icon kind="shield" size={28} color="#c96a6a" />
+
+            <Text style={styles.sectionLabel}>{copy.nextUp}</Text>
+            <View style={styles.nextCard}>
+              <View style={styles.nextAccent} />
+              <View style={styles.nextIconWrap}>
+                <Icon kind="syringe" size={28} color="#c48d42" />
+              </View>
+              <View style={styles.nextMain}>
+                <Text style={styles.nextTitle}>{copy.nextCard.name}</Text>
+                <Text style={styles.nextSub}>{copy.nextCard.subtitle}</Text>
+              </View>
+              <View style={styles.nextRight}>
+                <Text style={styles.nextDate}>{copy.nextCard.date}</Text>
+                <Text style={styles.nextSoon}>{copy.nextCard.inWeeks}</Text>
+              </View>
             </View>
-          </View>
 
-          <View style={styles.attentionDivider} />
-
-          <View style={styles.attentionPillsRow}>
-            <View style={[styles.pill, styles.pillDanger]}>
-              <Icon kind="warning" size={15} color="#b55858" />
-              <Text style={[styles.pillText, styles.pillTextDanger]}>{copy.oneOverdue}</Text>
+            <Text style={styles.sectionLabel}>{copy.vaccineHistory}</Text>
+            <View style={styles.historyList}>
+              {history.map((item) => (
+                <HistoryCard key={`${item.name}-${item.dueDate}`} item={item} statusLabels={copy.statuses} dueDateLabel={copy.dueDate} />
+              ))}
             </View>
-            <View style={[styles.pill, styles.pillWarn]}>
-              <Icon kind="clock" size={15} color="#ad762d" />
-              <Text style={[styles.pillText, styles.pillTextWarn]}>{copy.oneDueSoon}</Text>
-            </View>
-          </View>
-
-          <Pressable style={styles.resolveLink}>
-            <Text style={styles.resolveText}>{copy.resolve}</Text>
-            <Icon kind="arrow" size={16} color="#c96a6a" />
-          </Pressable>
-        </View>
-
-        <Text style={styles.sectionLabel}>{copy.nextUp}</Text>
-        <View style={styles.nextCard}>
-          <View style={styles.nextAccent} />
-          <View style={styles.nextIconWrap}>
-            <Icon kind="syringe" size={28} color="#c48d42" />
-          </View>
-          <View style={styles.nextMain}>
-            <Text style={styles.nextTitle}>{copy.nextCard.name}</Text>
-            <Text style={styles.nextSub}>{copy.nextCard.subtitle}</Text>
-          </View>
-          <View style={styles.nextRight}>
-            <Text style={styles.nextDate}>{copy.nextCard.date}</Text>
-            <Text style={styles.nextSoon}>{copy.nextCard.inWeeks}</Text>
-          </View>
-        </View>
-
-        <Text style={styles.sectionLabel}>{copy.vaccineHistory}</Text>
-        <View style={styles.historyList}>
-          {history.map((item) => (
-            <HistoryCard key={`${item.name}-${item.dueDate}`} item={item} statusLabels={copy.statuses} dueDateLabel={copy.dueDate} />
-          ))}
-        </View>
+          </>
+        ) : (
+          <ScreenStateCard
+            mode={screenState as ScreenStateMode}
+            title={stateTitle}
+            body={stateBody}
+            actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : undefined}
+            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lütfen kýsa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
+          />
+        )}
       </ScrollView>
 
-      <Pressable style={styles.addBtn}>
-        <Text style={styles.addPlus}>+</Text>
-        <Text style={styles.addText}>{copy.addVaccination}</Text>
-      </Pressable>
+      {showAddButton ? (
+        <Pressable
+          style={styles.addBtn}
+          onPress={() => {
+            if (onAddVaccination) {
+              onAddVaccination();
+              return;
+            }
+            Alert.alert(
+              isTr ? 'Yakýnda' : 'Coming soon',
+              isTr ? 'Aþý ekleme akýþý bir sonraki adýmda aktif edilecek.' : 'Add vaccination flow will be enabled in the next step.',
+            );
+          }}
+        >
+          <Text style={styles.addPlus}>+</Text>
+          <Text style={styles.addText}>{copy.addVaccination}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -561,3 +620,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+

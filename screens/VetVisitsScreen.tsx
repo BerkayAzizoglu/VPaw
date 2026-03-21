@@ -1,6 +1,7 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -10,12 +11,17 @@ import {
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
 import { getWording } from '../lib/wording';
+import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 
 type VetVisitsScreenProps = {
   onBack: () => void;
+  onAddVisit?: () => void;
+  status?: 'ready' | ScreenStateMode;
+  onRetry?: () => void;
+  visits?: VisitItem[];
 };
 
-type VisitItem = {
+export type VisitItem = {
   id: string;
   icon: 'stethoscope' | 'pulse';
   date: string;
@@ -165,11 +171,12 @@ function TimelineCard({ item, attachDocuments }: { item: VisitItem; attachDocume
   );
 }
 
-export default function VetVisitsScreen({ onBack }: VetVisitsScreenProps) {
+export default function VetVisitsScreen({ onBack, onAddVisit, status = 'ready', onRetry, visits }: VetVisitsScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).vetVisits;
+  const isTr = locale === 'tr';
 
-  const visits: VisitItem[] = [
+  const fallbackVisits: VisitItem[] = [
     {
       id: 'v1',
       icon: 'stethoscope',
@@ -203,6 +210,28 @@ export default function VetVisitsScreen({ onBack }: VetVisitsScreenProps) {
     },
   ];
 
+  const visitsData = visits ?? fallbackVisits;
+  const totalAmount = visitsData.reduce((sum, item) => {
+    const raw = item.amount ? Number(item.amount.replace(/[^0-9.-]/g, '')) : 0;
+    return sum + (Number.isFinite(raw) ? raw : 0);
+  }, 0);
+  const visitsCountText = isTr ? `${visitsData.length} Ziyaret` : `${visitsData.length} Visits`;
+  const totalCostText = totalAmount > 0 ? `$${totalAmount.toFixed(0)} ${isTr ? 'Toplam' : 'Total'}` : copy.totalCost;
+
+  const screenState = status;
+  const showMainContent = screenState === 'ready';
+  const showAddButton = screenState !== 'loading' && screenState !== 'error';
+  const stateTitle = screenState === 'loading'
+    ? (isTr ? 'Ziyaretler yükleniyor' : 'Loading vet visits')
+    : screenState === 'empty'
+      ? (isTr ? 'Henüz ziyaret kaydý yok' : 'No vet visits yet')
+      : (isTr ? 'Ziyaret kayýtlarý alýnamadý' : 'Could not load vet visits');
+  const stateBody = screenState === 'loading'
+    ? (isTr ? 'Geçmiþ kayýtlar hazýrlanýyor, lütfen bekleyin.' : 'Preparing your medical history, please wait.')
+    : screenState === 'empty'
+      ? (isTr ? 'Ýlk veteriner ziyaretinizi eklediðinizde bu alan otomatik olarak dolacaktýr.' : 'This area will fill automatically once your first visit is added.')
+      : (isTr ? 'Baðlantýyý kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
+
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
@@ -215,28 +244,54 @@ export default function VetVisitsScreen({ onBack }: VetVisitsScreenProps) {
           <View style={styles.headerPlaceholder} />
         </View>
 
-        <View style={styles.titleWrap}>
-          <Text style={styles.title}>{copy.medicalHistory}</Text>
-          <View style={styles.statsRow}>
-            <StatPill icon="stethoscope" text={copy.visitsCount} />
-            <StatPill icon="wallet" text={copy.totalCost} />
-          </View>
-        </View>
+        {showMainContent ? (
+          <>
+            <View style={styles.titleWrap}>
+              <Text style={styles.title}>{copy.medicalHistory}</Text>
+              <View style={styles.statsRow}>
+                <StatPill icon="stethoscope" text={visitsCountText} />
+                <StatPill icon="wallet" text={totalCostText} />
+              </View>
+            </View>
 
-        <View style={styles.timelineWrap}>
-          <View style={styles.timelineLine} />
-          <View style={styles.cardsColumn}>
-            {visits.map((item) => (
-              <TimelineCard key={item.id} item={item} attachDocuments={copy.attachDocuments} />
-            ))}
-          </View>
-        </View>
+            <View style={styles.timelineWrap}>
+              <View style={styles.timelineLine} />
+              <View style={styles.cardsColumn}>
+                {visitsData.map((item) => (
+                  <TimelineCard key={item.id} item={item} attachDocuments={copy.attachDocuments} />
+                ))}
+              </View>
+            </View>
+          </>
+        ) : (
+          <ScreenStateCard
+            mode={screenState as ScreenStateMode}
+            title={stateTitle}
+            body={stateBody}
+            actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : undefined}
+            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lütfen kýsa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
+          />
+        )}
       </ScrollView>
 
-      <Pressable style={styles.addBtn}>
-        <Icon kind="plus" size={20} color="#faf8f5" />
-        <Text style={styles.addBtnText}>{copy.addVisit}</Text>
-      </Pressable>
+      {showAddButton ? (
+        <Pressable
+          style={styles.addBtn}
+          onPress={() => {
+            if (onAddVisit) {
+              onAddVisit();
+              return;
+            }
+            Alert.alert(
+              isTr ? 'Yakýnda' : 'Coming soon',
+              isTr ? 'Ziyaret ekleme akýþý bir sonraki adýmda aktif edilecek.' : 'Add visit flow will be enabled in the next step.',
+            );
+          }}
+        >
+          <Icon kind="plus" size={20} color="#faf8f5" />
+          <Text style={styles.addBtnText}>{copy.addVisit}</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

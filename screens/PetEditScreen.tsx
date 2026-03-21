@@ -25,7 +25,7 @@ type PetEditScreenProps = {
   onSaved: (pet: PetProfile) => void;
 };
 
-type PickerField = 'name' | 'petType' | 'gender' | 'breed' | 'coatPattern' | 'birthDate' | 'vaccines' | 'surgeries' | 'allergies' | 'diabetes' | 'photo' | null;
+type PickerField = 'name' | 'microchip' | 'petType' | 'gender' | 'breed' | 'coatPattern' | 'birthDate' | 'vaccines' | 'surgeries' | 'allergies' | 'diabetes' | 'photo' | null;
 
 const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
 
@@ -374,11 +374,13 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
   const [otherSurgeryText, setOtherSurgeryText] = useState('');
   const [otherDiabetesText, setOtherDiabetesText] = useState('');
   const [nameDraft, setNameDraft] = useState(pet.name);
+  const [microchipDraft, setMicrochipDraft] = useState(pet.microchip || '');
 
   useEffect(() => {
     setDraft(pet);
     setBirthPicker(parseBirthDate(pet.birthDate));
     setNameDraft(pet.name);
+    setMicrochipDraft(pet.microchip || '');
   }, [pet]);
 
   const breedOptions = useMemo(() => sortAlpha(draft.petType === 'Cat' ? CAT_BREEDS : DOG_BREEDS), [draft.petType]);
@@ -401,6 +403,7 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
 
   const getNextDraft = (prev: PetProfile, field: Exclude<PickerField, null>, value: string): PetProfile => {
     if (field === 'name') return { ...prev, name: value.trim() || prev.name };
+    if (field === 'microchip') return { ...prev, microchip: value.trim() || prev.microchip };
     if (field === 'petType') {
       const nextType = value as 'Dog' | 'Cat';
       const nextBreed = nextType === 'Dog' ? 'Golden Retriever' : 'British Shorthair';
@@ -470,7 +473,7 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
     }
     setPickerField(null);
 
-    const basicInfoFields: Array<Exclude<PickerField, null>> = ['name', 'petType', 'gender', 'breed', 'coatPattern', 'birthDate'];
+    const basicInfoFields: Array<Exclude<PickerField, null>> = ['name', 'microchip', 'petType', 'gender', 'breed', 'coatPattern', 'birthDate'];
     const requiresConfirm = basicInfoFields.includes(field);
     const changed = JSON.stringify(next) !== JSON.stringify(draft);
     if (!changed) return;
@@ -478,12 +481,16 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
     if (requiresConfirm) {
       const confirmTitle = field === 'name'
         ? (isTr ? 'Ýsmi güncelle?' : 'Apply name update?')
-        : field === 'birthDate'
+        : field === 'microchip'
+          ? (isTr ? 'Mikroçipi güncelle?' : 'Apply microchip update?')
+          : field === 'birthDate'
           ? (isTr ? 'Doðum tarihini güncelle?' : 'Apply birth date change?')
           : (isTr ? 'Temel bilgiyi güncelle?' : 'Apply this basic info change?');
       const confirmMessage = field === 'name'
         ? (isTr ? 'Ýsim deðiþikliði geçmiþ kayýtlarla eþleþmeyi etkileyebilir. Devam edilsin mi?' : 'Changing the pet name can affect how past records are matched. Continue?')
-        : field === 'birthDate'
+        : field === 'microchip'
+          ? (isTr ? 'Mikroçip deðiþikliði resmi kayýt eþleþmesini etkileyebilir. Devam edilsin mi?' : 'Changing the microchip can affect official record matching. Continue?')
+          : field === 'birthDate'
           ? (isTr ? 'Doðum tarihi deðiþikliði yaþ hesabýný ve özetleri etkileyebilir. Devam edilsin mi?' : 'Changing birth date updates age calculations and can affect summaries/insights for this pet profile. Continue?')
           : (isTr ? 'Bu deðiþiklik bu profilin özet ve içgörülerini etkileyebilir. Devam edilsin mi?' : 'This update can affect summaries and insights for this pet profile. Continue?');
       Alert.alert(
@@ -563,7 +570,8 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
             <InfoRow label={isTr ? 'Cinsiyet' : 'Gender'} value={draft.gender === 'female' ? 'Female' : 'Male'} onPress={() => setPickerField('gender')} />
             <InfoRow label={isTr ? 'Irk' : 'Breed'} value={draft.breed} onPress={() => setPickerField('breed')} />
             <InfoRow label={isTr ? 'Pattern' : 'Coat Pattern'} value={draft.coatPattern} onPress={() => setPickerField('coatPattern')} />
-            <InfoRow label={isTr ? 'Yaþ' : 'Age'} value={formatAgeLabel(draft.birthDate)} onPress={() => { setBirthPicker(parseBirthDate(draft.birthDate)); setPickerField('birthDate'); }} noBorder />
+            <InfoRow label={isTr ? 'Yaþ' : 'Age'} value={formatAgeLabel(draft.birthDate)} onPress={() => { setBirthPicker(parseBirthDate(draft.birthDate)); setPickerField('birthDate'); }} />
+            <InfoRow label={isTr ? 'Mikroçip' : 'Microchip'} value={draft.microchip || '-'} onPress={() => { setMicrochipDraft(draft.microchip || ''); setPickerField('microchip'); }} noBorder />
           </View>
 
           <Text style={styles.sectionTitle}>{isTr ? 'Týbbi Geçmiþ' : 'Medical History'}</Text>
@@ -616,6 +624,8 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
             <Text style={styles.modalTitle}>
               {pickerField === 'name'
                 ? (isTr ? 'Ýsim Düzenle' : 'Edit Name')
+                : pickerField === 'microchip'
+                  ? (isTr ? 'Mikroçip Düzenle' : 'Edit Microchip')
                 : pickerField === 'birthDate'
                   ? (isTr ? 'Doðum Tarihi' : 'Birth Date')
                   : pickerField === 'photo'
@@ -648,6 +658,25 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
                 />
                 <Pressable style={styles.applyDateBtn} onPress={() => applySelection(nameDraft)}>
                   <Text style={styles.applyDateBtnText}>{isTr ? 'Ýsmi Uygula' : 'Apply Name'}</Text>
+                </Pressable>
+              </View>
+            ) : pickerField === 'microchip' ? (
+              <View style={styles.nameEditorWrap}>
+                <Text style={styles.nameEditorHint}>{isTr ? 'Mikroçip numarasýný güncelle.' : 'Update the microchip number.'}</Text>
+                <TextInput
+                  value={microchipDraft}
+                  onChangeText={setMicrochipDraft}
+                  placeholder={isTr ? 'Örn. 985 112 004 883' : 'e.g. 985 112 004 883'}
+                  placeholderTextColor="rgba(45,45,45,0.35)"
+                  autoFocus
+                  maxLength={32}
+                  keyboardType="numbers-and-punctuation"
+                  returnKeyType="done"
+                  onSubmitEditing={() => applySelection(microchipDraft)}
+                  style={styles.nameEditorInput}
+                />
+                <Pressable style={styles.applyDateBtn} onPress={() => applySelection(microchipDraft)}>
+                  <Text style={styles.applyDateBtnText}>{isTr ? 'Mikroçipi Uygula' : 'Apply Microchip'}</Text>
                 </Pressable>
               </View>
             ) : pickerField === 'birthDate' ? (
@@ -1187,6 +1216,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
+
+
+
+
 
 
 

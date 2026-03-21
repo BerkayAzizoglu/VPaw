@@ -1,4 +1,4 @@
-ï»¿import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Animated,
@@ -202,6 +202,9 @@ export default function WeightTrackingScreen({ onBack, onOpenHealthRecords, onOp
   );
 
   const reference = useMemo(() => getWeightReference(petType, petBreed, copy.refs), [petType, petBreed, copy.refs]);
+  const microchipDisplay = microchip && microchip.trim().length > 0
+    ? microchip
+    : (locale === 'tr' ? 'Tanýmlý deðil' : 'Not set');
 
   useEffect(() => {
     setSelectedIndex(Math.max(entries.length - 1, 0));
@@ -384,7 +387,7 @@ export default function WeightTrackingScreen({ onBack, onOpenHealthRecords, onOp
 
           <Text style={styles.currentSub}>{displayedDate}</Text>
           <Text style={styles.referenceLine}>{copy.healthyReferencePrefix} ({petBreed ?? petType ?? 'Pet'}): {rangeText}</Text>
-          {microchip ? <Text style={styles.microchipLine}>{locale === 'tr' ? 'MikroÃ§ip: ' : 'Microchip: '}{microchip}</Text> : null}
+          <Text style={styles.microchipLine}>{locale === 'tr' ? 'Mikroçip: ' : 'Microchip: '}{microchipDisplay}</Text>
           <Text style={styles.referenceNote}>{reference.note}</Text>
         </View>
 
@@ -912,5 +915,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
 
 
