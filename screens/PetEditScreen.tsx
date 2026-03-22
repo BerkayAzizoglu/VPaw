@@ -23,6 +23,8 @@ type PetEditScreenProps = {
   pet: PetProfile;
   onBack: () => void;
   onSaved: (pet: PetProfile) => void;
+  isNewPet?: boolean;
+  onCreated?: (pet: PetProfile) => void;
 };
 
 type PickerField = 'name' | 'microchip' | 'petType' | 'gender' | 'breed' | 'coatPattern' | 'birthDate' | 'vaccines' | 'surgeries' | 'allergies' | 'diabetes' | 'photo' | null;
@@ -364,7 +366,7 @@ function sortAlpha(items: string[]) {
   return hasOther ? [...core, 'Other'] : core;
 }
 
-export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenProps) {
+export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, onCreated }: PetEditScreenProps) {
   const [fontsLoaded] = useFonts({ Nunito_600SemiBold, Montserrat_700Bold });
   const { locale } = useLocale();
   const isTr = locale === 'tr';
@@ -480,24 +482,24 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
 
     if (requiresConfirm) {
       const confirmTitle = field === 'name'
-        ? (isTr ? 'Ýsmi güncelle?' : 'Apply name update?')
+        ? (isTr ? 'ï¿½smi gï¿½ncelle?' : 'Apply name update?')
         : field === 'microchip'
-          ? (isTr ? 'Mikroçipi güncelle?' : 'Apply microchip update?')
+          ? (isTr ? 'Mikroï¿½ipi gï¿½ncelle?' : 'Apply microchip update?')
           : field === 'birthDate'
-          ? (isTr ? 'Doðum tarihini güncelle?' : 'Apply birth date change?')
-          : (isTr ? 'Temel bilgiyi güncelle?' : 'Apply this basic info change?');
+          ? (isTr ? 'Doï¿½um tarihini gï¿½ncelle?' : 'Apply birth date change?')
+          : (isTr ? 'Temel bilgiyi gï¿½ncelle?' : 'Apply this basic info change?');
       const confirmMessage = field === 'name'
-        ? (isTr ? 'Ýsim deðiþikliði geçmiþ kayýtlarla eþleþmeyi etkileyebilir. Devam edilsin mi?' : 'Changing the pet name can affect how past records are matched. Continue?')
+        ? (isTr ? 'ï¿½sim deï¿½iï¿½ikliï¿½i geï¿½miï¿½ kayï¿½tlarla eï¿½leï¿½meyi etkileyebilir. Devam edilsin mi?' : 'Changing the pet name can affect how past records are matched. Continue?')
         : field === 'microchip'
-          ? (isTr ? 'Mikroçip deðiþikliði resmi kayýt eþleþmesini etkileyebilir. Devam edilsin mi?' : 'Changing the microchip can affect official record matching. Continue?')
+          ? (isTr ? 'Mikroï¿½ip deï¿½iï¿½ikliï¿½i resmi kayï¿½t eï¿½leï¿½mesini etkileyebilir. Devam edilsin mi?' : 'Changing the microchip can affect official record matching. Continue?')
           : field === 'birthDate'
-          ? (isTr ? 'Doðum tarihi deðiþikliði yaþ hesabýný ve özetleri etkileyebilir. Devam edilsin mi?' : 'Changing birth date updates age calculations and can affect summaries/insights for this pet profile. Continue?')
-          : (isTr ? 'Bu deðiþiklik bu profilin özet ve içgörülerini etkileyebilir. Devam edilsin mi?' : 'This update can affect summaries and insights for this pet profile. Continue?');
+          ? (isTr ? 'Doï¿½um tarihi deï¿½iï¿½ikliï¿½i yaï¿½ hesabï¿½nï¿½ ve ï¿½zetleri etkileyebilir. Devam edilsin mi?' : 'Changing birth date updates age calculations and can affect summaries/insights for this pet profile. Continue?')
+          : (isTr ? 'Bu deï¿½iï¿½iklik bu profilin ï¿½zet ve iï¿½gï¿½rï¿½lerini etkileyebilir. Devam edilsin mi?' : 'This update can affect summaries and insights for this pet profile. Continue?');
       Alert.alert(
         confirmTitle,
         confirmMessage,
         [
-          { text: isTr ? 'Ýptal' : 'Cancel', style: 'cancel' },
+          { text: isTr ? 'ï¿½ptal' : 'Cancel', style: 'cancel' },
           { text: isTr ? 'Uygula' : 'Apply', style: 'destructive', onPress: () => setDraft(next) },
         ],
       );
@@ -565,21 +567,21 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
 
           <Text style={styles.sectionTitle}>{isTr ? 'Temel Bilgiler' : 'Basic Info'}</Text>
           <View style={styles.sectionCard}>
-            <InfoRow label={isTr ? 'Ýsim' : 'Name'} value={draft.name} onPress={() => { setNameDraft(draft.name); setPickerField('name'); }} />
-            <InfoRow label={isTr ? 'Hayvan Türü' : 'Pet Type'} value={draft.petType} onPress={() => setPickerField('petType')} />
+            <InfoRow label={isTr ? 'ï¿½sim' : 'Name'} value={draft.name} onPress={() => { setNameDraft(draft.name); setPickerField('name'); }} />
+            <InfoRow label={isTr ? 'Hayvan Tï¿½rï¿½' : 'Pet Type'} value={draft.petType} onPress={() => setPickerField('petType')} />
             <InfoRow label={isTr ? 'Cinsiyet' : 'Gender'} value={draft.gender === 'female' ? 'Female' : 'Male'} onPress={() => setPickerField('gender')} />
             <InfoRow label={isTr ? 'Irk' : 'Breed'} value={draft.breed} onPress={() => setPickerField('breed')} />
             <InfoRow label={isTr ? 'Pattern' : 'Coat Pattern'} value={draft.coatPattern} onPress={() => setPickerField('coatPattern')} />
-            <InfoRow label={isTr ? 'Yaþ' : 'Age'} value={formatAgeLabel(draft.birthDate)} onPress={() => { setBirthPicker(parseBirthDate(draft.birthDate)); setPickerField('birthDate'); }} />
-            <InfoRow label={isTr ? 'Mikroçip' : 'Microchip'} value={draft.microchip || '-'} onPress={() => { setMicrochipDraft(draft.microchip || ''); setPickerField('microchip'); }} noBorder />
+            <InfoRow label={isTr ? 'Yaï¿½' : 'Age'} value={formatAgeLabel(draft.birthDate)} onPress={() => { setBirthPicker(parseBirthDate(draft.birthDate)); setPickerField('birthDate'); }} />
+            <InfoRow label={isTr ? 'Mikroï¿½ip' : 'Microchip'} value={draft.microchip || '-'} onPress={() => { setMicrochipDraft(draft.microchip || ''); setPickerField('microchip'); }} noBorder />
           </View>
 
-          <Text style={styles.sectionTitle}>{isTr ? 'Týbbi Geçmiþ' : 'Medical History'}</Text>
+          <Text style={styles.sectionTitle}>{isTr ? 'Tï¿½bbi Geï¿½miï¿½' : 'Medical History'}</Text>
           <View style={styles.sectionCard}>
-            <InfoRow label={isTr ? 'Aþýlar' : 'Vaccinations'} value={vaccineSummary} onPress={() => setPickerField('vaccines')} />
+            <InfoRow label={isTr ? 'Aï¿½ï¿½lar' : 'Vaccinations'} value={vaccineSummary} onPress={() => setPickerField('vaccines')} />
             <InfoRow label={isTr ? 'Ameliyatlar' : 'Surgeries'} value={surgerySummary} onPress={() => setPickerField('surgeries')} />
             <InfoRow label={isTr ? 'Alerjiler' : 'Allergies'} value={allergySummary} onPress={() => setPickerField('allergies')} />
-            <InfoRow label={isTr ? 'Þeker' : 'Diabetes'} value={diabetesSummary} onPress={() => setPickerField('diabetes')} />
+            <InfoRow label={isTr ? 'ï¿½eker' : 'Diabetes'} value={diabetesSummary} onPress={() => setPickerField('diabetes')} />
 
             <View style={styles.toggleRow}>
               <Text style={styles.label}>{isTr ? 'Ic parazit rutini' : 'Internal parasite routine'}</Text>
@@ -607,13 +609,20 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
               />
             </View>
           </View>
-          <Pressable style={styles.saveBtn} onPress={() => onSaved({
-            ...draft,
-            vaccines: draft.vaccinations.length ? draft.vaccinations.map((v) => v.name).join(', ') : 'None',
-            surgeries: draft.surgeriesLog.length ? draft.surgeriesLog.map((s) => s.name).join(', ') : 'None',
-            chronicConditions: { allergies: draft.allergiesLog.length > 0, diabetes: draft.diabetesLog.length > 0 },
-          })}>
-            <Text style={styles.saveText}>{isTr ? 'Deðiþiklikleri Kaydet' : 'Save Changes'}</Text>
+          <Pressable style={styles.saveBtn} onPress={() => {
+            const saved = {
+              ...draft,
+              vaccines: draft.vaccinations.length ? draft.vaccinations.map((v) => v.name).join(', ') : 'None',
+              surgeries: draft.surgeriesLog.length ? draft.surgeriesLog.map((s) => s.name).join(', ') : 'None',
+              chronicConditions: { allergies: draft.allergiesLog.length > 0, diabetes: draft.diabetesLog.length > 0 },
+            };
+            if (isNewPet && onCreated) {
+              onCreated(saved);
+            } else {
+              onSaved(saved);
+            }
+          }}>
+            <Text style={styles.saveText}>{isNewPet ? (isTr ? 'HayvanÄ± Ekle' : 'Add Pet') : (isTr ? 'DeÄŸiÅŸiklikleri Kaydet' : 'Save Changes')}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -623,32 +632,32 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>
               {pickerField === 'name'
-                ? (isTr ? 'Ýsim Düzenle' : 'Edit Name')
+                ? (isTr ? 'ï¿½sim Dï¿½zenle' : 'Edit Name')
                 : pickerField === 'microchip'
-                  ? (isTr ? 'Mikroçip Düzenle' : 'Edit Microchip')
+                  ? (isTr ? 'Mikroï¿½ip Dï¿½zenle' : 'Edit Microchip')
                 : pickerField === 'birthDate'
-                  ? (isTr ? 'Doðum Tarihi' : 'Birth Date')
+                  ? (isTr ? 'Doï¿½um Tarihi' : 'Birth Date')
                   : pickerField === 'photo'
-                    ? (isTr ? 'Fotoðraf' : 'Photo')
+                    ? (isTr ? 'Fotoï¿½raf' : 'Photo')
                     : pickerField === 'coatPattern'
-                      ? (isTr ? 'Tüy Deseni' : 'Coat Pattern')
+                      ? (isTr ? 'Tï¿½y Deseni' : 'Coat Pattern')
                       : pickerField === 'vaccines'
-                        ? (isTr ? 'Aþýlar' : 'Vaccinations')
+                        ? (isTr ? 'Aï¿½ï¿½lar' : 'Vaccinations')
                         : pickerField === 'surgeries'
                           ? (isTr ? 'Ameliyatlar' : 'Surgeries')
                           : pickerField === 'allergies'
                             ? (isTr ? 'Alerjiler' : 'Allergies')
                             : pickerField === 'diabetes'
                               ? (isTr ? 'Diyabet' : 'Diabetes')
-                              : (isTr ? 'Seçim' : 'Option')}
+                              : (isTr ? 'Seï¿½im' : 'Option')}
             </Text>
             {pickerField === 'name' ? (
               <View style={styles.nameEditorWrap}>
-                <Text style={styles.nameEditorHint}>{isTr ? 'Evcil dostunun adýný güncelle.' : "Update your pet's display name."}</Text>
+                <Text style={styles.nameEditorHint}>{isTr ? 'Evcil dostunun adï¿½nï¿½ gï¿½ncelle.' : "Update your pet's display name."}</Text>
                 <TextInput
                   value={nameDraft}
                   onChangeText={setNameDraft}
-                  placeholder={isTr ? 'Örn. Milo' : 'e.g. Milo'}
+                  placeholder={isTr ? 'ï¿½rn. Milo' : 'e.g. Milo'}
                   placeholderTextColor="rgba(45,45,45,0.35)"
                   autoFocus
                   maxLength={24}
@@ -657,16 +666,16 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
                   style={styles.nameEditorInput}
                 />
                 <Pressable style={styles.applyDateBtn} onPress={() => applySelection(nameDraft)}>
-                  <Text style={styles.applyDateBtnText}>{isTr ? 'Ýsmi Uygula' : 'Apply Name'}</Text>
+                  <Text style={styles.applyDateBtnText}>{isTr ? 'ï¿½smi Uygula' : 'Apply Name'}</Text>
                 </Pressable>
               </View>
             ) : pickerField === 'microchip' ? (
               <View style={styles.nameEditorWrap}>
-                <Text style={styles.nameEditorHint}>{isTr ? 'Mikroçip numarasýný güncelle.' : 'Update the microchip number.'}</Text>
+                <Text style={styles.nameEditorHint}>{isTr ? 'Mikroï¿½ip numarasï¿½nï¿½ gï¿½ncelle.' : 'Update the microchip number.'}</Text>
                 <TextInput
                   value={microchipDraft}
                   onChangeText={setMicrochipDraft}
-                  placeholder={isTr ? 'Örn. 985 112 004 883' : 'e.g. 985 112 004 883'}
+                  placeholder={isTr ? 'ï¿½rn. 985 112 004 883' : 'e.g. 985 112 004 883'}
                   placeholderTextColor="rgba(45,45,45,0.35)"
                   autoFocus
                   maxLength={32}
@@ -676,15 +685,15 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
                   style={styles.nameEditorInput}
                 />
                 <Pressable style={styles.applyDateBtn} onPress={() => applySelection(microchipDraft)}>
-                  <Text style={styles.applyDateBtnText}>{isTr ? 'Mikroçipi Uygula' : 'Apply Microchip'}</Text>
+                  <Text style={styles.applyDateBtnText}>{isTr ? 'Mikroï¿½ipi Uygula' : 'Apply Microchip'}</Text>
                 </Pressable>
               </View>
             ) : pickerField === 'birthDate' ? (
               <View>
                 <View style={styles.dateHeadRow}>
-                  <Text style={styles.dateHeadLabel}>{isTr ? 'Gün' : 'Day'}</Text>
+                  <Text style={styles.dateHeadLabel}>{isTr ? 'Gï¿½n' : 'Day'}</Text>
                   <Text style={styles.dateHeadLabel}>{isTr ? 'Ay' : 'Month'}</Text>
-                  <Text style={styles.dateHeadLabel}>{isTr ? 'Yýl' : 'Year'}</Text>
+                  <Text style={styles.dateHeadLabel}>{isTr ? 'Yï¿½l' : 'Year'}</Text>
                 </View>
 
                 <View style={styles.datePickerRow}>
@@ -726,7 +735,7 @@ export default function PetEditScreen({ pet, onBack, onSaved }: PetEditScreenPro
                 </View>
 
                 <Pressable style={styles.applyDateBtn} onPress={() => applySelection(toBirthDateIso(birthPicker))}>
-                  <Text style={styles.applyDateBtnText}>{isTr ? 'Doðum Tarihini Uygula' : 'Apply Birth Date'}</Text>
+                  <Text style={styles.applyDateBtnText}>{isTr ? 'Doï¿½um Tarihini Uygula' : 'Apply Birth Date'}</Text>
                 </Pressable>
               </View>
             ) : (

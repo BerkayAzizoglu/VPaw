@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VPaw Health Hub - Premium Mockup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  :root {
+    /*
+      COLOR SYSTEM — Semantic Groups
+      ────────────────────────────────
+      CLINICAL (done at clinic):  Sky blue
+      ONGOING (being managed):    Lavender / Rose
+      EVENTS (point-in-time):     Peach / Sand
+      VITALS (tracking):          Mint
+      STATUS: Sage=done, Peach=upcoming, Rose=active/alert
+    */
+
+    /* Clinical — vaccines, lab results */
+    --clinical: #a2c4d4;
+    --clinical-soft: rgba(162,196,212,0.15);
+    --clinical-text: #6a9ab5;
+
+    /* Ongoing — medications, conditions */
+    --ongoing: #b8a8d0;
+    --ongoing-soft: rgba(184,168,208,0.15);
+    --ongoing-text: #9a88bb;
+
+    /* Alert — active conditions */
+    --alert: #d4a0a8;
+    --alert-soft: rgba(212,160,168,0.15);
+    --alert-text: #c48a94;
+
+    /* Events — vet visits, surgeries */
+    --event: #d4b896;
+    --event-soft: rgba(212,184,150,0.15);
+    --event-text: #b8a07a;
+
+    /* Vitals — weight */
+    --vital: #a0c8b0;
+    --vital-soft: rgba(160,200,176,0.15);
+    --vital-text: #7aaa90;
+
+    /* Status */
+    --done: #a0c8b0;
+    --done-soft: rgba(160,200,176,0.12);
+    --done-text: #7aaa90;
+
+    --upcoming: #d4b896;
+    --upcoming-soft: rgba(212,184,150,0.15);
+    --upcoming-text: #c4a87a;
+
+    --active-alert: #d4a0a8;
+    --active-soft: rgba(212,160,168,0.12);
+    --active-text: #c48a94;
+
+    --planned: #a2c4d4;
+    --planned-soft: rgba(162,196,212,0.12);
+    --planned-text: #6a9ab5;
+
+    /* Dark surfaces */
+    --surface-1: #1c1c1e;
+    --surface-2: #232326;
+    --surface-3: #2c2c2e;
+    --surface-4: #38383a;
+    --surface-card: #28282a;
+
+    --text-w1: rgba(255,255,255,0.92);
+    --text-w2: rgba(255,255,255,0.55);
+    --text-w3: rgba(255,255,255,0.30);
+    --text-w4: rgba(255,255,255,0.10);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+    background: #111;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+    padding: 40px 20px;
+    gap: 40px;
+    flex-wrap: wrap;
+  }
+
+  .phone-label {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+
+  /* ── PHONE FRAME ── */
+  .phone-wrap { display: flex; flex-direction: column; align-items: center; }
+  .phone {
+    width: 393px;
+    height: 852px;
+    background: var(--surface-1);
+    border-radius: 48px;
+    overflow: hidden;
+    box-shadow:
+      0 0 0 1.5px #333,
+      0 0 0 4px #222,
+      0 0 0 5.5px #333,
+      0 24px 80px rgba(0,0,0,0.6);
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .dynamic-island {
+    width: 126px;
+    height: 36px;
+    background: #000;
+    border-radius: 20px;
+    position: absolute;
+    top: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+  }
+
+  .phone-screen {
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-top: 60px;
+    padding-bottom: 100px;
+  }
+  .phone-screen::-webkit-scrollbar { display: none; }
+
+  /* ── HEADER ── */
+  .hub-header { padding: 8px 24px 18px; }
+  .hub-title {
+    font-size: 30px;
+    font-weight: 800;
+    color: var(--text-w1);
+    letter-spacing: -0.5px;
+  }
+  .hub-pet-info {
+    font-size: 13px;
+    color: var(--text-w2);
+    margin-top: 3px;
+    font-weight: 500;
+  }
+
+  /* ── SUMMARY CARDS ── */
+  .summary-scroll {
+    display: flex;
+    gap: 10px;
+    padding: 0 24px 18px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    cursor: grab;
+  }
+  .summary-scroll::-webkit-scrollbar { display: none; }
+
+  .summary-card {
+    flex-shrink: 0;
+    width: 112px;
+    padding: 16px 12px 14px;
+    background: var(--surface-card);
+    border-radius: 18px;
+    text-align: center;
+    scroll-snap-align: start;
+    border: 1px solid var(--text-w4);
+    transition: transform 0.2s;
+  }
+  .summary-card:active { transform: scale(0.96); }
+
+  .s-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 10px;
+  }
+  .s-icon svg { width: 20px; height: 20px; }
+  .s-icon.vital { background: var(--vital-soft); }
+  .s-icon.clinical { background: var(--clinical-soft); }
+  .s-icon.event { background: var(--event-soft); }
+  .s-icon.ongoing { background: var(--ongoing-soft); }
+
+  .s-value {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--text-w1);
+    letter-spacing: -0.3px;
+  }
+  .s-unit { font-size: 11px; font-weight: 600; color: var(--text-w3); }
+  .s-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-w3);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-top: 2px;
+  }
+  .s-badge {
+    font-size: 10px;
+    font-weight: 700;
+    margin-top: 6px;
+    padding: 3px 8px;
+    border-radius: 7px;
+    display: inline-block;
+  }
+  .s-badge.vital { background: var(--vital-soft); color: var(--vital-text); }
+  .s-badge.upcoming { background: var(--upcoming-soft); color: var(--upcoming-text); }
+  .s-badge.neutral { background: var(--text-w4); color: var(--text-w2); }
+  .s-badge.ongoing { background: var(--ongoing-soft); color: var(--ongoing-text); }
+
+  /* ── SECTION LABEL ── */
+  .section-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-w3);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    padding: 6px 24px 10px;
+  }
+
+  /* ── CATEGORY LIST ── */
+  .cat-list { padding: 0 16px; }
+
+  .cat-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 14px;
+    background: var(--surface-card);
+    border-radius: 16px;
+    margin-bottom: 6px;
+    border: 1px solid var(--text-w4);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+  .cat-item:hover {
+    background: var(--surface-3);
+    transform: translateX(2px);
+  }
+  .cat-item:active { transform: scale(0.98); }
+
+  /* Active accent line */
+  .cat-item.has-active::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 10px;
+    bottom: 10px;
+    width: 2.5px;
+    border-radius: 0 2px 2px 0;
+  }
+  .cat-item.a-alert::after { background: var(--alert); }
+  .cat-item.a-ongoing::after { background: var(--ongoing); }
+  .cat-item.a-upcoming::after { background: var(--upcoming); }
+
+  .c-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .c-icon svg { width: 20px; height: 20px; }
+
+  /* Icon backgrounds by semantic group */
+  .c-icon.alert { background: var(--alert-soft); }
+  .c-icon.clinical { background: var(--clinical-soft); }
+  .c-icon.event { background: var(--event-soft); }
+  .c-icon.ongoing { background: var(--ongoing-soft); }
+  .c-icon.vital { background: var(--vital-soft); }
+
+  .cat-info { flex: 1; min-width: 0; }
+  .cat-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-w1);
+    letter-spacing: -0.1px;
+  }
+  .cat-detail {
+    font-size: 11px;
+    color: var(--text-w2);
+    margin-top: 2px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .cat-detail .hl-alert { color: var(--alert-text); font-weight: 600; }
+  .cat-detail .hl-upcoming { color: var(--upcoming-text); font-weight: 600; }
+  .cat-detail .hl-done { color: var(--done-text); font-weight: 600; }
+
+  .cat-right { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+
+  .cat-count {
+    min-width: 26px;
+    height: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 9px;
+    padding: 0 7px;
+    color: var(--text-w2);
+    background: var(--text-w4);
+  }
+  .cat-count.c-alert { background: var(--active-soft); color: var(--alert-text); }
+  .cat-count.c-upcoming { background: var(--upcoming-soft); color: var(--upcoming-text); }
+  .cat-count.c-done { background: var(--done-soft); color: var(--done-text); }
+
+  .cat-chevron { color: var(--text-w3); font-size: 16px; }
+
+  /* ── EXPENSE CARD ── */
+  .expense-card {
+    margin: 8px 16px 12px;
+    padding: 18px;
+    background: linear-gradient(145deg, var(--surface-3) 0%, var(--surface-4) 100%);
+    border-radius: 18px;
+    color: white;
+    border: 1px solid var(--text-w4);
+    position: relative;
+    overflow: hidden;
+  }
+  .expense-card::after {
+    content: '';
+    position: absolute;
+    top: -30px; right: -30px;
+    width: 120px; height: 120px;
+    background: radial-gradient(circle, rgba(160,200,176,0.08) 0%, transparent 70%);
+    border-radius: 50%;
+  }
+  .expense-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 8px; position: relative; z-index: 1; }
+  .expense-label { font-size: 10px; font-weight: 700; color: var(--text-w3); text-transform: uppercase; letter-spacing: 1px; }
+  .expense-year { font-size: 10px; font-weight: 600; padding: 3px 9px; border-radius: 7px; background: var(--text-w4); color: var(--text-w3); }
+  .expense-amount { font-size: 26px; font-weight: 800; letter-spacing: -0.5px; position: relative; z-index: 1; color: var(--text-w1); }
+  .expense-currency { font-size: 15px; font-weight: 500; color: var(--text-w3); }
+  .expense-breakdown {
+    display: flex;
+    gap: 14px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--text-w4);
+    position: relative; z-index: 1;
+  }
+  .expense-item { display: flex; align-items: center; gap: 6px; }
+  .e-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .e-text { font-size: 10px; color: var(--text-w3); font-weight: 500; }
+  .e-val { font-size: 12px; color: var(--text-w2); font-weight: 700; }
+
+  /* ── BOTTOM TAB BAR ── */
+  .tab-bar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 84px;
+    background: var(--surface-2);
+    border-top: 1px solid var(--text-w4);
+    display: flex;
+    align-items: flex-start;
+    padding-top: 10px;
+    z-index: 40;
+  }
+  .tab-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    cursor: pointer;
+    position: relative;
+  }
+  .tab-icon { width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; }
+  .tab-icon svg { width: 22px; height: 22px; }
+  .tab-label { font-size: 10px; font-weight: 600; letter-spacing: 0.2px; }
+  .tab-item.inactive .tab-label { color: var(--text-w3); }
+  .tab-item.inactive svg { color: var(--text-w3); }
+  .tab-item.active .tab-label { color: var(--vital-text); }
+  .tab-item.active svg { color: var(--vital-text); }
+  .tab-item.active::before {
+    content: '';
+    position: absolute;
+    top: -10px;
+    left: 50%; transform: translateX(-50%);
+    width: 20px; height: 2.5px;
+    background: var(--vital-text);
+    border-radius: 0 0 2px 2px;
+  }
+
+  /* FAB */
+  .fab { position: absolute; bottom: 42px; right: 22px; z-index: 45; }
+  .fab-btn {
+    width: 52px; height: 52px;
+    background: var(--text-w1);
+    border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+    cursor: pointer; transition: all 0.2s;
+  }
+  .fab-btn:hover { transform: scale(1.05); }
+  .fab-btn:active { transform: scale(0.95); }
+  .fab-btn svg { width: 20px; height: 20px; color: var(--surface-1); }
+
+  /* ── DETAIL SCREENS ── */
+  .detail-nav { display: flex; align-items: center; gap: 12px; padding: 8px 20px 14px; }
+  .detail-back {
+    width: 36px; height: 36px;
+    background: var(--surface-3);
+    border: 1px solid var(--text-w4);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+  }
+  .detail-back svg { width: 16px; height: 16px; color: var(--text-w2); }
+  .detail-title { font-size: 20px; font-weight: 800; color: var(--text-w1); flex: 1; letter-spacing: -0.3px; }
+  .detail-add {
+    padding: 8px 15px;
+    background: var(--vital-text);
+    color: white;
+    border: none; border-radius: 11px;
+    font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: inherit;
+    transition: opacity 0.15s;
+  }
+  .detail-add:hover { opacity: 0.85; }
+
+  /* Section divider */
+  .s-divider { display: flex; align-items: center; gap: 10px; padding: 14px 24px 8px; }
+  .s-divider-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .s-divider-line { flex: 1; height: 1px; background: var(--text-w4); }
+  .d-upcoming { color: var(--upcoming-text); }
+  .d-done { color: var(--done-text); }
+  .d-planned { color: var(--planned-text); }
+
+  /* Record cards */
+  .rec {
+    margin: 0 16px 6px;
+    padding: 15px;
+    background: var(--surface-card);
+    border-radius: 15px;
+    border: 1px solid var(--text-w4);
+    position: relative;
+    transition: all 0.2s;
+    cursor: pointer;
+  }
+  .rec:hover { background: var(--surface-3); }
+  .rec:active { transform: scale(0.99); }
+
+  .rec::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 12px; bottom: 12px;
+    width: 2.5px;
+    border-radius: 0 2px 2px 0;
+  }
+  .rec.r-done::before { background: var(--done); }
+  .rec.r-upcoming::before { background: var(--upcoming); }
+  .rec.r-alert::before { background: var(--alert); }
+  .rec.r-planned::before { background: var(--planned); }
+
+  .rec-top { display: flex; justify-content: space-between; align-items: flex-start; }
+  .rec-title { font-size: 15px; font-weight: 700; color: var(--text-w1); }
+  .rec-date { font-size: 11px; color: var(--text-w3); font-weight: 500; flex-shrink: 0; }
+  .rec-sub { font-size: 12px; color: var(--text-w2); margin-top: 3px; font-weight: 500; }
+
+  .rec-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+  .t {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 7px;
+    letter-spacing: 0.2px;
+  }
+  .t-done { background: var(--done-soft); color: var(--done-text); }
+  .t-upcoming { background: var(--upcoming-soft); color: var(--upcoming-text); }
+  .t-alert { background: var(--active-soft); color: var(--alert-text); }
+  .t-planned { background: var(--planned-soft); color: var(--planned-text); }
+  .t-expense { background: var(--text-w4); color: var(--text-w2); font-weight: 700; }
+  .t-vet { background: var(--event-soft); color: var(--event-text); }
+  .t-auto { background: var(--planned-soft); color: var(--planned-text); }
+
+  .rec-link {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin-top: 7px;
+    font-size: 10px; color: var(--clinical-text); font-weight: 600;
+  }
+  .rec-link svg { width: 11px; height: 11px; }
+
+  /* Linked records in visit */
+  .linked { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--text-w4); }
+  .linked-label { font-size: 9px; font-weight: 700; color: var(--text-w3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  .linked-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .l-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .l-name { font-size: 12px; font-weight: 500; color: var(--text-w2); flex: 1; }
+  .l-cost { font-size: 11px; font-weight: 700; color: var(--done-text); }
+
+  /* ── FORM ── */
+  .form-section { padding: 0 22px; }
+  .form-group { margin-bottom: 18px; }
+  .form-label { font-size: 11px; font-weight: 700; color: var(--text-w3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 7px; }
+  .form-opt { font-weight: 500; color: var(--text-w3); text-transform: none; letter-spacing: 0; font-size: 10px; opacity: 0.6; }
+
+  .type-chips { display: flex; gap: 7px; flex-wrap: wrap; }
+  .type-chip {
+    padding: 9px 13px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1.5px solid var(--text-w4);
+    background: var(--surface-card);
+    color: var(--text-w2);
+    cursor: pointer;
+    display: flex; align-items: center; gap: 5px;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  .type-chip:hover { border-color: var(--text-w3); }
+  .type-chip.selected { border-color: var(--vital); background: var(--vital-soft); color: var(--vital-text); }
+  .chip-dot { width: 7px; height: 7px; border-radius: 50%; }
+
+  .form-input {
+    width: 100%;
+    padding: 13px 15px;
+    border: 1.5px solid var(--text-w4);
+    border-radius: 13px;
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--surface-card);
+    color: var(--text-w1);
+    transition: border-color 0.15s;
+    outline: none;
+  }
+  .form-input:focus { border-color: var(--vital); }
+  .form-input::placeholder { color: var(--text-w3); }
+
+  .form-select {
+    width: 100%;
+    padding: 13px 15px;
+    border: 1.5px solid var(--text-w4);
+    border-radius: 13px;
+    font-size: 14px;
+    font-family: inherit;
+    background: var(--surface-card);
+    color: var(--text-w1);
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23555' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    outline: none;
+  }
+  .form-select:focus { border-color: var(--vital); }
+
+  .form-row { display: flex; gap: 8px; }
+  .form-row > * { flex: 1; }
+  .form-row > .sm { max-width: 90px; flex: none; }
+
+  .form-hint { display: flex; align-items: center; gap: 5px; margin-top: 5px; font-size: 11px; color: var(--clinical-text); font-weight: 500; }
+  .form-hint svg { width: 13px; height: 13px; }
+
+  .form-submit {
+    width: 100%;
+    padding: 15px;
+    background: var(--text-w1);
+    color: var(--surface-1);
+    border: none; border-radius: 14px;
+    font-size: 15px; font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    margin-top: 6px;
+    transition: all 0.15s;
+  }
+  .form-submit:hover { opacity: 0.9; }
+  .form-submit:active { transform: scale(0.98); }
+
+  /* ── SVG ICON HELPERS ── */
+  svg.ic { width: 20px; height: 20px; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SCREEN 1: HEALTH HUB                       -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="phone-wrap">
+  <div class="phone-label">Health Hub</div>
+  <div class="phone">
+    <div class="dynamic-island"></div>
+    <div class="phone-screen">
+
+      <div class="hub-header">
+        <div class="hub-title">Health Hub</div>
+        <div class="hub-pet-info">Milo &middot; British Shorthair &middot; 2y</div>
+      </div>
+
+      <!-- Summary Cards -->
+      <div class="summary-scroll" id="summaryScroll">
+        <!-- Weight = Vital -->
+        <div class="summary-card">
+          <div class="s-icon vital">
+            <svg class="ic" stroke="var(--vital-text)" viewBox="0 0 24 24"><path d="M12 3C7 3 3 6.5 3 11c0 3.5 2 6 5 7.5V21h8v-2.5c3-1.5 5-4 5-7.5 0-4.5-4-8-9-8z"/><path d="M12 7v4"/><path d="M10 13h4"/></svg>
+          </div>
+          <div class="s-value">4.5 <span class="s-unit">kg</span></div>
+          <div class="s-label">Weight</div>
+          <div class="s-badge vital">+0.3 kg</div>
+        </div>
+
+        <!-- Upcoming Vaccine = Clinical -->
+        <div class="summary-card">
+          <div class="s-icon clinical">
+            <svg class="ic" stroke="var(--clinical-text)" viewBox="0 0 24 24"><path d="M17 3l4 4-9 9H8v-4l9-9z"/><path d="M8 16H4v4h4"/><line x1="15" y1="6" x2="18" y2="9"/></svg>
+          </div>
+          <div class="s-value">1</div>
+          <div class="s-label">Upcoming</div>
+          <div class="s-badge upcoming">DHPP due</div>
+        </div>
+
+        <!-- Last Visit = Event -->
+        <div class="summary-card">
+          <div class="s-icon event">
+            <svg class="ic" stroke="var(--event-text)" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M10 15l2 2 4-4"/></svg>
+          </div>
+          <div class="s-value">Feb 21</div>
+          <div class="s-label">Last Visit</div>
+          <div class="s-badge neutral">Checkup</div>
+        </div>
+
+        <!-- Expenses = Ongoing -->
+        <div class="summary-card">
+          <div class="s-icon ongoing">
+            <svg class="ic" stroke="var(--ongoing-text)" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v12"/><path d="M8 9.5c0-1.38 1.79-2.5 4-2.5s4 1.12 4 2.5-1.79 2.5-4 2.5-4 1.12-4 2.5 1.79 2.5 4 2.5"/></svg>
+          </div>
+          <div class="s-value">2.4k</div>
+          <div class="s-label">This Year</div>
+          <div class="s-badge ongoing">TRY</div>
+        </div>
+      </div>
+
+      <!-- Categories -->
+      <div class="section-label">Categories</div>
+      <div class="cat-list">
+
+        <!-- Conditions — Ongoing / Alert (active = rose accent) -->
+        <div class="cat-item has-active a-alert">
+          <div class="c-icon alert">
+            <!-- Heart with pulse line -->
+            <svg class="ic" stroke="var(--alert-text)" viewBox="0 0 24 24"><path d="M12 20S4 14 4 8.5C4 5.46 6.46 3 9.5 3c1.74 0 3.41.81 4.5 2.09A5.99 5.99 0 0118.5 3C20.54 3 22 5.46 22 8.5 22 14 12 20 12 20z" fill="none"/><path d="M4 12h4l2-3 3 6 2-3h5" stroke-width="1.5"/></svg>
+          </div>
+          <div class="cat-info">
+            <div class="cat-name">Conditions</div>
+            <div class="cat-detail"><span class="hl-alert">1 active</span> &middot; Dental Plaque</div>
+          </div>
+          <div class="cat-right">
+            <div class="cat-count c-alert">2</div>
+            <span class="cat-chevron">&rsaquo;</span>
+          </div>
+        </div>
+
+        <!-- Vaccines — Clinical (upcoming = peach accent) -->
+        <div class="cat-item has-active a-upcoming">
+          <div class="c-icon clinical">
+            <!-- Syringe -->
+            <svg class="ic" stroke="var(--clinical-text)" viewBox="0 0 24 24"><path d="M17 3l4 4"/><path d="M19 5L9.5 14.5"/><path d="M11.5 6.5l6 6"/><path d="M7.5 10.5l6 6"/><path d="M3 21l3.5-3.5"/><path d="M6.5 17.5L9.5 14.5"/></svg>
+          </div>
+          <div class="cat-info">
+            <div class="cat-name">Vaccines</div>
+            <div class="cat-detail"><span class="hl-upcoming">DHPP due Apr 15</span></div>
+          </div>
+          <div class="cat-right">
+            <div class="cat-count c-upcoming">5</div>
+            <span class="cat-chevron">&rsaquo;</span>
+          </div>
+        </div>
+
+        <!-- Vet Visits — Event -->
+        <div class="cat-item">
+          <div class="c-icon event">
+            <!-- Clinic / Building -->
+            <svg class="ic" stroke="var(--event-text)" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-4h6v4"/><path d="M10 10h.01M14 10h.01M10 14h.01M14 14h.01"/></svg>
+          </div>
+          <div class="cat-info">
+            <div class="cat-name">Vet Visits</div>
+            <div class="cat-detail">Last: <span class="hl-done">Feb 21, 2026</span></div>
+          </div>
+          <div class="cat-right">
+            <div class="cat-count">3</div>
+            <span class="cat-chevron">&rsaquo;</span>
+          </div>
+        </div>
+
+        <!-- Medications — Ongoing (active = lavender accent) -->
+        <div class="cat-item has-active a-ongoing">
+          <div class="c-icon ongoing">
+            <!-- Pill capsule -->
+            <svg class="ic" stroke="var(--ongoing-text)" viewBox="0 0 24 24"><path d="M8.5 3C5.46 3 3 5.46 3 8.5S5.46 14 8.5 14h7c3.04 0 5.5-2.46 5.5-5.5S18.54 3 15.5 3h-7z" transform="rotate(45 12 12)"/><line x1="12" y1="5" x2="12" y2="19" transform="rotate(45 12 12)"/></svg>
+          </div>
+          <div class="cat-info">
+            <div class="cat-name">Medications</div>
+            <div class="cat-detail"><span class="hl-alert">1 active</span> &middot; Metacam daily</div>
+          </div>
+          <div class="cat-right">
+            <div class="cat-count">4</div>
+            <span class="cat-chevron">&rsaquo;</span>
+          </div>
+        </div>
+
+        <!-- Lab Results — Clinical -->
+        <div class="cat-item">
+          <div class="c-icon clinical">
+            <!-- Test tube / Flask -->
+            <svg class="ic" stroke="var(--clinical-text)" viewBox="0 0 24 24"><path d="M9 3h6"/><path d="M10 3v7.4a4 4 0 01-.8 2.4L6 17a2 2 0 001.6 3.2h8.8A2 2 0 0018 17l-3.2-4.2a4 4 0 01-.8-2.4V3"/><path d="M7 17h10"/></svg>
+          </div>
+          <div class="cat-info">
+            <div class="cat-name">Lab Results</div>
+            <div class="cat-detail">Last: Blood Panel Feb 21</div>
+          </div>
+          <div class="cat-right">
+            <div class="cat-count">2</div>
+            <span class="cat-chevron">&rsaquo;</span>
+          </div>
+        </div>
+
+        <!-- Surgeries — Event -->
+        <div class="cat-item">
+          <div class="c-icon event">
+            <!-- Scalpel / Surgical -->
+            <svg class="ic" stroke="var(--event-text)" viewBox="0 0 24 24"><path d="M20 4L9 15"/><path d="M4 20c2 0 5-1 6-2l-4-4c-1 1-2 4-2 6z"/><circle cx="16" cy="8" r="1" fill="var(--event-text)" stroke="none"/></svg>
+          </div>
+          <div class="cat-info">
+            <div class="cat-name">Surgeries</div>
+            <div class="cat-detail">Neutering &middot; Jan 2025</div>
+          </div>
+          <div class="cat-right">
+            <div class="cat-count">1</div>
+            <span class="cat-chevron">&rsaquo;</span>
+          </div>
+        </div>
+
+        <!-- Weight — Vital -->
+        <div class="cat-item">
+          <div class="c-icon vital">
+            <!-- Scale -->
+            <svg class="ic" stroke="var(--vital-text)" viewBox="0 0 24 24"><rect x="4" y="14" width="16" height="6" rx="2"/><path d="M8 14V8a4 4 0 018 0v6"/><circle cx="12" cy="10" r="1.5" fill="var(--vital-text)" stroke="none"/></svg>
+          </div>
+          <div class="cat-info">
+            <div class="cat-name">Weight Tracking</div>
+            <div class="cat-detail">4.5 kg &middot; <span class="hl-done">Ideal maintained</span></div>
+          </div>
+          <div class="cat-right">
+            <div class="cat-count c-done">12</div>
+            <span class="cat-chevron">&rsaquo;</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Expense Card -->
+      <div class="expense-card">
+        <div class="expense-top">
+          <div class="expense-label">Total Expenses</div>
+          <div class="expense-year">2026</div>
+        </div>
+        <div class="expense-amount">2,450 <span class="expense-currency">TL</span></div>
+        <div class="expense-breakdown">
+          <div class="expense-item">
+            <div class="e-dot" style="background: var(--clinical);"></div>
+            <div><div class="e-text">Vaccine</div><div class="e-val">850</div></div>
+          </div>
+          <div class="expense-item">
+            <div class="e-dot" style="background: var(--event);"></div>
+            <div><div class="e-text">Vet</div><div class="e-val">1,200</div></div>
+          </div>
+          <div class="expense-item">
+            <div class="e-dot" style="background: var(--ongoing);"></div>
+            <div><div class="e-text">Med</div><div class="e-val">400</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Tab Bar -->
+    <div class="tab-bar">
+      <div class="tab-item inactive">
+        <div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div>
+        <div class="tab-label">Home</div>
+      </div>
+      <div class="tab-item active">
+        <div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div>
+        <div class="tab-label">Health</div>
+      </div>
+      <div class="tab-item inactive">
+        <div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div>
+        <div class="tab-label">Reminders</div>
+      </div>
+      <div class="tab-item inactive">
+        <div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+        <div class="tab-label">Insights</div>
+      </div>
+    </div>
+    <div class="fab"><div class="fab-btn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div></div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SCREEN 2: VACCINES DETAIL                   -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="phone-wrap">
+  <div class="phone-label">Category Detail</div>
+  <div class="phone">
+    <div class="dynamic-island"></div>
+    <div class="phone-screen">
+
+      <div class="detail-nav">
+        <div class="detail-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+        <div class="detail-title">Vaccines</div>
+        <button class="detail-add">+ Add</button>
+      </div>
+
+      <div class="s-divider">
+        <span class="s-divider-label d-upcoming">Upcoming</span>
+        <span class="s-divider-line"></span>
+      </div>
+      <div class="rec r-upcoming">
+        <div class="rec-top"><div class="rec-title">DHPP (Booster)</div><div class="rec-date">Apr 15, 2026</div></div>
+        <div class="rec-tags"><span class="t t-upcoming">Upcoming</span><span class="t t-auto">Auto-reminder</span></div>
+      </div>
+
+      <div class="s-divider">
+        <span class="s-divider-label d-done">Completed</span>
+        <span class="s-divider-line"></span>
+      </div>
+
+      <div class="rec r-done">
+        <div class="rec-top"><div class="rec-title">Rabies (Kuduz)</div><div class="rec-date">Feb 21, 2026</div></div>
+        <div class="rec-sub">Istanbul Vet Klinik &middot; Dr. Ayse</div>
+        <div class="rec-tags"><span class="t t-done">Done</span><span class="t t-expense">350 TL</span></div>
+        <div class="rec-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>Vet Visit &middot; Feb 21 Checkup</div>
+      </div>
+
+      <div class="rec r-done">
+        <div class="rec-top"><div class="rec-title">FVRCP</div><div class="rec-date">Nov 10, 2025</div></div>
+        <div class="rec-sub">PetPoint Klinik</div>
+        <div class="rec-tags"><span class="t t-done">Done</span><span class="t t-expense">300 TL</span></div>
+      </div>
+
+      <div class="rec r-done">
+        <div class="rec-top"><div class="rec-title">FeLV</div><div class="rec-date">Aug 5, 2025</div></div>
+        <div class="rec-tags"><span class="t t-done">Done</span><span class="t t-expense">280 TL</span><span class="t t-vet">Istanbul Vet</span></div>
+        <div class="rec-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/></svg>Vet Visit &middot; Aug 5</div>
+      </div>
+
+      <div class="rec r-done">
+        <div class="rec-top"><div class="rec-title">DHPP</div><div class="rec-date">Apr 12, 2025</div></div>
+        <div class="rec-tags"><span class="t t-done">Done</span></div>
+      </div>
+
+      <div class="rec r-done">
+        <div class="rec-top"><div class="rec-title">Rabies (Kuduz)</div><div class="rec-date">Feb 20, 2025</div></div>
+        <div class="rec-tags"><span class="t t-done">Done</span><span class="t t-expense">320 TL</span></div>
+      </div>
+
+    </div>
+    <div class="tab-bar">
+      <div class="tab-item inactive"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div><div class="tab-label">Home</div></div>
+      <div class="tab-item active"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div><div class="tab-label">Health</div></div>
+      <div class="tab-item inactive"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div><div class="tab-label">Reminders</div></div>
+      <div class="tab-item inactive"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="tab-label">Insights</div></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SCREEN 3: VET VISIT (ANCHOR)                -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="phone-wrap">
+  <div class="phone-label">Vet Visit (Anchor)</div>
+  <div class="phone">
+    <div class="dynamic-island"></div>
+    <div class="phone-screen">
+
+      <div class="detail-nav">
+        <div class="detail-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></div>
+        <div class="detail-title">Vet Visits</div>
+        <button class="detail-add">+ Add</button>
+      </div>
+
+      <div class="rec r-done" style="padding-bottom: 10px;">
+        <div class="rec-top"><div class="rec-title">Annual Checkup</div><div class="rec-date">Feb 21, 2026</div></div>
+        <div class="rec-sub">Istanbul Vet Klinik &middot; Dr. Ayse</div>
+        <div class="rec-tags"><span class="t t-done">Completed</span><span class="t t-expense">1,200 TL</span></div>
+        <div class="linked">
+          <div class="linked-label">Visit Records</div>
+          <div class="linked-row"><div class="l-dot" style="background:var(--clinical);"></div><div class="l-name">Rabies Vaccine</div><div class="l-cost">350 TL</div></div>
+          <div class="linked-row"><div class="l-dot" style="background:var(--clinical);"></div><div class="l-name">Blood Panel</div><div class="l-cost">450 TL</div></div>
+          <div class="linked-row"><div class="l-dot" style="background:var(--ongoing);"></div><div class="l-name">Metacam prescribed</div><div class="l-cost">200 TL</div></div>
+          <div class="linked-row"><div class="l-dot" style="background:var(--vital);"></div><div class="l-name">Weight: 4.5 kg</div><div class="l-cost"></div></div>
+        </div>
+      </div>
+
+      <div class="rec r-done">
+        <div class="rec-top"><div class="rec-title">Vaccine Visit</div><div class="rec-date">Nov 10, 2025</div></div>
+        <div class="rec-sub">PetPoint Klinik</div>
+        <div class="rec-tags"><span class="t t-done">Completed</span><span class="t t-expense">300 TL</span></div>
+        <div class="linked">
+          <div class="linked-label">Visit Records</div>
+          <div class="linked-row"><div class="l-dot" style="background:var(--clinical);"></div><div class="l-name">FVRCP Vaccine</div><div class="l-cost">300 TL</div></div>
+        </div>
+      </div>
+
+      <div class="s-divider">
+        <span class="s-divider-label d-planned">Planned</span>
+        <span class="s-divider-line"></span>
+      </div>
+
+      <div class="rec r-planned">
+        <div class="rec-top"><div class="rec-title">DHPP Booster</div><div class="rec-date">Apr 15, 2026</div></div>
+        <div class="rec-tags"><span class="t t-planned">Planned</span><span class="t t-auto">Auto-reminder</span></div>
+      </div>
+
+    </div>
+    <div class="tab-bar">
+      <div class="tab-item inactive"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div><div class="tab-label">Home</div></div>
+      <div class="tab-item active"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div><div class="tab-label">Health</div></div>
+      <div class="tab-item inactive"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div><div class="tab-label">Reminders</div></div>
+      <div class="tab-item inactive"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="tab-label">Insights</div></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════ -->
+<!-- SCREEN 4: ADD RECORD FORM                    -->
+<!-- ═══════════════════════════════════════════ -->
+<div class="phone-wrap">
+  <div class="phone-label">Add Record</div>
+  <div class="phone">
+    <div class="dynamic-island"></div>
+    <div class="phone-screen">
+
+      <div class="detail-nav">
+        <div class="detail-back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></div>
+        <div class="detail-title">New Record</div>
+      </div>
+
+      <div class="form-section">
+
+        <div class="form-group">
+          <div class="form-label">Type</div>
+          <div class="type-chips">
+            <div class="type-chip selected"><div class="chip-dot" style="background:var(--clinical);"></div>Vaccine</div>
+            <div class="type-chip"><div class="chip-dot" style="background:var(--alert);"></div>Condition</div>
+            <div class="type-chip"><div class="chip-dot" style="background:var(--ongoing);"></div>Medication</div>
+            <div class="type-chip"><div class="chip-dot" style="background:var(--clinical);"></div>Lab Result</div>
+            <div class="type-chip"><div class="chip-dot" style="background:var(--event);"></div>Surgery</div>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="form-label">Vaccine Name</div>
+          <select class="form-select">
+            <option disabled>Select vaccine...</option>
+            <option selected>DHPP</option>
+            <option>Rabies (Kuduz)</option>
+            <option>FVRCP</option>
+            <option>FeLV</option>
+            <option>FIV</option>
+            <option>Bordetella</option>
+            <option>Leptospirosis</option>
+            <option>Lyme</option>
+            <option>Other</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <div class="form-label">Date</div>
+          <input type="text" class="form-input" value="March 23, 2026" readonly>
+        </div>
+
+        <div class="form-group">
+          <div class="form-label">Next Due Date <span class="form-opt">(optional)</span></div>
+          <input type="text" class="form-input" value="March 23, 2027" readonly>
+          <div class="form-hint">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            Reminder will be created automatically
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="form-label">Link to Visit <span class="form-opt">(optional)</span></div>
+          <select class="form-select">
+            <option>No visit link</option>
+            <option>Feb 21 &middot; Annual Checkup</option>
+            <option>Nov 10 &middot; Vaccine Visit</option>
+            <option selected>+ Create new visit</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <div class="form-label">Cost <span class="form-opt">(optional)</span></div>
+          <div class="form-row">
+            <input type="text" class="form-input" placeholder="0" value="350">
+            <select class="form-select sm">
+              <option selected>TRY</option>
+              <option>USD</option>
+              <option>EUR</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <div class="form-label">Notes <span class="form-opt">(optional)</span></div>
+          <input type="text" class="form-input" placeholder="Add a note...">
+        </div>
+
+        <button class="form-submit">Save Record</button>
+      </div>
+
+    </div>
+    <div class="tab-bar">
+      <div class="tab-item inactive"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg></div><div class="tab-label">Home</div></div>
+      <div class="tab-item active"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg></div><div class="tab-label">Health</div></div>
+      <div class="tab-item inactive"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></div><div class="tab-label">Reminders</div></div>
+      <div class="tab-item inactive"><div class="tab-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="tab-label">Insights</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const scroll = document.getElementById('summaryScroll');
+let isDown=false, startX, scrollLeft;
+scroll.addEventListener('mousedown', e=>{isDown=true;scroll.style.cursor='grabbing';startX=e.pageX-scroll.offsetLeft;scrollLeft=scroll.scrollLeft;});
+scroll.addEventListener('mouseleave', ()=>{isDown=false;scroll.style.cursor='grab';});
+scroll.addEventListener('mouseup', ()=>{isDown=false;scroll.style.cursor='grab';});
+scroll.addEventListener('mousemove', e=>{if(!isDown)return;e.preventDefault();scroll.scrollLeft=scrollLeft-((e.pageX-scroll.offsetLeft)-startX)*1.5;});
+</script>
+
+</body>
+</html>

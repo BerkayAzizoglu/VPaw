@@ -1,4 +1,4 @@
-export type PetId = 'luna' | 'milo';
+export type PetId = string;
 
 export type VetVisitReasonCategory =
   | 'checkup'
@@ -73,7 +73,7 @@ export type VetVisit = {
 export type MedicalEvent = {
   id: string;
   petId: PetId;
-  vetVisitId: string;
+  vetVisitId?: string;
   type: MedicalEventType;
   eventDate: string;
   title: string;
@@ -132,10 +132,10 @@ export type MedicationCourse = {
 
 export type ByPet<T> = Record<PetId, T[]>;
 
-export const EMPTY_VET_VISITS_BY_PET: ByPet<VetVisit> = { luna: [], milo: [] };
-export const EMPTY_MEDICAL_EVENTS_BY_PET: ByPet<MedicalEvent> = { luna: [], milo: [] };
-export const EMPTY_REMINDERS_BY_PET: ByPet<Reminder> = { luna: [], milo: [] };
-export const EMPTY_MEDICATION_COURSES_BY_PET: ByPet<MedicationCourse> = { luna: [], milo: [] };
+export const EMPTY_VET_VISITS_BY_PET: ByPet<VetVisit> = {};
+export const EMPTY_MEDICAL_EVENTS_BY_PET: ByPet<MedicalEvent> = {};
+export const EMPTY_REMINDERS_BY_PET: ByPet<Reminder> = {};
+export const EMPTY_MEDICATION_COURSES_BY_PET: ByPet<MedicationCourse> = {};
 
 function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -175,17 +175,14 @@ function reminderTitleFromSubtype(subtype: ReminderSubtype): string {
 
 function normalizeByPet<T>(raw: unknown, parseItem: (item: unknown, petId: PetId) => T | null, empty: ByPet<T>): ByPet<T> {
   if (!raw || typeof raw !== 'object') return empty;
-  const source = raw as Partial<Record<PetId, unknown>>;
-
-  const parseArray = (value: unknown, petId: PetId): T[] => {
-    if (!Array.isArray(value)) return [];
-    return value.map((item) => parseItem(item, petId)).filter((v): v is T => v !== null);
-  };
-
-  return {
-    luna: parseArray(source.luna, 'luna'),
-    milo: parseArray(source.milo, 'milo'),
-  };
+  const source = raw as Record<string, unknown>;
+  const result: ByPet<T> = {};
+  for (const petId of Object.keys(source)) {
+    const value = source[petId];
+    if (!Array.isArray(value)) continue;
+    result[petId] = value.map((item) => parseItem(item, petId)).filter((v): v is T => v !== null);
+  }
+  return result;
 }
 
 export function normalizeVetVisitsByPet(raw: unknown): ByPet<VetVisit> {
@@ -222,7 +219,6 @@ export function normalizeMedicalEventsByPet(raw: unknown): ByPet<MedicalEvent> {
       if (!item || typeof item !== 'object') return null;
       const i = item as Partial<MedicalEvent>;
       if (
-        typeof i.vetVisitId !== 'string' ||
         typeof i.type !== 'string' ||
         typeof i.eventDate !== 'string' ||
         typeof i.title !== 'string'
@@ -232,7 +228,7 @@ export function normalizeMedicalEventsByPet(raw: unknown): ByPet<MedicalEvent> {
       return {
         id: typeof i.id === 'string' ? i.id : makeId(`event-${petId}`),
         petId,
-        vetVisitId: i.vetVisitId,
+        vetVisitId: typeof i.vetVisitId === 'string' ? i.vetVisitId : undefined,
         type: i.type as MedicalEventType,
         eventDate: i.eventDate,
         title: i.title,

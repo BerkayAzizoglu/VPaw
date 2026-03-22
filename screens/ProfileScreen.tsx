@@ -33,8 +33,8 @@ type ProfileScreenProps = {
   onOpenVetVisits?: () => void;
   onOpenSettings?: () => void;
   onOpenPetPassport?: () => void;
-  petProfiles?: Record<'luna' | 'milo', PetProfile>;
-  weightsByPet?: Record<'luna' | 'milo', WeightPoint[]>;
+  petProfiles?: Record<string, PetProfile>;
+  weightsByPet?: Record<string, WeightPoint[]>;
 };
 
 type IconName =
@@ -262,9 +262,12 @@ export default function ProfileScreen({ onBackHome, onOpenPremium, onOpenProfile
   const sectionHealth = 'PET HEALTH';
   const sectionPreferences = isTr ? 'TERCİHLER' : 'PREFERENCES';
   const displayEmail = user?.email ?? 'alex.morrison@example.com';
-  const petsCount = petProfiles ? Object.keys(petProfiles).length : 1;
-  const recordsCount = petProfiles
-    ? Object.values(petProfiles).reduce((sum, p) => {
+  const visiblePets = petProfiles
+    ? Object.values(petProfiles).filter((p) => p && typeof p.name === 'string' && p.name.trim().length > 0)
+    : [];
+  const petsCount = visiblePets.length > 0 ? visiblePets.length : 1;
+  const recordsCount = visiblePets.length > 0
+    ? visiblePets.reduce((sum, p) => {
         const weightCount = weightsByPet?.[p.id]?.length ?? 0;
         return sum + p.vaccinations.length + p.surgeriesLog.length + p.allergiesLog.length + p.diabetesLog.length + weightCount;
       }, 0)

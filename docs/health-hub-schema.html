@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VPaw Health Hub - Architecture & Mockup</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f0; color: #2d2d2d; }
+
+  .page { max-width: 1400px; margin: 0 auto; padding: 40px 20px; }
+  h1 { font-size: 32px; font-weight: 700; margin-bottom: 8px; }
+  h2 { font-size: 24px; font-weight: 600; margin: 40px 0 16px; color: #1a1a1a; }
+  h3 { font-size: 18px; font-weight: 600; margin: 24px 0 12px; color: #333; }
+  .subtitle { color: #666; font-size: 16px; margin-bottom: 40px; }
+
+  /* ── TABS ── */
+  .tab-bar { display: flex; gap: 4px; border-bottom: 2px solid #e0e0e0; margin-bottom: 32px; }
+  .tab { padding: 12px 24px; cursor: pointer; font-weight: 500; border-bottom: 3px solid transparent; margin-bottom: -2px; transition: all 0.2s; color: #888; }
+  .tab:hover { color: #333; }
+  .tab.active { color: #4a6741; border-bottom-color: #4a6741; font-weight: 600; }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── SCHEMA DIAGRAM ── */
+  .schema-container { display: flex; flex-direction: column; gap: 32px; }
+
+  .layer { background: white; border-radius: 16px; padding: 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .layer-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: #4a6741; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .layer-title::before { content: ''; width: 4px; height: 20px; background: #4a6741; border-radius: 2px; }
+
+  .entity-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+
+  .entity-card { border: 2px solid #e8e8e4; border-radius: 12px; padding: 20px; transition: all 0.2s; position: relative; }
+  .entity-card:hover { border-color: #4a6741; transform: translateY(-2px); box-shadow: 0 4px 16px rgba(0,0,0,0.08); }
+  .entity-card.primary { border-color: #4a6741; background: #f8faf7; }
+  .entity-card.anchor { border-color: #8a6a3a; background: #faf8f5; }
+  .entity-card.auto { border-color: #5a7a9e; background: #f5f8fa; }
+
+  .entity-name { font-size: 16px; font-weight: 700; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+  .entity-desc { font-size: 13px; color: #777; margin-bottom: 12px; }
+  .entity-fields { list-style: none; }
+  .entity-fields li { font-size: 13px; padding: 3px 0; color: #555; display: flex; align-items: center; gap: 6px; }
+  .entity-fields li::before { content: ''; width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .field-required::before { background: #4a6741; }
+  .field-optional::before { background: #ccc; }
+  .field-auto::before { background: #5a7a9e; }
+
+  .badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .badge-core { background: #e8f0e5; color: #4a6741; }
+  .badge-anchor { background: #f0ece5; color: #8a6a3a; }
+  .badge-auto { background: #e5eef5; color: #5a7a9e; }
+  .badge-new { background: #fce8e8; color: #c44; }
+
+  /* ── CONNECTION ARROWS ── */
+  .connections { background: white; border-radius: 16px; padding: 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .conn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .conn-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: #fafaf8; border-radius: 10px; font-size: 14px; }
+  .conn-arrow { color: #4a6741; font-weight: 700; font-size: 18px; flex-shrink: 0; }
+  .conn-label { font-size: 11px; color: #888; }
+
+  /* ── FLOW DIAGRAM ── */
+  .flow-container { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+  .flow-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  .flow-box { padding: 12px 20px; border-radius: 10px; font-size: 14px; font-weight: 500; text-align: center; min-width: 140px; }
+  .flow-entry { background: #2d2d2d; color: white; }
+  .flow-hub { background: #4a6741; color: white; }
+  .flow-category { background: #e8f0e5; color: #2d5a24; border: 1px solid #c8d8c4; }
+  .flow-form { background: #f0ece5; color: #6a4a1a; border: 1px solid #d8d0c0; }
+  .flow-output { background: #e5eef5; color: #3a5a7e; border: 1px solid #c0d0e0; }
+  .flow-arrow-down { font-size: 24px; color: #aaa; }
+
+  /* ── MOCKUP ── */
+  .mockup-container { display: flex; gap: 32px; flex-wrap: wrap; justify-content: center; }
+
+  .phone { width: 375px; height: 812px; background: #fafaf8; border-radius: 40px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.15); border: 8px solid #1a1a1a; position: relative; flex-shrink: 0; }
+  .phone-notch { width: 150px; height: 30px; background: #1a1a1a; border-radius: 0 0 20px 20px; margin: 0 auto; position: relative; z-index: 10; }
+  .phone-screen { height: calc(100% - 30px); overflow-y: auto; position: relative; }
+  .phone-screen::-webkit-scrollbar { display: none; }
+
+  .screen-header { padding: 16px 20px 12px; background: #fafaf8; position: sticky; top: 0; z-index: 5; }
+  .screen-title { font-size: 28px; font-weight: 700; color: #1a1a1a; }
+  .screen-subtitle { font-size: 13px; color: #888; margin-top: 2px; }
+
+  /* Summary Cards */
+  .summary-strip { display: flex; gap: 10px; padding: 0 20px 16px; overflow-x: auto; }
+  .summary-card { flex-shrink: 0; width: 110px; padding: 14px 12px; background: white; border-radius: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.06); text-align: center; }
+  .summary-icon { font-size: 24px; margin-bottom: 6px; }
+  .summary-value { font-size: 18px; font-weight: 700; color: #1a1a1a; }
+  .summary-label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+  .summary-sub { font-size: 11px; color: #4a6741; margin-top: 4px; font-weight: 500; }
+
+  /* Category List */
+  .cat-list { padding: 0 20px; }
+  .cat-item { display: flex; align-items: center; gap: 14px; padding: 16px; background: white; border-radius: 14px; margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); cursor: pointer; transition: all 0.15s; }
+  .cat-item:hover { transform: translateX(4px); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+  .cat-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .cat-icon-vaccine { background: #e8f0e5; }
+  .cat-icon-vet { background: #f0ece5; }
+  .cat-icon-condition { background: #fce8e8; }
+  .cat-icon-med { background: #ece5f0; }
+  .cat-icon-lab { background: #e5eef5; }
+  .cat-icon-surgery { background: #f0e5ea; }
+  .cat-icon-weight { background: #e5f0ee; }
+  .cat-info { flex: 1; }
+  .cat-name { font-size: 15px; font-weight: 600; color: #1a1a1a; }
+  .cat-detail { font-size: 12px; color: #888; margin-top: 2px; }
+  .cat-count { font-size: 13px; font-weight: 600; color: #4a6741; background: #e8f0e5; padding: 4px 10px; border-radius: 12px; }
+  .cat-chevron { color: #ccc; font-size: 18px; }
+
+  /* Expense Banner */
+  .expense-banner { margin: 0 20px 16px; padding: 16px; background: linear-gradient(135deg, #2d2d2d, #3d3d3d); border-radius: 14px; color: white; display: flex; align-items: center; justify-content: space-between; }
+  .expense-label { font-size: 12px; color: #aaa; text-transform: uppercase; letter-spacing: 0.5px; }
+  .expense-amount { font-size: 22px; font-weight: 700; margin-top: 2px; }
+  .expense-period { font-size: 11px; color: #888; }
+  .expense-chart { width: 80px; height: 40px; }
+
+  /* Tab Bar */
+  .mock-tab-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 80px; background: white; border-top: 1px solid #eee; display: flex; align-items: flex-start; padding-top: 10px; justify-content: space-around; z-index: 10; }
+  .mock-tab { text-align: center; font-size: 10px; color: #aaa; }
+  .mock-tab.active { color: #4a6741; }
+  .mock-tab-icon { font-size: 22px; margin-bottom: 2px; }
+
+  /* FAB */
+  .mock-fab { position: absolute; bottom: 40px; right: 20px; width: 56px; height: 56px; background: #2d2d2d; border-radius: 28px; display: flex; align-items: center; justify-content: center; color: white; font-size: 28px; box-shadow: 0 4px 16px rgba(0,0,0,0.25); z-index: 20; }
+
+  /* ── CATEGORY DETAIL MOCKUP ── */
+  .detail-header { padding: 16px 20px; display: flex; align-items: center; gap: 12px; }
+  .detail-back { font-size: 20px; color: #4a6741; cursor: pointer; }
+  .detail-title { font-size: 20px; font-weight: 700; }
+  .detail-add { margin-left: auto; background: #4a6741; color: white; border: none; padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+
+  .record-card { margin: 0 20px 10px; padding: 16px; background: white; border-radius: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); border-left: 4px solid; }
+  .record-card.vaccine { border-left-color: #4a6741; }
+  .record-card.vet { border-left-color: #8a6a3a; }
+  .record-card.condition { border-left-color: #c44; }
+  .record-card.med { border-left-color: #7a6a9a; }
+  .record-card.lab { border-left-color: #5a7a9e; }
+
+  .record-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .record-title { font-size: 15px; font-weight: 600; }
+  .record-date { font-size: 12px; color: #888; }
+  .record-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .record-tag { font-size: 11px; padding: 3px 8px; border-radius: 6px; background: #f0f0ec; color: #666; }
+  .record-expense { font-size: 11px; padding: 3px 8px; border-radius: 6px; background: #e8f0e5; color: #4a6741; font-weight: 600; }
+  .record-status { font-size: 11px; padding: 3px 8px; border-radius: 6px; }
+  .status-active { background: #fce8e8; color: #c44; }
+  .status-resolved { background: #e8f0e5; color: #4a6741; }
+  .status-upcoming { background: #fff3e0; color: #e67e22; }
+
+  .record-linked { font-size: 11px; color: #5a7a9e; margin-top: 6px; display: flex; align-items: center; gap: 4px; }
+
+  /* ── ADD FORM MOCKUP ── */
+  .form-sheet { margin: 0 20px; background: white; border-radius: 16px; padding: 24px 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.08); }
+  .form-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+  .form-group { margin-bottom: 16px; }
+  .form-label { font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .form-select { width: 100%; padding: 12px; border: 1.5px solid #e0e0dc; border-radius: 10px; font-size: 14px; background: #fafaf8; color: #333; }
+  .form-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .form-chip { padding: 8px 14px; border-radius: 20px; font-size: 13px; border: 1.5px solid #e0e0dc; background: white; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .form-chip.selected { border-color: #4a6741; background: #e8f0e5; color: #2d5a24; font-weight: 600; }
+  .chip-dot { width: 8px; height: 8px; border-radius: 50%; }
+  .form-input { width: 100%; padding: 12px; border: 1.5px solid #e0e0dc; border-radius: 10px; font-size: 14px; background: #fafaf8; }
+  .form-row { display: flex; gap: 10px; }
+  .form-row > * { flex: 1; }
+  .form-btn { width: 100%; padding: 14px; background: #4a6741; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+  .form-btn:hover { background: #3d5636; }
+  .form-optional { font-size: 11px; color: #bbb; font-weight: 400; }
+
+  /* ── DATA FLOW ── */
+  .data-flow { background: white; border-radius: 16px; padding: 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .flow-diagram { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .flow-level { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .flow-node { padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 500; text-align: center; }
+  .flow-node-entry { background: #2d2d2d; color: white; }
+  .flow-node-hub { background: #4a6741; color: white; }
+  .flow-node-cat { background: #e8f0e5; color: #2d5a24; border: 1px solid #c8d8c4; }
+  .flow-node-output { background: #e5eef5; color: #3a5a7e; border: 1px solid #c0d0e0; }
+  .flow-node-store { background: #f0ece5; color: #6a4a1a; border: 1px solid #d8d0c0; }
+  .flow-arrow { font-size: 20px; color: #ccc; }
+
+  /* ── TYPE MAP ── */
+  .type-table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+  .type-table th { text-align: left; font-size: 12px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; border-bottom: 2px solid #e8e8e4; }
+  .type-table td { padding: 10px 12px; border-bottom: 1px solid #f0f0ec; font-size: 13px; vertical-align: top; }
+  .type-table tr:hover { background: #fafaf8; }
+  .type-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+
+  /* ── PREMIUM AI ── */
+  .ai-section { background: linear-gradient(135deg, #1a1a1a, #2d2d2d); border-radius: 16px; padding: 28px; color: white; margin-top: 24px; }
+  .ai-title { font-size: 18px; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .ai-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .ai-item { padding: 14px; background: rgba(255,255,255,0.08); border-radius: 10px; }
+  .ai-item-title { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .ai-item-desc { font-size: 11px; color: #aaa; }
+  .ai-data-needs { margin-top: 16px; padding: 14px; background: rgba(74,103,65,0.2); border-radius: 10px; border: 1px solid rgba(74,103,65,0.3); }
+  .ai-data-title { font-size: 12px; font-weight: 600; color: #8ab87e; margin-bottom: 6px; }
+  .ai-data-list { list-style: none; }
+  .ai-data-list li { font-size: 12px; color: #aaa; padding: 2px 0; }
+  .ai-data-list li::before { content: ''; display: inline-block; width: 6px; height: 6px; background: #4a6741; border-radius: 50%; margin-right: 8px; }
+
+  @media (max-width: 800px) {
+    .mockup-container { flex-direction: column; align-items: center; }
+    .conn-grid { grid-template-columns: 1fr; }
+    .entity-grid { grid-template-columns: 1fr; }
+    .ai-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <h1>VPaw Health Hub</h1>
+  <p class="subtitle">Architecture, Data Schema & UI Mockup</p>
+
+  <div class="tab-bar">
+    <div class="tab active" onclick="showTab('schema')">Data Schema</div>
+    <div class="tab" onclick="showTab('flow')">Connection Flow</div>
+    <div class="tab" onclick="showTab('mockup')">Hub Mockup</div>
+    <div class="tab" onclick="showTab('detail')">Category Detail</div>
+    <div class="tab" onclick="showTab('form')">Add Record Form</div>
+    <div class="tab" onclick="showTab('ai')">Premium AI</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- TAB 1: DATA SCHEMA                         -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="tab-content active" id="tab-schema">
+    <div class="schema-container">
+
+      <!-- Core Entities -->
+      <div class="layer">
+        <div class="layer-title">Core Health Entities</div>
+        <div class="entity-grid">
+
+          <!-- Vet Visit -->
+          <div class="entity-card anchor">
+            <div class="entity-name">
+              <span>Vet Visit</span>
+              <span class="badge badge-anchor">Anchor</span>
+            </div>
+            <div class="entity-desc">Her sey buraya baglana da bilir, baglanmak zorunda da degil</div>
+            <ul class="entity-fields">
+              <li class="field-required">visitDate: string (ISO)</li>
+              <li class="field-required">reasonCategory: <code>checkup | vaccine | illness | injury | surgery | emergency | follow_up</code></li>
+              <li class="field-required">status: <code>completed | planned | canceled</code></li>
+              <li class="field-optional">clinicName?: string</li>
+              <li class="field-optional">vetName?: string</li>
+              <li class="field-optional">followUpDate?: string</li>
+              <li class="field-auto">expense?: { amount, currency }</li>
+              <li class="field-optional">notes?: string</li>
+              <li class="field-auto">linkedRecordIds?: string[] &larr; otomatik</li>
+            </ul>
+          </div>
+
+          <!-- Medical Record -->
+          <div class="entity-card primary">
+            <div class="entity-name">
+              <span>Medical Record</span>
+              <span class="badge badge-core">Core</span>
+            </div>
+            <div class="entity-desc">Tek tip: vaccine, condition, surgery, medication, lab hepsi bu</div>
+            <ul class="entity-fields">
+              <li class="field-required">type: <code>vaccine | condition | surgery | medication | lab_result</code></li>
+              <li class="field-required">title: string (dropdown'dan)</li>
+              <li class="field-required">eventDate: string (ISO)</li>
+              <li class="field-optional">status?: <code>active | resolved | monitoring | completed | upcoming</code></li>
+              <li class="field-optional">vetVisitId?: string &larr; opsiyonel link</li>
+              <li class="field-optional">subcategory?: string (spesifik isim)</li>
+              <li class="field-optional">dueDate?: string (sonraki tarih)</li>
+              <li class="field-optional">valueNumber? + valueUnit? (lab icin)</li>
+              <li class="field-auto">expense?: { amount, currency }</li>
+              <li class="field-optional">note?: string</li>
+              <li class="field-auto">createdAt, updatedAt</li>
+            </ul>
+          </div>
+
+          <!-- Reminder -->
+          <div class="entity-card auto">
+            <div class="entity-name">
+              <span>Reminder</span>
+              <span class="badge badge-auto">Auto-link</span>
+            </div>
+            <div class="entity-desc">Kayitlardan otomatik + manuel olusturulabilir</div>
+            <ul class="entity-fields">
+              <li class="field-required">type: <code>medical | care</code></li>
+              <li class="field-required">subtype: <code>vaccine | vet_visit | medication | food | litter | walk | custom</code></li>
+              <li class="field-required">scheduledAt: string</li>
+              <li class="field-required">frequency: <code>once | daily | weekly | monthly | custom</code></li>
+              <li class="field-auto">sourceRecordId?: string &larr; hangi kayittan geldi</li>
+              <li class="field-auto">sourceType?: <code>medical_record | vet_visit | manual</code></li>
+              <li class="field-optional">completedAt?: string</li>
+              <li class="field-optional">isActive: boolean</li>
+            </ul>
+          </div>
+
+          <!-- Weight -->
+          <div class="entity-card">
+            <div class="entity-name">
+              <span>Weight Entry</span>
+            </div>
+            <div class="entity-desc">Profildeki kilo takibi - ayri kalir</div>
+            <ul class="entity-fields">
+              <li class="field-required">value: number</li>
+              <li class="field-required">unit: <code>kg | lb</code></li>
+              <li class="field-required">date: string (ISO)</li>
+              <li class="field-optional">vetVisitId?: string</li>
+            </ul>
+          </div>
+
+          <!-- Expense -->
+          <div class="entity-card">
+            <div class="entity-name">
+              <span>Expense</span>
+              <span class="badge badge-new">New</span>
+            </div>
+            <div class="entity-desc">Her kayda opsiyonel olarak eklenir, ayri entity degil</div>
+            <ul class="entity-fields">
+              <li class="field-required">amount: number</li>
+              <li class="field-required">currency: <code>TRY | USD | EUR</code></li>
+              <li class="field-optional">category: auto (parent record type'tan)</li>
+              <li class="field-auto">date: auto (parent record date)</li>
+            </ul>
+          </div>
+
+          <!-- Document/Attachment -->
+          <div class="entity-card">
+            <div class="entity-name">
+              <span>Document</span>
+              <span class="badge badge-new">Future</span>
+            </div>
+            <div class="entity-desc">Dosya/foto ekleme - gelecekte</div>
+            <ul class="entity-fields">
+              <li class="field-required">name: string</li>
+              <li class="field-required">uri: string</li>
+              <li class="field-required">type: <code>photo | pdf | lab_report</code></li>
+              <li class="field-optional">parentRecordId: string</li>
+            </ul>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Hub Categories = Views, not separate data -->
+      <div class="layer">
+        <div class="layer-title">Hub Categories = Filtered Views (ayri data degil!)</div>
+        <table class="type-table">
+          <thead>
+            <tr>
+              <th>Kategori</th>
+              <th>Gosterilen type</th>
+              <th>Dropdown Secenekler (free-text yok)</th>
+              <th>Status</th>
+              <th>Expense</th>
+              <th>Auto Reminder</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="type-dot" style="background:#4a6741"></span><strong>Vaccines</strong></td>
+              <td><code>type === 'vaccine'</code></td>
+              <td>Kuduz, DHPP, FeLV, FIV, FVRCP, Lyme, Bordetella, Leptospirosis</td>
+              <td>completed, upcoming</td>
+              <td>Evet</td>
+              <td>dueDate varsa &rarr; vaccine reminder</td>
+            </tr>
+            <tr>
+              <td><span class="type-dot" style="background:#c44"></span><strong>Conditions</strong></td>
+              <td><code>type === 'condition'</code></td>
+              <td>Diyabet, Bobrek Yetmezligi, Kalp Hastaligi, Tiroid, Allerji, Cilt, Goz, Kulak, Sindirim, Diger</td>
+              <td>active, resolved, monitoring</td>
+              <td>Evet</td>
+              <td>Hayir (manuel kontrol reminder)</td>
+            </tr>
+            <tr>
+              <td><span class="type-dot" style="background:#8a6a3a"></span><strong>Vet Visits</strong></td>
+              <td>VetVisit entity</td>
+              <td>Kontrol, Asi, Hastalik, Yaralanma, Ameliyat, Acil, Takip</td>
+              <td>completed, planned</td>
+              <td>Evet</td>
+              <td>followUpDate varsa &rarr; vet_visit reminder</td>
+            </tr>
+            <tr>
+              <td><span class="type-dot" style="background:#7a6a9a"></span><strong>Medications</strong></td>
+              <td><code>type === 'medication'</code></td>
+              <td>Antibiyotik, Agri Kesici, Anti-enflamatuar, Vitamin, Parazit, Goz Damlasi, Krem, Diger</td>
+              <td>active, completed, paused</td>
+              <td>Evet</td>
+              <td>frequency varsa &rarr; medication reminder</td>
+            </tr>
+            <tr>
+              <td><span class="type-dot" style="background:#5a7a9e"></span><strong>Lab Results</strong></td>
+              <td><code>type === 'lab_result'</code></td>
+              <td>Kan Paneli, Idrar Tahlili, Rontgen, Ultrason, Biyopsi, Dis Tahlili, Diger</td>
+              <td>normal, abnormal, pending</td>
+              <td>Evet</td>
+              <td>Hayir</td>
+            </tr>
+            <tr>
+              <td><span class="type-dot" style="background:#c46a7a"></span><strong>Surgeries</strong></td>
+              <td><code>type === 'surgery'</code></td>
+              <td>Kisirlik, Dis Temizligi, Tum Cikarma, Goz Ameliyati, Ortopedi, Diger</td>
+              <td>completed, planned</td>
+              <td>Evet</td>
+              <td>planned ise &rarr; reminder</td>
+            </tr>
+            <tr>
+              <td><span class="type-dot" style="background:#5f9a6f"></span><strong>Weight</strong></td>
+              <td>Weight entity</td>
+              <td>Sadece deger girisi</td>
+              <td>-</td>
+              <td>Hayir</td>
+              <td>Hayir</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- TAB 2: CONNECTION FLOW                      -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-flow">
+
+    <h3>Veri Giris Noktalari (Entry Points)</h3>
+    <div class="data-flow" style="margin-bottom: 24px">
+      <div class="flow-diagram">
+        <div class="flow-level">
+          <div class="flow-node flow-node-entry">FAB (+) Butonu</div>
+          <div class="flow-node flow-node-entry">Home Quick Actions</div>
+          <div class="flow-node flow-node-entry">Health Hub icinden</div>
+        </div>
+        <div class="flow-arrow">&darr;&darr;&darr;</div>
+        <div class="flow-level">
+          <div class="flow-node flow-node-hub" style="min-width: 300px;">HEALTH HUB (Tek Merkez)</div>
+        </div>
+        <div class="flow-arrow">&darr;</div>
+        <div class="flow-level">
+          <div class="flow-node flow-node-cat">Vaccines</div>
+          <div class="flow-node flow-node-cat">Conditions</div>
+          <div class="flow-node flow-node-cat">Vet Visits</div>
+          <div class="flow-node flow-node-cat">Medications</div>
+          <div class="flow-node flow-node-cat">Lab Results</div>
+          <div class="flow-node flow-node-cat">Surgeries</div>
+          <div class="flow-node flow-node-cat">Weight</div>
+        </div>
+        <div class="flow-arrow">&darr;</div>
+        <div class="flow-level">
+          <div class="flow-node flow-node-store">MedicalRecord (tek tablo)</div>
+          <div class="flow-node flow-node-store">VetVisit (anchor)</div>
+          <div class="flow-node flow-node-store">Weight</div>
+        </div>
+        <div class="flow-arrow">&darr;</div>
+        <div class="flow-level">
+          <div class="flow-node flow-node-output">Auto Reminders</div>
+          <div class="flow-node flow-node-output">Expense Summary</div>
+          <div class="flow-node flow-node-output">AI Health Summary</div>
+          <div class="flow-node flow-node-output">Health Passport</div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Baglanti Senaryolari</h3>
+    <div class="connections">
+      <div class="conn-grid">
+        <div class="conn-item">
+          <div>
+            <strong>Senaryo 1: Vet Ziyareti Kaydi</strong><br>
+            <span class="conn-label">Kullanici vet ziyareti olusturur &rarr; icinde asi, teshis, ilac, lab ekler</span>
+          </div>
+        </div>
+        <div class="conn-item">
+          <div>
+            <strong>Senaryo 2: Standalone Kayit</strong><br>
+            <span class="conn-label">Direkt "Asi ekle" der, vet ziyareti olmadan kaydeder</span>
+          </div>
+        </div>
+        <div class="conn-item">
+          <div>
+            <strong>Senaryo 3: Gecmise Donuk</strong><br>
+            <span class="conn-label">Eski asi/tedavi bilgisini tarih secerek kaydeder</span>
+          </div>
+        </div>
+        <div class="conn-item">
+          <div>
+            <strong>Senaryo 4: Auto Reminder</strong><br>
+            <span class="conn-label">Asi dueDate &rarr; otomatik hatirlatma olusur, ilac frequency &rarr; gunluk hatirlatma</span>
+          </div>
+        </div>
+        <div class="conn-item">
+          <div>
+            <strong>Senaryo 5: Harcama Takibi</strong><br>
+            <span class="conn-label">Her kayitta opsiyonel tutar girilir &rarr; ay/yil bazli toplam gorunur</span>
+          </div>
+        </div>
+        <div class="conn-item">
+          <div>
+            <strong>Senaryo 6: AI Ozet (Premium)</strong><br>
+            <span class="conn-label">Tum structured data &rarr; "Milo'nun saglik durumu: 2 aktif teshis, ilaclari gunde 2x..."</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Silinecek/Birlestirilecek Ekranlar</h3>
+    <div class="layer" style="margin-top: 12px">
+      <table class="type-table">
+        <thead>
+          <tr>
+            <th>Mevcut Ekran</th>
+            <th>Durum</th>
+            <th>Yeni Karsiligi</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><s>VaccinationsScreen.tsx</s></td>
+            <td style="color:#c44">SIL</td>
+            <td>HealthHub &rarr; Vaccines kategorisi</td>
+          </tr>
+          <tr>
+            <td><s>VetVisitsScreen.tsx</s></td>
+            <td style="color:#c44">SIL</td>
+            <td>HealthHub &rarr; Vet Visits kategorisi</td>
+          </tr>
+          <tr>
+            <td><s>HealthRecordsScreen.tsx</s></td>
+            <td style="color:#c44">SIL</td>
+            <td>HealthHub &rarr; Conditions + Lab Results kategorileri</td>
+          </tr>
+          <tr>
+            <td><s>WeightTrackingScreen.tsx</s></td>
+            <td style="color:#e67e22">BIRLESTIR</td>
+            <td>HealthHub &rarr; Weight kategorisi (chart component'i kalir)</td>
+          </tr>
+          <tr>
+            <td>HealthHubScreen.tsx</td>
+            <td style="color:#4a6741">YENIDEN YAZ</td>
+            <td>Yeni Hub: summary + 7 kategori + detail alt sayfalar</td>
+          </tr>
+          <tr>
+            <td>HomeScreen.tsx</td>
+            <td style="color:#4a6741">GUNCELLE</td>
+            <td>Quick action kartlari &rarr; HealthHub kategorisine yonlendir</td>
+          </tr>
+          <tr>
+            <td>PetHealthPassportScreen.tsx</td>
+            <td style="color:#5a7a9e">KALIR</td>
+            <td>Hub verilerinden beslenir (okuma)</td>
+          </tr>
+          <tr>
+            <td>RemindersScreen.tsx</td>
+            <td style="color:#5a7a9e">KALIR</td>
+            <td>Auto-reminder baglantisi eklenir</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- TAB 3: HUB MOCKUP                          -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-mockup">
+    <div class="mockup-container">
+
+      <!-- Phone: Health Hub Main -->
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="screen-header">
+            <div class="screen-title">Health Hub</div>
+            <div class="screen-subtitle">Milo &middot; British Shorthair</div>
+          </div>
+
+          <!-- Summary Strip -->
+          <div class="summary-strip">
+            <div class="summary-card">
+              <div class="summary-icon">&#9878;</div>
+              <div class="summary-value">4.5 kg</div>
+              <div class="summary-label">Weight</div>
+              <div class="summary-sub">+0.3 kg</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon">&#128137;</div>
+              <div class="summary-value" style="color: #e67e22;">1</div>
+              <div class="summary-label">Upcoming</div>
+              <div class="summary-sub" style="color: #e67e22;">DHPP due</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon">&#127973;</div>
+              <div class="summary-value">Feb 21</div>
+              <div class="summary-label">Last Visit</div>
+              <div class="summary-sub">Checkup</div>
+            </div>
+            <div class="summary-card">
+              <div class="summary-icon">&#128176;</div>
+              <div class="summary-value">2,450</div>
+              <div class="summary-label">This Year</div>
+              <div class="summary-sub">TRY</div>
+            </div>
+          </div>
+
+          <!-- Category List -->
+          <div class="cat-list">
+            <div class="cat-item">
+              <div class="cat-icon cat-icon-condition">&#129440;</div>
+              <div class="cat-info">
+                <div class="cat-name">Conditions</div>
+                <div class="cat-detail">1 active &middot; Dental Plaque</div>
+              </div>
+              <div class="cat-count">2</div>
+              <div class="cat-chevron">&rsaquo;</div>
+            </div>
+
+            <div class="cat-item">
+              <div class="cat-icon cat-icon-vaccine">&#128137;</div>
+              <div class="cat-info">
+                <div class="cat-name">Vaccines</div>
+                <div class="cat-detail">DHPP due Apr 15</div>
+              </div>
+              <div class="cat-count">5</div>
+              <div class="cat-chevron">&rsaquo;</div>
+            </div>
+
+            <div class="cat-item">
+              <div class="cat-icon cat-icon-vet">&#127973;</div>
+              <div class="cat-info">
+                <div class="cat-name">Vet Visits</div>
+                <div class="cat-detail">Last: Feb 21, 2026</div>
+              </div>
+              <div class="cat-count">3</div>
+              <div class="cat-chevron">&rsaquo;</div>
+            </div>
+
+            <div class="cat-item">
+              <div class="cat-icon cat-icon-med">&#128138;</div>
+              <div class="cat-info">
+                <div class="cat-name">Medications</div>
+                <div class="cat-detail">1 active &middot; Metacam daily</div>
+              </div>
+              <div class="cat-count">4</div>
+              <div class="cat-chevron">&rsaquo;</div>
+            </div>
+
+            <div class="cat-item">
+              <div class="cat-icon cat-icon-lab">&#129514;</div>
+              <div class="cat-info">
+                <div class="cat-name">Lab Results</div>
+                <div class="cat-detail">Last: Blood Panel Feb 21</div>
+              </div>
+              <div class="cat-count">2</div>
+              <div class="cat-chevron">&rsaquo;</div>
+            </div>
+
+            <div class="cat-item">
+              <div class="cat-icon cat-icon-surgery">&#129657;</div>
+              <div class="cat-info">
+                <div class="cat-name">Surgeries</div>
+                <div class="cat-detail">Neutering &middot; Jan 2025</div>
+              </div>
+              <div class="cat-count">1</div>
+              <div class="cat-chevron">&rsaquo;</div>
+            </div>
+
+            <div class="cat-item">
+              <div class="cat-icon cat-icon-weight">&#9878;</div>
+              <div class="cat-info">
+                <div class="cat-name">Weight Tracking</div>
+                <div class="cat-detail">4.5 kg &middot; Ideal</div>
+              </div>
+              <div class="cat-count">12</div>
+              <div class="cat-chevron">&rsaquo;</div>
+            </div>
+          </div>
+
+          <!-- Expense Banner -->
+          <div class="expense-banner" style="margin-top: 8px;">
+            <div>
+              <div class="expense-label">Total Expenses 2026</div>
+              <div class="expense-amount">2,450 TL</div>
+              <div class="expense-period">Vaccine: 850 &middot; Vet: 1,200 &middot; Med: 400</div>
+            </div>
+            <svg class="expense-chart" viewBox="0 0 80 40">
+              <polyline points="0,35 15,30 30,20 45,25 60,15 75,10" fill="none" stroke="#4a6741" stroke-width="2" opacity="0.6"/>
+            </svg>
+          </div>
+
+          <div style="height: 100px;"></div>
+        </div>
+
+        <!-- Tab Bar -->
+        <div class="mock-tab-bar">
+          <div class="mock-tab"><div class="mock-tab-icon">&#127968;</div>Home</div>
+          <div class="mock-tab active"><div class="mock-tab-icon">&#128154;</div>Health</div>
+          <div class="mock-tab"><div class="mock-tab-icon">&#128276;</div>Reminders</div>
+          <div class="mock-tab"><div class="mock-tab-icon">&#128200;</div>Insights</div>
+        </div>
+        <div class="mock-fab">+</div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- TAB 4: CATEGORY DETAIL                      -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-detail">
+    <div class="mockup-container">
+
+      <!-- Phone: Vaccines Detail -->
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="detail-header">
+            <div class="detail-back">&larr;</div>
+            <div class="detail-title">&#128137; Vaccines</div>
+            <button class="detail-add">+ Add</button>
+          </div>
+
+          <!-- Upcoming -->
+          <div style="padding: 0 20px 8px;">
+            <div style="font-size:12px; font-weight:600; color:#e67e22; text-transform:uppercase; letter-spacing:1px;">Upcoming</div>
+          </div>
+          <div class="record-card vaccine" style="border-left-color: #e67e22;">
+            <div class="record-top">
+              <div class="record-title">DHPP (Booster)</div>
+              <div class="record-date">Apr 15, 2026</div>
+            </div>
+            <div class="record-meta">
+              <span class="record-status status-upcoming">Upcoming</span>
+              <span class="record-tag">Auto-reminder set</span>
+            </div>
+          </div>
+
+          <div style="padding: 8px 20px 8px;">
+            <div style="font-size:12px; font-weight:600; color:#4a6741; text-transform:uppercase; letter-spacing:1px;">Completed</div>
+          </div>
+
+          <div class="record-card vaccine">
+            <div class="record-top">
+              <div class="record-title">Rabies (Kuduz)</div>
+              <div class="record-date">Feb 21, 2026</div>
+            </div>
+            <div class="record-meta">
+              <span class="record-status status-resolved">Done</span>
+              <span class="record-expense">350 TL</span>
+              <span class="record-tag">Dr. Ayse</span>
+            </div>
+            <div class="record-linked">&#128279; Vet Visit &middot; Feb 21 Checkup</div>
+          </div>
+
+          <div class="record-card vaccine">
+            <div class="record-top">
+              <div class="record-title">FVRCP</div>
+              <div class="record-date">Nov 10, 2025</div>
+            </div>
+            <div class="record-meta">
+              <span class="record-status status-resolved">Done</span>
+              <span class="record-expense">300 TL</span>
+            </div>
+          </div>
+
+          <div class="record-card vaccine">
+            <div class="record-top">
+              <div class="record-title">FeLV</div>
+              <div class="record-date">Aug 5, 2025</div>
+            </div>
+            <div class="record-meta">
+              <span class="record-status status-resolved">Done</span>
+              <span class="record-expense">280 TL</span>
+              <span class="record-tag">Istanbul Vet Klinik</span>
+            </div>
+            <div class="record-linked">&#128279; Vet Visit &middot; Aug 5 Vaccine</div>
+          </div>
+
+          <div class="record-card vaccine">
+            <div class="record-top">
+              <div class="record-title">DHPP</div>
+              <div class="record-date">Apr 12, 2025</div>
+            </div>
+            <div class="record-meta">
+              <span class="record-status status-resolved">Done</span>
+            </div>
+          </div>
+
+          <div class="record-card vaccine">
+            <div class="record-top">
+              <div class="record-title">Rabies (Kuduz)</div>
+              <div class="record-date">Feb 20, 2025</div>
+            </div>
+            <div class="record-meta">
+              <span class="record-status status-resolved">Done</span>
+              <span class="record-expense">320 TL</span>
+            </div>
+          </div>
+
+          <div style="height: 100px;"></div>
+        </div>
+        <div class="mock-tab-bar">
+          <div class="mock-tab"><div class="mock-tab-icon">&#127968;</div>Home</div>
+          <div class="mock-tab active"><div class="mock-tab-icon">&#128154;</div>Health</div>
+          <div class="mock-tab"><div class="mock-tab-icon">&#128276;</div>Reminders</div>
+          <div class="mock-tab"><div class="mock-tab-icon">&#128200;</div>Insights</div>
+        </div>
+      </div>
+
+      <!-- Phone: Vet Visit Detail (anchor) -->
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="detail-header">
+            <div class="detail-back">&larr;</div>
+            <div class="detail-title">&#127973; Vet Visits</div>
+            <button class="detail-add">+ Add</button>
+          </div>
+
+          <div class="record-card vet">
+            <div class="record-top">
+              <div class="record-title">Annual Checkup</div>
+              <div class="record-date">Feb 21, 2026</div>
+            </div>
+            <div style="font-size:13px; color:#666; margin-top:4px;">Istanbul Vet Klinik &middot; Dr. Ayse</div>
+            <div class="record-meta">
+              <span class="record-status status-resolved">Completed</span>
+              <span class="record-expense">1,200 TL</span>
+            </div>
+            <!-- Linked records inside visit -->
+            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #f0f0ec;">
+              <div style="font-size:11px; color:#888; font-weight:600; margin-bottom:6px;">VISIT RECORDS</div>
+              <div style="display:flex; flex-direction:column; gap:6px;">
+                <div style="display:flex; align-items:center; gap:8px; font-size:12px;">
+                  <span class="type-dot" style="background:#4a6741"></span>
+                  <span>Rabies Vaccine</span>
+                  <span style="color:#4a6741; font-weight:600; margin-left:auto;">350 TL</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; font-size:12px;">
+                  <span class="type-dot" style="background:#5a7a9e"></span>
+                  <span>Blood Panel</span>
+                  <span style="color:#4a6741; font-weight:600; margin-left:auto;">450 TL</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; font-size:12px;">
+                  <span class="type-dot" style="background:#7a6a9a"></span>
+                  <span>Metacam prescribed</span>
+                  <span style="color:#4a6741; font-weight:600; margin-left:auto;">200 TL</span>
+                </div>
+                <div style="display:flex; align-items:center; gap:8px; font-size:12px;">
+                  <span class="type-dot" style="background:#5f9a6f"></span>
+                  <span>Weight: 4.5 kg</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="record-card vet">
+            <div class="record-top">
+              <div class="record-title">Vaccine Visit</div>
+              <div class="record-date">Nov 10, 2025</div>
+            </div>
+            <div style="font-size:13px; color:#666; margin-top:4px;">PetPoint Klinik</div>
+            <div class="record-meta">
+              <span class="record-status status-resolved">Completed</span>
+              <span class="record-expense">300 TL</span>
+            </div>
+            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid #f0f0ec;">
+              <div style="font-size:11px; color:#888; font-weight:600; margin-bottom:6px;">VISIT RECORDS</div>
+              <div style="display:flex; align-items:center; gap:8px; font-size:12px;">
+                <span class="type-dot" style="background:#4a6741"></span>
+                <span>FVRCP Vaccine</span>
+                <span style="color:#4a6741; font-weight:600; margin-left:auto;">300 TL</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Planned Visit -->
+          <div style="padding: 8px 20px;">
+            <div style="font-size:12px; font-weight:600; color:#e67e22; text-transform:uppercase; letter-spacing:1px;">Planned</div>
+          </div>
+          <div class="record-card vet" style="border-left-color: #e67e22; opacity: 0.85;">
+            <div class="record-top">
+              <div class="record-title">DHPP Booster</div>
+              <div class="record-date">Apr 15, 2026</div>
+            </div>
+            <div class="record-meta">
+              <span class="record-status status-upcoming">Planned</span>
+              <span class="record-tag">Auto-reminder set</span>
+            </div>
+          </div>
+
+          <div style="height: 100px;"></div>
+        </div>
+        <div class="mock-tab-bar">
+          <div class="mock-tab"><div class="mock-tab-icon">&#127968;</div>Home</div>
+          <div class="mock-tab active"><div class="mock-tab-icon">&#128154;</div>Health</div>
+          <div class="mock-tab"><div class="mock-tab-icon">&#128276;</div>Reminders</div>
+          <div class="mock-tab"><div class="mock-tab-icon">&#128200;</div>Insights</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- TAB 5: ADD RECORD FORM                      -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-form">
+    <div class="mockup-container">
+
+      <!-- Phone: Add Record -->
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="detail-header">
+            <div class="detail-back">&times;</div>
+            <div class="detail-title">Add Record</div>
+          </div>
+
+          <div style="padding: 0 20px;">
+            <div class="form-sheet" style="box-shadow: none; padding: 0;">
+
+              <!-- Type Selection -->
+              <div class="form-group">
+                <div class="form-label">Record Type</div>
+                <div class="form-chips">
+                  <div class="form-chip selected">
+                    <div class="chip-dot" style="background: #4a6741;"></div>
+                    Vaccine
+                  </div>
+                  <div class="form-chip">
+                    <div class="chip-dot" style="background: #c44;"></div>
+                    Condition
+                  </div>
+                  <div class="form-chip">
+                    <div class="chip-dot" style="background: #7a6a9a;"></div>
+                    Medication
+                  </div>
+                  <div class="form-chip">
+                    <div class="chip-dot" style="background: #5a7a9e;"></div>
+                    Lab
+                  </div>
+                  <div class="form-chip">
+                    <div class="chip-dot" style="background: #c46a7a;"></div>
+                    Surgery
+                  </div>
+                </div>
+              </div>
+
+              <!-- Title (dropdown based on type) -->
+              <div class="form-group">
+                <div class="form-label">Vaccine Name</div>
+                <select class="form-select">
+                  <option>Select...</option>
+                  <option selected>DHPP</option>
+                  <option>Rabies (Kuduz)</option>
+                  <option>FVRCP</option>
+                  <option>FeLV</option>
+                  <option>FIV</option>
+                  <option>Bordetella</option>
+                  <option>Leptospirosis</option>
+                  <option>Lyme</option>
+                  <option>Other</option>
+                </select>
+              </div>
+
+              <!-- Date -->
+              <div class="form-group">
+                <div class="form-label">Date</div>
+                <input type="date" class="form-input" value="2026-03-23">
+              </div>
+
+              <!-- Next Due -->
+              <div class="form-group">
+                <div class="form-label">Next Due Date <span class="form-optional">(optional)</span></div>
+                <input type="date" class="form-input" value="2027-03-23">
+                <div style="font-size:11px; color:#5a7a9e; margin-top:4px;">&#128276; Auto-reminder will be created</div>
+              </div>
+
+              <!-- Vet Visit Link -->
+              <div class="form-group">
+                <div class="form-label">Link to Vet Visit <span class="form-optional">(optional)</span></div>
+                <select class="form-select">
+                  <option>No visit link</option>
+                  <option>Feb 21 - Annual Checkup</option>
+                  <option>Nov 10 - Vaccine Visit</option>
+                  <option selected>+ Create new visit</option>
+                </select>
+              </div>
+
+              <!-- Expense -->
+              <div class="form-group">
+                <div class="form-label">Cost <span class="form-optional">(optional)</span></div>
+                <div class="form-row">
+                  <input type="number" class="form-input" placeholder="0" value="350">
+                  <select class="form-select" style="max-width: 90px;">
+                    <option selected>TRY</option>
+                    <option>USD</option>
+                    <option>EUR</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Note -->
+              <div class="form-group">
+                <div class="form-label">Notes <span class="form-optional">(optional)</span></div>
+                <textarea class="form-input" rows="2" placeholder="Add a note..." style="resize:none;"></textarea>
+              </div>
+
+              <button class="form-btn">Save Record</button>
+            </div>
+          </div>
+
+          <div style="height: 40px;"></div>
+        </div>
+      </div>
+
+      <!-- Phone: Vet Visit Form (anchor) -->
+      <div class="phone">
+        <div class="phone-notch"></div>
+        <div class="phone-screen">
+          <div class="detail-header">
+            <div class="detail-back">&times;</div>
+            <div class="detail-title">Add Vet Visit</div>
+          </div>
+
+          <div style="padding: 0 20px;">
+            <div class="form-sheet" style="box-shadow: none; padding: 0;">
+
+              <!-- Reason -->
+              <div class="form-group">
+                <div class="form-label">Visit Reason</div>
+                <div class="form-chips">
+                  <div class="form-chip selected">Checkup</div>
+                  <div class="form-chip">Vaccine</div>
+                  <div class="form-chip">Illness</div>
+                  <div class="form-chip">Injury</div>
+                  <div class="form-chip">Surgery</div>
+                  <div class="form-chip">Emergency</div>
+                  <div class="form-chip">Follow-up</div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <div class="form-label">Date</div>
+                <input type="date" class="form-input" value="2026-03-23">
+              </div>
+
+              <div class="form-group">
+                <div class="form-label">Clinic <span class="form-optional">(optional)</span></div>
+                <input type="text" class="form-input" placeholder="Clinic name" value="Istanbul Vet Klinik">
+              </div>
+
+              <div class="form-group">
+                <div class="form-label">Veterinarian <span class="form-optional">(optional)</span></div>
+                <input type="text" class="form-input" placeholder="Vet name" value="Dr. Ayse">
+              </div>
+
+              <div class="form-group">
+                <div class="form-label">Total Cost <span class="form-optional">(optional)</span></div>
+                <div class="form-row">
+                  <input type="number" class="form-input" placeholder="0" value="1200">
+                  <select class="form-select" style="max-width: 90px;">
+                    <option selected>TRY</option>
+                    <option>USD</option>
+                    <option>EUR</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <div class="form-label">Follow-up Date <span class="form-optional">(optional)</span></div>
+                <input type="date" class="form-input">
+                <div style="font-size:11px; color:#5a7a9e; margin-top:4px;">&#128276; Auto-reminder will be created</div>
+              </div>
+
+              <!-- What happened during visit -->
+              <div class="form-group">
+                <div class="form-label">What happened? <span class="form-optional">(add after save)</span></div>
+                <div style="padding: 14px; background: #fafaf8; border-radius: 10px; border: 1.5px dashed #ddd;">
+                  <div style="font-size:13px; color:#888; text-align:center;">
+                    After saving the visit, you can add:<br>
+                    <span style="color:#4a6741;">Vaccines</span> &middot;
+                    <span style="color:#5a7a9e;">Lab Results</span> &middot;
+                    <span style="color:#7a6a9a;">Medications</span> &middot;
+                    <span style="color:#c44;">Diagnoses</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <div class="form-label">Notes <span class="form-optional">(optional)</span></div>
+                <textarea class="form-input" rows="2" placeholder="Add a note..." style="resize:none;"></textarea>
+              </div>
+
+              <button class="form-btn">Save Visit</button>
+            </div>
+          </div>
+
+          <div style="height: 40px;"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- TAB 6: PREMIUM AI                           -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div class="tab-content" id="tab-ai">
+
+    <div class="ai-section">
+      <div class="ai-title">&#10024; Premium AI Health Summary</div>
+      <p style="font-size: 13px; color: #aaa; margin-bottom: 20px;">
+        Structured data = Accurate AI. Her kategori dropdown'dan secildigi icin, AI tam olarak anlayabilir.
+      </p>
+
+      <div class="ai-grid">
+        <div class="ai-item">
+          <div class="ai-item-title">Health Score</div>
+          <div class="ai-item-desc">Tum verilere bakarak 0-100 arasi saglik skoru hesaplar. Aktif condition sayisi, asi durumu, kilo trendi, ilac uyumu</div>
+        </div>
+        <div class="ai-item">
+          <div class="ai-item-title">Risk Alerts</div>
+          <div class="ai-item-desc">"Diyabet + kilo artisi = risk" gibi cross-category analizler. Irksa yatkinliklar</div>
+        </div>
+        <div class="ai-item">
+          <div class="ai-item-title">Expense Forecast</div>
+          <div class="ai-item-desc">Gecmis harcamalara dayanarak yillik maliyet tahmini. Kategori bazli breakdown</div>
+        </div>
+        <div class="ai-item">
+          <div class="ai-item-title">Care Timeline</div>
+          <div class="ai-item-desc">"Nisan: DHPP booster, Mayis: dis temizligi, Haziran: kan tahlili" gibi gelecek plan</div>
+        </div>
+      </div>
+
+      <div class="ai-data-needs">
+        <div class="ai-data-title">AI'nin Ihtiyac Duydugu Structured Data</div>
+        <ul class="ai-data-list">
+          <li><strong>Conditions:</strong> type=condition, status (active/resolved), name (dropdown)</li>
+          <li><strong>Vaccines:</strong> type=vaccine, name (dropdown), dueDate</li>
+          <li><strong>Medications:</strong> type=medication, name, frequency, status (active)</li>
+          <li><strong>Lab Results:</strong> type=lab_result, valueNumber, valueUnit, status (normal/abnormal)</li>
+          <li><strong>Weight:</strong> value array + dates &rarr; trend analysis</li>
+          <li><strong>Expenses:</strong> amount + currency per record &rarr; category breakdown</li>
+          <li><strong>Pet Profile:</strong> breed, age, sex &rarr; breed-specific risk factors</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="layer" style="margin-top: 24px;">
+      <div class="layer-title">Free-text vs Structured Karsilastirmasi</div>
+      <table class="type-table">
+        <thead>
+          <tr>
+            <th>Alan</th>
+            <th style="color:#c44;">Eski (Free-text)</th>
+            <th style="color:#4a6741;">Yeni (Structured)</th>
+            <th>AI Farki</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Vaccine name</td>
+            <td>"rabis asisi yaptirdim"</td>
+            <td>Dropdown: "Rabies"</td>
+            <td>AI ne asi oldugunu %100 bilir</td>
+          </tr>
+          <tr>
+            <td>Condition</td>
+            <td>"bobrek sorunu varmis"</td>
+            <td>Dropdown: "Bobrek Yetmezligi" + status: active</td>
+            <td>AI tedavi onerebilir, risk hesaplar</td>
+          </tr>
+          <tr>
+            <td>Medication</td>
+            <td>"ilac verdiler gunde 2"</td>
+            <td>Name: "Metacam" + frequency: twice_daily + status: active</td>
+            <td>AI etkilesim kontrolu + uyum takibi</td>
+          </tr>
+          <tr>
+            <td>Expense</td>
+            <td>(yok)</td>
+            <td>amount: 350, currency: TRY</td>
+            <td>AI yillik maliyet tahmini yapabilir</td>
+          </tr>
+          <tr>
+            <td>Lab value</td>
+            <td>"kan degerleri normalmis"</td>
+            <td>valueNumber: 45, valueUnit: "mg/dL", status: normal</td>
+            <td>AI zaman icinde trend analizi yapabilir</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function showTab(tabId) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+  document.getElementById('tab-' + tabId).classList.add('active');
+
+  // Find which tab index
+  const tabs = document.querySelectorAll('.tab');
+  const tabIds = ['schema', 'flow', 'mockup', 'detail', 'form', 'ai'];
+  const idx = tabIds.indexOf(tabId);
+  if (idx >= 0) tabs[idx].classList.add('active');
+}
+</script>
+
+</body>
+</html>

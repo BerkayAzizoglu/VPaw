@@ -1,8 +1,8 @@
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
-import type { ByPet, PetId, Reminder, ReminderSubtype } from './healthMvpModel';
+import type { ByPet, Reminder, ReminderSubtype } from './healthMvpModel';
 
-type PetNameById = Record<PetId, string>;
+type PetNameById = Record<string, string>;
 
 let notificationConfigured = false;
 
@@ -93,10 +93,11 @@ export async function reconcileReminderNotifications(
   const forceReschedule = !!options?.forceReschedule;
   const granted = await ensureNotificationPermissions();
 
-  const next: ByPet<Reminder> = { luna: [], milo: [] };
-  const petIds: PetId[] = ['luna', 'milo'];
+  const next: ByPet<Reminder> = {};
+  const petIds = Array.from(new Set([...Object.keys(byPet), ...Object.keys(petNames)]));
 
   for (const petId of petIds) {
+    next[petId] = [];
     const petName = petNames[petId] || 'Pet';
     for (const reminder of byPet[petId] ?? []) {
       let currentNotificationId = reminder.notificationId;

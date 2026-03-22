@@ -8,12 +8,14 @@ import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 
 type PetProfilesScreenProps = {
   locale: Locale;
-  activePetId: 'luna' | 'milo';
-  petProfiles: Record<'luna' | 'milo', PetProfile>;
+  activePetId: string;
+  petProfiles: Record<string, PetProfile>;
   onBack: () => void;
-  onSelectPet: (petId: 'luna' | 'milo') => void;
-  onOpenPetDetail: (petId: 'luna' | 'milo') => void;
-  onOpenPetEdit: (petId: 'luna' | 'milo') => void;
+  onSelectPet: (petId: string) => void;
+  onOpenPetDetail: (petId: string) => void;
+  onOpenPetEdit: (petId: string) => void;
+  canAddPet?: boolean;
+  onAddPet?: () => void;
 };
 
 function formatAgeFromBirthDate(birthDate: string, locale: Locale) {
@@ -46,9 +48,12 @@ export default function PetProfilesScreen({
   onSelectPet,
   onOpenPetDetail,
   onOpenPetEdit,
+  canAddPet = false,
+  onAddPet,
 }: PetProfilesScreenProps) {
   const isTr = locale === 'tr';
-  const pets = (Object.keys(petProfiles) as Array<'luna' | 'milo'>).map((id) => petProfiles[id]);
+  const pets = Object.values(petProfiles)
+    .filter((pet) => pet && typeof pet.name === 'string' && pet.name.trim().length > 0);
   const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: true, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
 
   return (
@@ -66,6 +71,9 @@ export default function PetProfilesScreen({
         <Text style={styles.subtitle}>{isTr ? 'Tüm dostlarını tek ekranda yönet.' : 'Manage all companions in one place.'}</Text>
 
         <View style={styles.cardsWrap}>
+          {pets.length === 0 && (
+            <Text style={styles.emptyText}>{isTr ? 'Henüz evcil hayvan eklenmemiş.' : 'No pets added yet.'}</Text>
+          )}
           {pets.map((pet) => {
             const active = pet.id === activePetId;
             const ageText = formatAgeFromBirthDate(pet.birthDate, locale);
@@ -103,6 +111,20 @@ export default function PetProfilesScreen({
               </Pressable>
             );
           })}
+
+          {canAddPet ? (
+            <Pressable style={styles.addPetBtn} onPress={onAddPet}>
+              <Text style={styles.addPetBtnText}>{isTr ? '+ Yeni Hayvan Ekle' : '+ Add New Pet'}</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.addPetLockedWrap}>
+              <Text style={styles.addPetLockedText}>
+                {isTr
+                  ? 'Daha fazla evcil hayvan eklemek için Premium\'a geç.'
+                  : 'Upgrade to Premium to add more pets.'}
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
     </View>
@@ -236,6 +258,40 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: '#545454',
     fontWeight: '600',
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#9a9a9a',
+    fontSize: 14,
+    paddingVertical: 16,
+  },
+  addPetBtn: {
+    marginTop: 4,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: '#2d2d2d',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addPetBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  addPetLockedWrap: {
+    marginTop: 4,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: '#f5f5f3',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    alignItems: 'center',
+  },
+  addPetLockedText: {
+    fontSize: 13,
+    color: '#8a8a8a',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });
 

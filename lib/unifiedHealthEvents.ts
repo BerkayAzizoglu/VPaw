@@ -2,8 +2,6 @@ import type { PetProfile } from '../components/AuthGate';
 import type { WeightPoint } from '../screens/WeightTrackingScreen';
 import type { ByPet, MedicalEvent, VetVisit } from './healthMvpModel';
 
-type PetId = 'luna' | 'milo';
-
 export type UnifiedHealthEventType = 'vaccine' | 'vet' | 'record' | 'weight';
 
 export type UnifiedHealthEvent = {
@@ -35,7 +33,7 @@ export function buildUnifiedHealthEventsForPet(
   petId: PetId,
   medicalEventsByPet: ByPet<MedicalEvent>,
   vetVisitsByPet: ByPet<VetVisit>,
-  weightsByPet: Record<PetId, WeightPoint[]>,
+  weightsByPet: Record<string, WeightPoint[]>,
   profile?: PetProfile,
 ): UnifiedHealthEvent[] {
   const medical = (medicalEventsByPet[petId] ?? []).map((event) => ({

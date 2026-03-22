@@ -1,5 +1,5 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 type ReminderSubtype = 'vet_visit' | 'vaccine' | 'medication' | 'food' | 'litter' | 'walk' | 'custom';
 
@@ -8,7 +8,7 @@ type ReminderItem = {
   title: string;
   date: string;
   petName?: string;
-  petId?: 'luna' | 'milo';
+  petId?: string;
   subtype?: ReminderSubtype;
 };
 
@@ -17,13 +17,16 @@ type RemindersScreenProps = {
   today: ReminderItem[];
   upcoming: ReminderItem[];
   overdue: ReminderItem[];
-  activePetId?: 'luna' | 'milo';
+  completed?: ReminderItem[];
+  activePetId?: string;
   activePetType?: 'Dog' | 'Cat';
   openCreateNonce?: number;
   subtypePreset?: ReminderSubtype;
+  locale?: 'en' | 'tr';
   onComplete?: (id: string) => void;
+  onDeleteReminder?: (id: string) => void;
   onCreate?: (payload: {
-    petId: 'luna' | 'milo';
+    petId: string;
     subtype: ReminderSubtype;
     title: string;
     date: string;
@@ -32,14 +35,24 @@ type RemindersScreenProps = {
 
 const BASE_SUBTYPES: ReminderSubtype[] = ['vaccine', 'vet_visit', 'medication', 'food', 'litter', 'walk', 'custom'];
 
-function subtypeLabel(subtype: ReminderSubtype) {
-  if (subtype === 'vaccine') return 'Vaccine';
-  if (subtype === 'vet_visit') return 'Vet Visit';
-  if (subtype === 'medication') return 'Medication';
-  if (subtype === 'food') return 'Food';
-  if (subtype === 'litter') return 'Litter';
-  if (subtype === 'walk') return 'Walk';
-  return 'Custom';
+function subtypeLabel(subtype: ReminderSubtype, isTr: boolean) {
+  if (subtype === 'vaccine') return isTr ? 'Aşı' : 'Vaccine';
+  if (subtype === 'vet_visit') return isTr ? 'Vet Ziyareti' : 'Vet Visit';
+  if (subtype === 'medication') return isTr ? 'İlaç' : 'Medication';
+  if (subtype === 'food') return isTr ? 'Mama' : 'Food';
+  if (subtype === 'litter') return isTr ? 'Kum' : 'Litter';
+  if (subtype === 'walk') return isTr ? 'Yürüyüş' : 'Walk';
+  return isTr ? 'Özel' : 'Custom';
+}
+
+function subtypeColor(subtype: ReminderSubtype | undefined) {
+  if (subtype === 'vaccine') return '#5a7a9e';
+  if (subtype === 'vet_visit') return '#8a6a3a';
+  if (subtype === 'medication') return '#7a6a9a';
+  if (subtype === 'food') return '#5f7f59';
+  if (subtype === 'litter') return '#4a8a7a';
+  if (subtype === 'walk') return '#9a7a3a';
+  return '#8a8a8a';
 }
 
 function isValidDate(value: string) {
@@ -47,19 +60,33 @@ function isValidDate(value: string) {
   return Number.isFinite(ms);
 }
 
+function buildRowSub(item: ReminderItem, isTr: boolean) {
+  const parts: string[] = [];
+  if (item.petName) parts.push(item.petName);
+  parts.push(item.date);
+  if (item.subtype) parts.push(subtypeLabel(item.subtype, isTr));
+  return parts.join(' • ');
+}
+
 function ReminderSection({
   title,
   items,
   empty,
+  isTr,
   onComplete,
+  onDelete,
   actionLabel,
 }: {
   title: string;
   items: ReminderItem[];
   empty: string;
+  isTr: boolean;
   onComplete?: (id: string) => void;
-  actionLabel?: 'Done' | 'Overdue';
+  onDelete?: (id: string) => void;
+  actionLabel?: 'done' | 'overdue' | 'history';
 }) {
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
   return (
     <>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -68,13 +95,52 @@ function ReminderSection({
           <Text style={styles.emptyText}>{empty}</Text>
         ) : (
           items.map((item, index) => (
-            <Pressable key={item.id} style={[styles.row, index !== items.length - 1 && styles.rowDivider]} onPress={() => onComplete?.(item.id)}>
-              <View style={styles.rowTextWrap}>
-                <Text style={styles.rowTitle}>{item.title}</Text>
-                <Text style={styles.rowSub}>{item.petName ? `${item.petName} • ${item.date}` : item.date}</Text>
+            <View key={item.id} style={[styles.rowWrap, index !== items.length - 1 && styles.rowDivider]}>
+              {item.subtype ? (
+                <View style={[styles.subtypeDot, { backgroundColor: subtypeColor(item.subtype) }]} />
+              ) : null}
+              <View style={styles.rowBody}>
+                <Pressable
+                  style={styles.rowPressable}
+                  onPress={() => {
+                    if (confirmDeleteId === item.id) {
+                      setConfirmDeleteId(null);
+                    } else if (actionLabel !== 'history') {
+                      onComplete?.(item.id);
+                    }
+                  }}
+                >
+                  <View style={styles.rowTextWrap}>
+                    <Text style={[styles.rowTitle, actionLabel === 'history' && styles.rowTitleHistory]}>{item.title}</Text>
+                    <Text style={styles.rowSub}>{buildRowSub(item, isTr)}</Text>
+                  </View>
+                  {actionLabel === 'overdue' ? (
+                    <Text style={styles.overdueTag}>{isTr ? 'Gecikmiş' : 'Overdue'}</Text>
+                  ) : actionLabel === 'history' ? (
+                    <Text style={styles.historyTag}>{isTr ? 'Tamam' : 'Done'}</Text>
+                  ) : (
+                    <Text style={styles.rowAction}>{isTr ? 'Tamam' : 'Done'}</Text>
+                  )}
+                </Pressable>
+
+                {onDelete ? (
+                  confirmDeleteId === item.id ? (
+                    <View style={styles.deleteConfirmRow}>
+                      <Pressable style={styles.deleteConfirmBtn} onPress={() => { onDelete(item.id); setConfirmDeleteId(null); }}>
+                        <Text style={styles.deleteConfirmText}>{isTr ? 'Sil — emin misin?' : 'Confirm Delete'}</Text>
+                      </Pressable>
+                      <Pressable onPress={() => setConfirmDeleteId(null)}>
+                        <Text style={styles.deleteCancelText}>{isTr ? 'Vazgeç' : 'Cancel'}</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Pressable style={styles.deleteBtn} onPress={() => setConfirmDeleteId(item.id)}>
+                      <Text style={styles.deleteBtnText}>✕</Text>
+                    </Pressable>
+                  )
+                ) : null}
               </View>
-              {actionLabel === 'Overdue' ? <Text style={styles.overdueTag}>Overdue</Text> : <Text style={styles.rowAction}>Done</Text>}
-            </Pressable>
+            </View>
           ))
         )}
       </View>
@@ -83,22 +149,29 @@ function ReminderSection({
 }
 
 export default function RemindersScreen({
-  title = 'Reminders',
   today,
   upcoming,
   overdue,
-  activePetId = 'luna',
+  completed = [],
+  activePetId = '',
   activePetType = 'Dog',
   openCreateNonce,
   subtypePreset,
+  locale = 'en',
   onComplete,
+  onDeleteReminder,
   onCreate,
 }: RemindersScreenProps) {
+  const isTr = locale === 'tr';
   const [createOpen, setCreateOpen] = useState(false);
   const [subtype, setSubtype] = useState<ReminderSubtype>(activePetType === 'Dog' ? 'walk' : 'food');
   const [entryTitle, setEntryTitle] = useState('');
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
   const [error, setError] = useState('');
+  const [focusedField, setFocusedField] = useState<'title' | 'date' | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const saveScale = useMemo(() => new Animated.Value(1), []);
+  const isFullyEmpty = today.length === 0 && upcoming.length === 0 && overdue.length === 0;
 
   const subtypeOptions = useMemo(() => {
     if (activePetType === 'Cat') {
@@ -109,7 +182,8 @@ export default function RemindersScreen({
 
   const openCreate = () => {
     const preferred = subtypePreset ?? (activePetType === 'Dog' ? 'walk' : 'food');
-    setSubtype(preferred);
+    const safePreferred = subtypeOptions.includes(preferred) ? preferred : subtypeOptions[0];
+    setSubtype(safePreferred);
     setEntryTitle('');
     setEntryDate(new Date().toISOString().slice(0, 10));
     setError('');
@@ -122,18 +196,24 @@ export default function RemindersScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openCreateNonce]);
 
+  const isFormValid = entryTitle.trim().length > 0
+    && entryDate.trim().length > 0
+    && isValidDate(entryDate)
+    && subtypeOptions.includes(subtype)
+    && !(activePetType === 'Cat' && subtype === 'walk');
+
   const submitCreate = () => {
     const cleanedTitle = entryTitle.trim();
     if (!cleanedTitle) {
-      setError('Please enter a reminder title.');
+      setError(isTr ? 'Başlık girin.' : 'Please enter a reminder title.');
       return;
     }
     if (!isValidDate(entryDate)) {
-      setError('Please enter a valid date (YYYY-MM-DD).');
+      setError(isTr ? 'Geçerli tarih girin (YYYY-AA-GG).' : 'Please enter a valid date (YYYY-MM-DD).');
       return;
     }
-    if (activePetType === 'Cat' && subtype === 'walk') {
-      setError('Walk reminder is available only for dogs.');
+    if (!subtypeOptions.includes(subtype)) {
+      setError(isTr ? 'Geçerli bir tür seçin.' : 'Please select a valid reminder type.');
       return;
     }
 
@@ -150,63 +230,148 @@ export default function RemindersScreen({
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
-          <View style={styles.headerSpacer} />
+          <Text style={styles.headerTitle}>{isTr ? 'Hatırlatmalar' : 'Reminders'}</Text>
           <Pressable style={styles.addBtn} onPress={openCreate}>
-            <Text style={styles.addBtnText}>+ Add</Text>
+            <Text style={styles.addBtnText}>{isTr ? '+ Ekle' : '+ Add'}</Text>
           </Pressable>
         </View>
 
-        <ReminderSection title="Today" items={today} empty="No reminders for today." onComplete={onComplete} actionLabel="Done" />
-        <ReminderSection title="Upcoming" items={upcoming} empty="No upcoming reminders." onComplete={onComplete} actionLabel="Done" />
-        <ReminderSection title="Overdue" items={overdue} empty="No overdue reminders." onComplete={onComplete} actionLabel="Overdue" />
+        {isFullyEmpty ? (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>{isTr ? 'Hatırlatma yok' : 'No reminders set'}</Text>
+            <Text style={styles.emptyBody}>{isTr ? 'İlk hatırlatmanı ekle ve takipte kal.' : 'Create your first reminder to stay on track.'}</Text>
+            <Pressable style={styles.emptyCta} onPress={openCreate}>
+              <Text style={styles.emptyCtaText}>{isTr ? 'Hatırlatma Ekle' : 'Add Reminder'}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        <ReminderSection
+          title={isTr ? 'Bugün' : 'Today'}
+          items={today}
+          empty={isTr ? 'Bugün hatırlatma yok.' : 'No reminders for today.'}
+          isTr={isTr}
+          onComplete={onComplete}
+          onDelete={onDeleteReminder}
+          actionLabel="done"
+        />
+        <ReminderSection
+          title={isTr ? 'Yaklaşan' : 'Upcoming'}
+          items={upcoming}
+          empty={isTr ? 'Yaklaşan hatırlatma yok.' : 'No upcoming reminders.'}
+          isTr={isTr}
+          onComplete={onComplete}
+          onDelete={onDeleteReminder}
+          actionLabel="done"
+        />
+        <ReminderSection
+          title={isTr ? 'Gecikmiş' : 'Overdue'}
+          items={overdue}
+          empty={isTr ? 'Gecikmiş hatırlatma yok.' : 'No overdue reminders.'}
+          isTr={isTr}
+          onComplete={onComplete}
+          onDelete={onDeleteReminder}
+          actionLabel="overdue"
+        />
+
+        {completed.length > 0 ? (
+          <>
+            <Pressable style={styles.completedToggle} onPress={() => setShowCompleted((v) => !v)}>
+              <Text style={styles.completedToggleText}>
+                {isTr
+                  ? `${showCompleted ? '▾' : '▸'} Geçmiş (${completed.length})`
+                  : `${showCompleted ? '▾' : '▸'} History (${completed.length})`}
+              </Text>
+            </Pressable>
+            {showCompleted ? (
+              <ReminderSection
+                title=""
+                items={completed}
+                empty=""
+                isTr={isTr}
+                onDelete={onDeleteReminder}
+                actionLabel="history"
+              />
+            ) : null}
+          </>
+        ) : null}
       </ScrollView>
 
-      <Modal visible={createOpen} transparent animationType="fade" onRequestClose={() => setCreateOpen(false)}>
+      <Modal
+        visible={createOpen}
+        transparent={false}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        statusBarTranslucent={false}
+        onRequestClose={() => setCreateOpen(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Add Reminder</Text>
+            <Text style={styles.modalTitle}>{isTr ? 'Hatırlatma Ekle' : 'Add Reminder'}</Text>
 
-            <Text style={styles.fieldLabel}>Type</Text>
+            <Text style={styles.fieldLabel}>{isTr ? 'Tür' : 'Type'}</Text>
             <View style={styles.chips}>
               {subtypeOptions.map((item) => (
                 <Pressable
                   key={item}
-                  style={[styles.chip, subtype === item && styles.chipActive]}
+                  style={({ pressed }) => [
+                    styles.chip,
+                    subtype !== item && styles.chipInactive,
+                    subtype === item && styles.chipActive,
+                    pressed && styles.chipPressed,
+                  ]}
                   onPress={() => setSubtype(item)}
                 >
-                  <Text style={[styles.chipText, subtype === item && styles.chipTextActive]}>{subtypeLabel(item)}</Text>
+                  <View style={[styles.chipDot, { backgroundColor: subtypeColor(item) }]} />
+                  <Text style={[styles.chipText, subtype === item && styles.chipTextActive]}>{subtypeLabel(item, isTr)}</Text>
                 </Pressable>
               ))}
             </View>
 
-            <Text style={styles.fieldLabel}>Title</Text>
+            <Text style={styles.fieldLabel}>{isTr ? 'Başlık' : 'Title'}</Text>
             <TextInput
-              style={styles.input}
-              placeholder="Reminder title"
+              style={[styles.input, focusedField === 'title' && styles.inputFocused]}
+              placeholder={isTr ? 'Hatırlatma başlığı' : 'Reminder title'}
               placeholderTextColor="#a4a4a4"
               value={entryTitle}
               onChangeText={setEntryTitle}
+              onFocus={() => setFocusedField('title')}
+              onBlur={() => setFocusedField(null)}
             />
 
-            <Text style={styles.fieldLabel}>Date (YYYY-MM-DD)</Text>
+            <Text style={styles.fieldLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, focusedField === 'date' && styles.inputFocused]}
               placeholder="2026-03-22"
               placeholderTextColor="#a4a4a4"
               value={entryDate}
               onChangeText={setEntryDate}
               autoCapitalize="none"
+              onFocus={() => setFocusedField('date')}
+              onBlur={() => setFocusedField(null)}
             />
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
             <View style={styles.modalActions}>
               <Pressable style={styles.secondaryBtn} onPress={() => setCreateOpen(false)}>
-                <Text style={styles.secondaryBtnText}>Cancel</Text>
+                <Text style={styles.secondaryBtnText}>{isTr ? 'İptal' : 'Cancel'}</Text>
               </Pressable>
-              <Pressable style={styles.primaryBtn} onPress={submitCreate}>
-                <Text style={styles.primaryBtnText}>Save</Text>
-              </Pressable>
+              <Animated.View style={{ transform: [{ scale: saveScale }] }}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.primaryBtn,
+                    !isFormValid && styles.primaryBtnDisabled,
+                    pressed && isFormValid && styles.primaryBtnPressed,
+                  ]}
+                  disabled={!isFormValid}
+                  onPress={submitCreate}
+                  onPressIn={() => Animated.spring(saveScale, { toValue: 0.98, useNativeDriver: true, speed: 40, bounciness: 6 }).start()}
+                  onPressOut={() => Animated.spring(saveScale, { toValue: 1, useNativeDriver: true, speed: 36, bounciness: 5 }).start()}
+                >
+                  <Text style={styles.primaryBtnText}>{isTr ? 'Kaydet' : 'Save'}</Text>
+                </Pressable>
+              </Animated.View>
             </View>
           </View>
         </View>
@@ -231,9 +396,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  headerSpacer: {
-    width: 2,
-    height: 2,
+  headerTitle: {
+    fontSize: 30,
+    lineHeight: 34,
+    color: '#2d2d2d',
+    fontWeight: '700',
+    letterSpacing: -0.6,
   },
   addBtn: {
     height: 34,
@@ -246,6 +414,43 @@ const styles = StyleSheet.create({
   addBtnText: {
     color: '#faf8f5',
     fontSize: 12,
+    fontWeight: '700',
+  },
+  emptyCard: {
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 6,
+  },
+  emptyTitle: {
+    color: '#2d2d2d',
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: '700',
+  },
+  emptyBody: {
+    color: '#888',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+  },
+  emptyCta: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  emptyCtaText: {
+    color: '#4f6b43',
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '700',
   },
   sectionTitle: {
@@ -262,17 +467,30 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.05)',
     overflow: 'hidden',
   },
-  row: {
+  rowWrap: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  rowDivider: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+  },
+  subtypeDot: {
+    width: 3,
+    borderRadius: 2,
+    marginVertical: 10,
+    marginLeft: 8,
+  },
+  rowBody: {
+    flex: 1,
+  },
+  rowPressable: {
     minHeight: 62,
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
-  },
-  rowDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.06)',
   },
   rowTextWrap: {
     flex: 1,
@@ -282,6 +500,10 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '700',
+  },
+  rowTitleHistory: {
+    color: '#9a9a9a',
+    fontWeight: '500',
   },
   rowSub: {
     marginTop: 2,
@@ -300,6 +522,48 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
+  historyTag: {
+    color: '#b0b0b0',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  deleteConfirmRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingBottom: 10,
+  },
+  deleteConfirmBtn: {
+    borderRadius: 12,
+    backgroundColor: '#c26c6c',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  deleteConfirmText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  deleteCancelText: {
+    color: '#8a8a8a',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  deleteBtn: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteBtnText: {
+    color: '#c0c0c0',
+    fontSize: 12,
+    fontWeight: '700',
+  },
   emptyText: {
     paddingHorizontal: 14,
     paddingVertical: 16,
@@ -308,15 +572,25 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontWeight: '500',
   },
+  completedToggle: {
+    paddingVertical: 4,
+  },
+  completedToggleText: {
+    color: '#8a8a8a',
+    fontSize: 13,
+    fontWeight: '600',
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-    justifyContent: 'center',
+    backgroundColor: '#faf8f5',
     paddingHorizontal: 18,
+    paddingTop: 52,
+    paddingBottom: 24,
   },
   modalCard: {
-    borderRadius: 18,
-    backgroundColor: '#faf8f5',
+    flex: 1,
+    borderRadius: 20,
+    backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.08)',
     paddingHorizontal: 14,
@@ -351,12 +625,24 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.08)',
     backgroundColor: '#fff',
     paddingHorizontal: 12,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 5,
   },
   chipActive: {
     borderColor: '#7f9a70',
     backgroundColor: '#eef5ea',
+  },
+  chipInactive: {
+    opacity: 0.82,
+  },
+  chipPressed: {
+    transform: [{ scale: 0.98 }],
+  },
+  chipDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
   chipText: {
     color: '#5f5f5f',
@@ -376,6 +662,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     color: '#2d2d2d',
     fontSize: 14,
+  },
+  inputFocused: {
+    borderColor: '#9ab395',
+    shadowColor: '#8ca486',
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
   errorText: {
     marginTop: 8,
@@ -412,6 +706,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  primaryBtnDisabled: {
+    opacity: 0.55,
+  },
+  primaryBtnPressed: {
+    opacity: 0.92,
   },
   primaryBtnText: {
     color: '#faf8f5',

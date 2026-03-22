@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Animated,
@@ -17,11 +17,12 @@ import { Nunito_600SemiBold } from '@expo-google-fonts/nunito';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
-import { Bell, ChevronRight, Mars, PawPrint, Pencil, Settings, Venus } from 'lucide-react-native';
+import { ChevronRight, Mars, PawPrint, Pencil, Venus } from 'lucide-react-native';
 import type { PetProfile } from '../components/AuthGate';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
 import { useAppSettings } from '../hooks/useAppSettings';
+import type { AiInsight } from '../lib/insightsEngine';
 
 const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
 const vaccinesCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/vaccines.svg')).uri;
@@ -31,10 +32,8 @@ const healthRecordsCardIconUri = Image.resolveAssetSource(require('../assets/hom
 const HOME_CARD_ICON_SIZE = 26;
 const HOME_CARD_ICON_SIZE_LARGE = 30;
 
-type PetId = 'luna' | 'milo';
-
 type HomePetData = {
-  id: PetId;
+  id: string;
   name: string;
   petType: 'Dog' | 'Cat';
   breed: string;
@@ -54,25 +53,30 @@ type HomePetData = {
 };
 
 type HomeScreenProps = {
+  onOpenProfile?: () => void;
   onOpenReminders?: () => void;
-  onOpenSettings?: () => void;
+  onOpenAddReminder?: () => void;
   reminderBadgeCount?: number;
+  userAvatarUri?: string;
+  userInitials?: string;
   onOpenPetProfile?: (petId?: string) => void;
   onOpenVaccinations?: (petId?: string) => void;
   onOpenHealthRecords?: (petId?: string) => void;
   onOpenVetVisits?: (petId?: string) => void;
   onOpenPetEdit?: (petId?: string) => void;
   onOpenPetPassport?: (petId?: string) => void;
-  petProfiles?: Record<'luna' | 'milo', PetProfile>;
-  weightsByPet?: Record<'luna' | 'milo', WeightPoint[]>;
+  petProfiles?: Record<string, PetProfile>;
+  weightsByPet?: Record<string, WeightPoint[]>;
   activePetId?: string;
   onChangeActivePet?: (petId: string) => void;
   petLockEnabled?: boolean;
   onChangePetLockEnabled?: (enabled: boolean) => void;
-  upcomingRemindersByPet?: Partial<Record<PetId, Array<{ id: string; title: string; date: string }>>>;
-  completedRemindersByPet?: Partial<Record<PetId, Array<{ id: string; title: string; date: string }>>>;
+  upcomingRemindersByPet?: Partial<Record<string, Array<{ id: string; title: string; date: string }>>>;
+  completedRemindersByPet?: Partial<Record<string, Array<{ id: string; title: string; date: string }>>>;
   onCompleteReminder?: (petId: string, reminderId: string) => void;
   onAddCareReminder?: (petId: string, subtype: 'food' | 'litter' | 'walk' | 'custom') => void;
+  topInsights?: AiInsight[];
+  onInsightAction?: (insight: AiInsight) => void;
 };
 
 const BASE_PETS: HomePetData[] = [
@@ -94,9 +98,9 @@ const BASE_PETS: HomePetData[] = [
     records: '4 types',
     recordsSub: 'Log health',
     upcoming: [
-      { title: 'Annual checkup', date: 'March 28, 2026 � 10:30 AM' },
+      { title: 'Annual checkup', date: 'March 28, 2026 ï¿½ 10:30 AM' },
       { title: 'Flea & tick prevention', date: 'April 1, 2026' },
-      { title: 'Grooming appointment', date: 'April 15, 2026 � 2:00 PM' },
+      { title: 'Grooming appointment', date: 'April 15, 2026 ï¿½ 2:00 PM' },
     ],
   },
   {
@@ -117,8 +121,8 @@ const BASE_PETS: HomePetData[] = [
     records: '3 types',
     recordsSub: 'Track notes',
     upcoming: [
-      { title: 'Weight review', date: 'March 30, 2026 � 09:30 AM' },
-      { title: 'Dental check', date: 'April 5, 2026 � 2:00 PM' },
+      { title: 'Weight review', date: 'March 30, 2026 ï¿½ 09:30 AM' },
+      { title: 'Dental check', date: 'April 5, 2026 ï¿½ 2:00 PM' },
       { title: 'Vaccine reminder', date: 'April 12, 2026' },
     ],
   },
@@ -138,7 +142,7 @@ function formatPetAge(birthDate: string, locale: 'en' | 'tr') {
   }
   years = Math.max(0, years);
   months = Math.max(0, months);
-  if (locale === 'tr') return `${years} y�l ${months} ay`;
+  if (locale === 'tr') return `${years} yï¿½l ${months} ay`;
   return `${years} years ${months} months`;
 }
 function parseWeightKg(value: string) {
@@ -171,9 +175,12 @@ function buildSmoothPath(points: Array<{ x: number; y: number }>) {
 }
 
 export default function HomeScreen({
+  onOpenProfile,
   onOpenReminders,
-  onOpenSettings,
+  onOpenAddReminder,
   reminderBadgeCount = 0,
+  userAvatarUri,
+  userInitials = 'VP',
   onOpenPetProfile,
   onOpenVaccinations,
   onOpenHealthRecords,
@@ -190,6 +197,8 @@ export default function HomeScreen({
   completedRemindersByPet,
   onCompleteReminder,
   onAddCareReminder,
+  topInsights = [],
+  onInsightAction,
 }: HomeScreenProps) {
   const { locale } = useLocale();
   const { settings } = useAppSettings();
@@ -224,66 +233,60 @@ export default function HomeScreen({
   }, [enterOpacity, enterTranslateY]);
 
   const pets = useMemo<HomePetData[]>(() => {
-    return BASE_PETS.map((p) => {
-      const profile = petProfiles?.[p.id];
-      const history = weightsByPet?.[p.id] ?? [];
-      const latest = history[history.length - 1];
-      const prev = history[history.length - 2];
-
-            let computedWeight = formatWeightByUnit(parseWeightKg(p.weight), settings.weightUnit);
-      let computedDelta = formatDeltaByUnit(parseWeightKg(p.weightDelta), settings.weightUnit);
-
-      if (latest) {
-        computedWeight = formatWeightByUnit(latest.value, settings.weightUnit);
-        if (prev) {
-          const delta = latest.value - prev.value;
+    if (!petProfiles) return [];
+    return Object.values(petProfiles)
+      .filter((profile) => profile && typeof profile.name === 'string' && profile.name.trim().length > 0)
+      .map((profile) => {
+        const history = weightsByPet?.[profile.id] ?? [];
+        const latest = history[history.length - 1];
+        const prev = history[history.length - 2];
+        let computedWeight = isTr ? 'Veri yok' : 'No data';
+        let computedDelta = '—';
+        if (latest) {
+          computedWeight = formatWeightByUnit(latest.value, settings.weightUnit);
+          const delta = prev ? latest.value - prev.value : 0;
           computedDelta = formatDeltaByUnit(Math.abs(delta) < 0.01 ? 0 : delta, settings.weightUnit);
-        } else {
-          computedDelta = formatDeltaByUnit(0, settings.weightUnit);
         }
-      }
-
-      if (!profile) {
         return {
-          ...p,
+          id: profile.id,
+          name: profile.name,
+          petType: profile.petType,
+          breed: profile.breed,
+          coatPattern: profile.coatPattern,
+          age: formatPetAge(profile.birthDate, locale),
+          gender: profile.gender,
+          heroImage: profile.image,
           weight: computedWeight,
           weightDelta: computedDelta,
-        };
-      }
-
-      return {
-        ...p,
-        name: profile.name,
-        petType: profile.petType,
-        breed: profile.breed,
-        coatPattern: profile.coatPattern,
-        age: formatPetAge(profile.birthDate, locale),
-        gender: profile.gender,
-        heroImage: profile.image,
-        weight: computedWeight,
-        weightDelta: computedDelta,
-      };
-    });
-  }, [locale, petProfiles, settings.weightUnit, weightsByPet]);
+          vaccines: isTr ? 'Kayıt yok' : 'No data',
+          vaccinesSub: '',
+          vetVisits: '—',
+          vetVisitsSub: '',
+          records: '—',
+          recordsSub: '',
+          upcoming: [],
+        } satisfies HomePetData;
+      });
+  }, [isTr, locale, petProfiles, settings.weightUnit, weightsByPet]);
 
   const activeIndex = useMemo(() => {
     const idx = pets.findIndex((p) => p.id === activePetId);
     return idx >= 0 ? idx : 0;
   }, [activePetId, pets]);
 
-  const activePet = pets[activeIndex];
-  const activeUpcoming = (upcomingRemindersByPet?.[activePet.id] ?? activePet.upcoming.map((item, index) => ({ id: `legacy-${index}`, ...item }))).slice(0, 2);
-  const activeCompleted = completedRemindersByPet?.[activePet.id] ?? [];
-  const backPet = pets[(activeIndex + 1) % pets.length];
-  const prevPet = pets[(activeIndex - 1 + pets.length) % pets.length];
+  const activePet = pets[activeIndex] ?? null;
+  const activeUpcoming = (activePet ? (upcomingRemindersByPet?.[activePet.id] ?? []) : []).slice(0, 2);
+  const backPet = pets.length > 1 ? pets[(activeIndex + 1) % pets.length] : null;
+  const prevPet = pets.length > 1 ? pets[(activeIndex - 1 + pets.length) % pets.length] : null;
+  const activeWeightHistory = (activePet ? (weightsByPet?.[activePet.id] ?? []) : []).slice(-6);
+  const hasWeightData = activeWeightHistory.length > 0;
 
-  const activeWeightHistory = (weightsByPet?.[activePet.id] ?? []).slice(-6);
-
+  const nextImportantEvent = activeUpcoming.length > 0 ? activeUpcoming[0] : null;
   const weightSpark = useMemo(() => {
     const chartW = 106;
     const chartH = 42;
     const inset = 2;
-    const values = (activeWeightHistory.length > 0 ? activeWeightHistory : [{ value: Number(activePet.weight.split(' ')[0]) || 0 }]).map((p) => p.value);
+    const values = (activeWeightHistory.length > 0 ? activeWeightHistory : [{ value: Number(activePet?.weight.split(' ')[0] ?? 0) || 0 }]).map((p) => p.value);
     const min = Math.min(...values);
     const max = Math.max(...values);
     const span = Math.max(0.1, max - min);
@@ -304,9 +307,10 @@ export default function HomeScreen({
       areaPath,
       latestDate: activeWeightHistory[activeWeightHistory.length - 1]?.date,
     };
-  }, [activePet.id, activePet.weight, activeWeightHistory]);
-
-  const weightUpdatedText = weightSpark.latestDate ?? (isTr ? 'Son g�ncelleme bug�n' : 'Last updated today');
+  }, [activePet.weight, activeWeightHistory]);
+  const weightUpdatedText = hasWeightData
+    ? (weightSpark.latestDate ?? (isTr ? 'Son güncelleme bugün' : 'Last updated today'))
+    : (isTr ? 'Henüz giriş yok' : 'No entries yet');
 
   useEffect(() => {
     setFrontImageLoaded(false);
@@ -321,7 +325,7 @@ export default function HomeScreen({
     }).start(() => setIsGestureActive(false));
   };
 
-  const finishSwitch = (nextPetId: PetId, settleFrom: number) => {
+  const finishSwitch = (nextPetId: string, settleFrom: number) => {
     onChangeActivePet?.(nextPetId);
     cardDragY.setValue(settleFrom);
     switchFade.setValue(0.86);
@@ -347,6 +351,7 @@ export default function HomeScreen({
   };
 
   const commitSwitchDown = () => {
+    if (!backPet) { resetCard(); return; }
     Animated.timing(cardDragY, {
       toValue: 190,
       duration: 150,
@@ -357,6 +362,7 @@ export default function HomeScreen({
   };
 
   const commitSwitchUp = () => {
+    if (!prevPet) { resetCard(); return; }
     Animated.timing(cardDragY, {
       toValue: -140,
       duration: 150,
@@ -370,8 +376,8 @@ export default function HomeScreen({
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_, gesture) => !isPetLockEnabled && Math.abs(gesture.dy) > 6,
-        onMoveShouldSetPanResponderCapture: (_, gesture) => !isPetLockEnabled && Math.abs(gesture.dy) > 6,
+        onMoveShouldSetPanResponder: (_, gesture) => !isPetLockEnabled && pets.length > 1 && Math.abs(gesture.dy) > 6,
+        onMoveShouldSetPanResponderCapture: (_, gesture) => !isPetLockEnabled && pets.length > 1 && Math.abs(gesture.dy) > 6,
         onPanResponderGrant: () => setIsGestureActive(true),
         onPanResponderMove: (_, gesture) => {
           const nextY = Math.max(-130, Math.min(160, gesture.dy));
@@ -391,8 +397,23 @@ export default function HomeScreen({
         onPanResponderTerminate: resetCard,
         onPanResponderTerminationRequest: () => false,
       }),
-    [backPet.id, cardDragY, isPetLockEnabled, onChangeActivePet, prevPet.id],
+    [backPet, cardDragY, isPetLockEnabled, onChangeActivePet, pets.length, prevPet],
   );
+
+  if (!activePet) {
+    return (
+      <Animated.View style={[styles.screen, { opacity: enterOpacity, transform: [{ translateY: enterTranslateY }] }]}>
+        <StatusBar style="dark" />
+        <View style={styles.noPetWrap}>
+          <Text style={styles.noPetTitle}>{isTr ? 'Hoş geldin!' : 'Welcome!'}</Text>
+          <Text style={styles.noPetSub}>{isTr ? 'İlk evcil hayvanını eklemek için profil sayfasına git.' : 'Go to your profile to add your first pet.'}</Text>
+          <Pressable style={styles.noPetBtn} onPress={onOpenProfile}>
+            <Text style={styles.noPetBtnText}>{isTr ? 'Profil' : 'Profile'}</Text>
+          </Pressable>
+        </View>
+      </Animated.View>
+    );
+  }
 
   return (
     <Animated.View style={[styles.screen, { opacity: enterOpacity, transform: [{ translateY: enterTranslateY }] }]}>
@@ -411,28 +432,24 @@ export default function HomeScreen({
             </View>
           </View>
 
-          <View style={styles.topRightActions}>
-            <Pressable onPress={onOpenSettings} style={styles.bellBtn}>
-              <Settings size={17} color="#5f5f5f" strokeWidth={2.1} />
-            </Pressable>
-            <Pressable onPress={onOpenReminders} style={styles.bellBtn}>
-              <Bell size={18} color="#5f5f5f" strokeWidth={2.1} />
-              {reminderBadgeCount > 0 ? (
-                <View style={styles.bellBadge}>
-                  <Text style={styles.bellBadgeText}>{reminderBadgeCount > 9 ? '9+' : String(reminderBadgeCount)}</Text>
-                </View>
-              ) : null}
-            </Pressable>
-          </View>
+          <Pressable onPress={onOpenProfile} style={styles.avatarBtn}>
+            {userAvatarUri ? (
+              <Image source={{ uri: userAvatarUri }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarInitials}>{userInitials}</Text>
+            )}
+          </Pressable>
         </View>
 
         <View style={styles.heroStackWrap}>
           <View style={styles.backCardWrap}>
-            <ImageBackground key={`back-${backPet.id}-${backPet.heroImage}`} source={{ uri: backPet.heroImage }} style={[styles.heroCardBack, !frontImageLoaded && styles.heroCardBackHidden]} imageStyle={styles.heroImageBack}>
-              <View style={styles.heroBottomBack}>
-                <Text style={styles.heroNameBack}>{backPet.name}</Text>
-              </View>
-            </ImageBackground>
+            {backPet ? (
+              <ImageBackground key={`back-${backPet.id}-${backPet.heroImage}`} source={{ uri: backPet.heroImage }} style={[styles.heroCardBack, !frontImageLoaded && styles.heroCardBackHidden]} imageStyle={styles.heroImageBack}>
+                <View style={styles.heroBottomBack}>
+                  <Text style={styles.heroNameBack}>{backPet.name}</Text>
+                </View>
+              </ImageBackground>
+            ) : null}
           </View>
 
           <Animated.View
@@ -482,19 +499,18 @@ export default function HomeScreen({
             </View>
           </View>
         </View>
-
-        <Text style={styles.sectionTitle}>{isTr ? 'Sa�l�k �zeti' : 'Health Overview'}</Text>
-
         <Pressable style={styles.weightCard} onPress={() => onOpenPetProfile?.(activePet.id)}>
           <View style={styles.weightHeader}>
-            <Text style={styles.weightHeaderText}>{isTr ? 'KILO PROFILI' : 'WEIGHT PROFILE'}</Text>
-            <Text style={styles.weightPill}>{activePet.weightDelta}</Text>
+            <Text style={styles.weightHeaderText}>{isTr ? 'WEIGHT PROFILE' : 'WEIGHT PROFILE'}</Text>
+            <Text style={styles.weightPill}>{hasWeightData ? activePet.weightDelta : (isTr ? '0.0 kg' : '0.0 kg')}</Text>
           </View>
 
           <View style={styles.weightMainRow}>
             <View style={styles.weightLeftCol}>
-              <Text style={styles.weightValue}>{activePet.weight}</Text>
-              <Text style={styles.weightSub}>{isTr ? '�deal kilo korunuyor' : 'Ideal weight maintained'}</Text>
+              <View style={styles.weightValueRow}>
+                <Text style={styles.weightValue}>{activePet.weight}</Text>
+              </View>
+              <Text style={styles.weightSub}>{isTr ? 'İdeal kilo korunuyor' : 'Ideal weight maintained'}</Text>
             </View>
 
             <View style={styles.sparkWrap}>
@@ -506,79 +522,51 @@ export default function HomeScreen({
                   </LinearGradient>
                 </Defs>
                 <Path d={weightSpark.areaPath} fill="url(#weightArea)" />
-                <Path
-                  d={weightSpark.linePath}
-                  stroke="#9cbf9c"
-                  strokeWidth={2.6}
-                  fill="none"
-                  strokeLinecap="round"
-                />
+                <Path d={weightSpark.linePath} stroke="#9cbf9c" strokeWidth={2.6} fill="none" strokeLinecap="round" />
               </Svg>
             </View>
           </View>
           <Text style={styles.weightSub2}>{weightUpdatedText}</Text>
         </Pressable>
 
-        <View style={styles.gridRow}>
-          <MiniCard
-            icon={<SvgUri uri={vaccinesCardIconUri} width={HOME_CARD_ICON_SIZE_LARGE} height={HOME_CARD_ICON_SIZE_LARGE} style={styles.miniSvgIcon} />}
-            title={isTr ? 'ASILAR' : 'VACCINES'}
-            value={activePet.vaccines}
-            sub={activePet.vaccinesSub}
-            onPress={() => onOpenVaccinations?.(activePet.id)}
-          />
-          <MiniCard
-            icon={<SvgUri uri={vetVisitCardIconUri} width={HOME_CARD_ICON_SIZE} height={HOME_CARD_ICON_SIZE} style={styles.miniSvgIcon} />}
-            title={isTr ? 'VET VISITS' : 'VET VISITS'}
-            value={activePet.vetVisits}
-            sub={activePet.vetVisitsSub}
-            onPress={() => onOpenVetVisits?.(activePet.id)}
-          />
-        </View>
-
-        <View style={styles.gridRow}>
-          <MiniCard
-            icon={<SvgUri uri={healthCardIconUri} width={HOME_CARD_ICON_SIZE_LARGE} height={HOME_CARD_ICON_SIZE_LARGE} style={styles.miniSvgIcon} />}
-            title={isTr ? 'HEALTH CARD' : 'HEALTH CARD'}
-            value={isTr ? 'D��a Aktar' : 'Export'}
-            sub={isTr ? 'PDF Belgesi' : 'PDF Document'}
-            onPress={() => onOpenPetPassport?.(activePet.id)}
-          />
-          <MiniCard
-            icon={<SvgUri uri={healthRecordsCardIconUri} width={HOME_CARD_ICON_SIZE_LARGE} height={HOME_CARD_ICON_SIZE_LARGE} style={styles.miniSvgIcon} />}
-            title={isTr ? 'SAGLIK KAYITLARI' : 'HEALTH RECORDS'}
-            value={activePet.records}
-            sub={activePet.recordsSub}
-            onPress={() => onOpenHealthRecords?.(activePet.id)}
-          />
-        </View>
-
-        <View style={styles.upcomingHeader}>
-          <Text style={styles.sectionTitle}>{isTr ? 'Yakla�an' : 'Upcoming'}</Text>
-          <Text style={styles.seeAll}>{isTr ? 'T�m�n� g�r' : 'See all'}</Text>
-        </View>
-
+        <Text style={styles.sectionTitle}>{isTr ? 'Sonraki onemli olay' : 'Next important event'}</Text>
         <View style={styles.upcomingCard}>
-          <View style={styles.quickReminderRow}>
-            <QuickReminderChip label={isTr ? '+ Mama' : '+ Food'} onPress={() => onAddCareReminder?.(activePet.id, 'food')} />
-            <QuickReminderChip label={isTr ? '+ Kum' : '+ Litter'} onPress={() => onAddCareReminder?.(activePet.id, 'litter')} />
-            {activePet.petType === 'Dog' ? (
-              <QuickReminderChip label={isTr ? '+ Yürüyüş' : '+ Walk'} onPress={() => onAddCareReminder?.(activePet.id, 'walk')} />
-            ) : null}
-          </View>
-
-          <Text style={styles.reminderGroupTitle}>{isTr ? 'Yaklaşan' : 'Upcoming'}</Text>
-          {activeUpcoming.map((event) => (
+          {nextImportantEvent ? (
             <EventRow
-              key={event.id}
-              title={event.title}
-              date={event.date}
-              onPress={event.id.startsWith('legacy-') ? undefined : () => onCompleteReminder?.(activePet.id, event.id)}
+              title={nextImportantEvent.title}
+              date={nextImportantEvent.date}
+              onPress={() => onCompleteReminder?.(activePet.id, nextImportantEvent.id)}
             />
-          ))}
-
-          {activeCompleted.length > 0 ? null : null}
+          ) : (
+            <View style={styles.emptyInlineWrap}>
+              <Text style={styles.emptyInlineTitle}>{isTr ? 'Henuz planli olay yok' : 'No upcoming event yet'}</Text>
+              <Text style={styles.emptyInlineBody}>
+                {isTr ? 'Bir hatirlatma veya ziyaret ekleyerek baslayabilirsin.' : 'Start by adding a reminder or a visit.'}
+              </Text>
+              <Pressable style={styles.emptyInlineCta} onPress={onOpenAddReminder}>
+                <Text style={styles.emptyInlineCtaText}>{isTr ? 'Hatirlatma Ekle' : 'Add Reminder'}</Text>
+              </Pressable>
+            </View>
+          )}
         </View>
+        <View style={styles.quickReminderRow}>
+          <QuickReminderChip label={isTr ? '+ Kilo' : '+ Weight'} onPress={() => onOpenPetProfile?.(activePet.id)} />
+          <QuickReminderChip label={isTr ? '+ Ziyaret' : '+ Visit'} onPress={() => onOpenVetVisits?.(activePet.id)} />
+          <QuickReminderChip label={isTr ? '+ Hatirlatma' : '+ Reminder'} onPress={onOpenAddReminder} />
+        </View>
+        {topInsights.length > 0 ? (
+          <View style={styles.upcomingCard}>
+            <View style={styles.insightPreviewRow}>
+              <Text style={styles.insightPreviewMeta}>{`${topInsights[0].type.toUpperCase()} • ${topInsights[0].priority.toUpperCase()}`}</Text>
+              <Text style={styles.insightPreviewText}>{topInsights[0].message}</Text>
+              {topInsights[0].actionType && topInsights[0].actionLabel ? (
+                <Pressable style={styles.insightPreviewCta} onPress={() => onInsightAction?.(topInsights[0])}>
+                  <Text style={styles.insightPreviewCtaText}>{topInsights[0].actionLabel}</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
       </ScrollView>
     </Animated.View>
   );
@@ -588,32 +576,6 @@ function QuickReminderChip({ label, onPress }: { label: string; onPress?: () => 
   return (
     <Pressable style={styles.quickReminderChip} onPress={onPress}>
       <Text style={styles.quickReminderChipText}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function MiniCard({
-  icon,
-  title,
-  value,
-  sub,
-  onPress,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  value: string;
-  sub: string;
-  onPress?: () => void;
-}) {
-  return (
-    <Pressable style={styles.miniCard} onPress={onPress}>
-      <View style={styles.miniTopRow}>
-        <View style={styles.miniIconWrap}>{icon}</View>
-        <ChevronRight size={14} color="#cecece" strokeWidth={2.4} />
-      </View>
-      <Text style={styles.miniTitle}>{title}</Text>
-      <Text style={styles.miniValue}>{value}</Text>
-      <Text style={styles.miniSub}>{sub}</Text>
     </Pressable>
   );
 }
@@ -673,37 +635,27 @@ const styles = StyleSheet.create({
   brandSubNunito: {
     fontFamily: 'Nunito_600SemiBold',
   },
-  topRightActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  bellBtn: {
+  avatarBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
     backgroundColor: '#f1f1ef',
     alignItems: 'center',
     justifyContent: 'center',
-    position: 'relative',
+    overflow: 'hidden',
   },
-  bellBadge: {
-    minWidth: 16,
-    height: 16,
-    borderRadius: 8,
-    position: 'absolute',
-    right: -3,
-    top: -2,
-    backgroundColor: '#c96a6a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 3,
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 18,
   },
-  bellBadgeText: {
-    color: '#fff',
-    fontSize: 9,
-    lineHeight: 10,
+  avatarInitials: {
+    color: '#5a5a5a',
+    fontSize: 11,
+    lineHeight: 12,
     fontWeight: '700',
+    letterSpacing: 0.4,
+    alignItems: 'center',
   },
   heroStackWrap: {
     height: 288,
@@ -1026,6 +978,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     gap: 8,
   },
+  emptyInfoCard: {
+    marginTop: -6,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  emptyInfoTitle: {
+    color: '#2d2d2d',
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: '700',
+  },
+  emptyInfoBody: {
+    color: '#868686',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+  },
+  emptyInfoCta: {
+    alignSelf: 'flex-start',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  emptyInfoCtaText: {
+    color: '#4f6b43',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
   quickReminderRow: {
     flexDirection: 'row',
     gap: 8,
@@ -1054,10 +1043,77 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'uppercase',
   },
+  emptyInlineWrap: {
+    paddingTop: 6,
+    gap: 6,
+  },
+  emptyInlineTitle: {
+    color: '#2d2d2d',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  emptyInlineBody: {
+    color: '#888',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+  },
+  emptyInlineCta: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  emptyInlineCtaText: {
+    color: '#4f6b43',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
   reminderDivider: {
     height: 1,
     backgroundColor: '#efefef',
     marginVertical: 4,
+  },
+  insightPreviewRow: {
+    gap: 4,
+    paddingVertical: 4,
+  },
+  insightPreviewMeta: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#8a8a8a',
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  insightPreviewText: {
+    fontSize: 13,
+    lineHeight: 17,
+    color: '#4f4f4f',
+    fontWeight: '600',
+  },
+  insightPreviewCta: {
+    marginTop: 6,
+    alignSelf: 'flex-start',
+    minHeight: 28,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  insightPreviewCtaText: {
+    color: '#5a5a5a',
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '700',
   },
   eventRow: {
     flexDirection: 'row',
@@ -1103,7 +1159,39 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     color: '#8c8c8c',
   },
+  noPetWrap: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  noPetTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#2d2d2d',
+    textAlign: 'center',
+  },
+  noPetSub: {
+    fontSize: 15,
+    color: '#7a7a7a',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  noPetBtn: {
+    marginTop: 8,
+    paddingHorizontal: 28,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: '#2d2d2d',
+  },
+  noPetBtnText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 });
+
 
 
 

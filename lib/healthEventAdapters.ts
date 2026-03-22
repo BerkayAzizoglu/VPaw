@@ -10,13 +10,11 @@ import type {
   VetVisit as MvpVetVisit,
 } from './healthMvpModel';
 
-type PetId = 'luna' | 'milo';
-
 type HealthEventType = 'vaccination' | 'vet_visit' | 'health_note' | 'weight' | 'other';
 
 type HealthEvent = {
   id: string;
-  petId: PetId;
+  petId: string;
   type: HealthEventType;
   title: string;
   description?: string;
@@ -64,8 +62,8 @@ function ensureString(value: unknown, fallback: string) {
 }
 
 export function getVaccinationsFromEvents(
-  petId: PetId,
-  healthEventsByPet: Record<PetId, HealthEvent[]>,
+  petId: string,
+  healthEventsByPet: Record<string, HealthEvent[]>,
   legacyProfile?: PetProfile,
 ): {
   historyItems: VaccinationsHistoryItem[];
@@ -129,9 +127,9 @@ export function getVaccinationsFromEvents(
 }
 
 export function getVaccinesForUI(
-  petId: PetId,
+  petId: string,
   medicalEventsByPet: ByPet<MvpMedicalEvent>,
-  legacyHealthEventsByPet: Record<PetId, HealthEvent[]>,
+  legacyHealthEventsByPet: Record<string, HealthEvent[]>,
   legacyProfile?: PetProfile,
 ): {
   historyItems: VaccinationsHistoryItem[];
@@ -169,8 +167,8 @@ export function getVaccinesForUI(
 }
 
 export function getVetVisitsFromEvents(
-  petId: PetId,
-  healthEventsByPet: Record<PetId, HealthEvent[]>,
+  petId: string,
+  healthEventsByPet: Record<string, HealthEvent[]>,
   legacyProfile?: PetProfile,
 ): VisitItem[] | null {
   const events = sortByDateDesc((healthEventsByPet[petId] ?? []).filter((e) => e.type === 'vet_visit'));
@@ -229,10 +227,10 @@ function getPrimaryEventForVisit(events: MvpMedicalEvent[]) {
 }
 
 export function getVetVisitsForUI(
-  petId: PetId,
+  petId: string,
   vetVisitsByPet: ByPet<MvpVetVisit>,
   medicalEventsByPet: ByPet<MvpMedicalEvent>,
-  legacyHealthEventsByPet: Record<PetId, HealthEvent[]>,
+  legacyHealthEventsByPet: Record<string, HealthEvent[]>,
   legacyProfile?: PetProfile,
 ): VisitItem[] | null {
   const visits = [...(vetVisitsByPet[petId] ?? [])].sort((a, b) => (parseDateMs(b.visitDate) ?? 0) - (parseDateMs(a.visitDate) ?? 0));
@@ -279,8 +277,8 @@ export function getVetVisitsForUI(
 }
 
 export function getHealthRecordsFromEvents(
-  petId: PetId,
-  healthEventsByPet: Record<PetId, HealthEvent[]>,
+  petId: string,
+  healthEventsByPet: Record<string, HealthEvent[]>,
   legacyProfile?: PetProfile,
 ): HealthRecordsData | null {
   const healthEvents = sortByDateDesc((healthEventsByPet[petId] ?? []).filter((e) => e.type === 'health_note'));
@@ -347,9 +345,9 @@ function mapMedicalEventTypeToLegacyCategory(type: MvpMedicalEvent['type']): str
 }
 
 export function getHealthRecordsForUI(
-  petId: PetId,
+  petId: string,
   medicalEventsByPet: ByPet<MvpMedicalEvent>,
-  legacyHealthEventsByPet: Record<PetId, HealthEvent[]>,
+  legacyHealthEventsByPet: Record<string, HealthEvent[]>,
   legacyProfile?: PetProfile,
 ): HealthRecordsData | null {
   const supportedTypes: MvpMedicalEvent['type'][] = ['diagnosis', 'procedure', 'test', 'prescription', 'note'];
@@ -424,13 +422,13 @@ function categoryLabelFromMedicalEventType(type: MvpMedicalEvent['type']) {
 }
 
 export function getHealthCardSummary(
-  petId: PetId,
+  petId: string,
   vetVisitsByPet: ByPet<MvpVetVisit>,
   medicalEventsByPet: ByPet<MvpMedicalEvent>,
   remindersByPet: ByPet<Reminder>,
   medicationCoursesByPet: ByPet<MedicationCourse>,
   weightEntries: Array<{ value: number; date: string }>,
-  legacyHealthEventsByPet: Record<PetId, HealthEvent[]>,
+  legacyHealthEventsByPet: Record<string, HealthEvent[]>,
   legacyProfile?: PetProfile,
 ): HealthCardSummary {
   const visits = [...(vetVisitsByPet[petId] ?? [])].sort((a, b) => (parseDateMs(b.visitDate) ?? 0) - (parseDateMs(a.visitDate) ?? 0));

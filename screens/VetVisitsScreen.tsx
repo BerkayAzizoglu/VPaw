@@ -248,6 +248,8 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
     prescription: '',
   });
   const lastPresetRef = useRef<string | null>(null);
+  const [focusedField, setFocusedField] = useState<string | null>(null);
+  const savePressScale = useRef(new Animated.Value(1)).current;
 
   const actionOrder: VisitActionType[] = ['vaccine', 'diagnosis', 'procedure', 'test', 'prescription'];
   const actionLabels: Record<VisitActionType, string> = isTr
@@ -504,6 +506,34 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
     return parsed.toISOString();
   };
 
+  const isCreateFormValid = useMemo(() => {
+    const visitDateIso = parseInputDate(visitDate);
+    if (!visitDateIso) return false;
+
+    const hasInvalidStructuredSelection = actionOrder.some((type) => {
+      if (!selectedActions[type]) return false;
+      const selectedValue = selectedActionOptions[type];
+      if (!selectedValue) return true;
+      if (selectedValue === 'other' && !customActionTitles[type].trim()) return true;
+      return false;
+    });
+    if (hasInvalidStructuredSelection) return false;
+
+    if (!reminderEnabled) return true;
+    if (reminderPreset !== 'custom') return true;
+    return !!parseInputDate(reminderDate);
+  }, [
+    actionOrder,
+    customActionTitles,
+    parseInputDate,
+    reminderDate,
+    reminderEnabled,
+    reminderPreset,
+    selectedActionOptions,
+    selectedActions,
+    visitDate,
+  ]);
+
   const handleSubmitCreate = () => {
     const visitDateIso = parseInputDate(visitDate);
     if (!visitDateIso) {
@@ -678,8 +708,10 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
 
       <Modal
         visible={isCreateVisible}
-        transparent
-        animationType="fade"
+        transparent={false}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        statusBarTranslucent={false}
         onRequestClose={() => setIsCreateVisible(false)}
       >
         <View style={styles.modalOverlay}>
@@ -695,12 +727,14 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
 
                   <Text style={styles.modalLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
                   <TextInput
-                    style={styles.modalInput}
+                    style={[styles.modalInput, focusedField === 'visitDate' ? styles.modalInputFocused : null]}
                     value={visitDate}
                     onChangeText={setVisitDate}
                     placeholder="2026-03-22"
                     placeholderTextColor="#a4a4a4"
                     autoCapitalize="none"
+                    onFocus={() => setFocusedField('visitDate')}
+                    onBlur={() => setFocusedField(null)}
                   />
 
                   <Text style={styles.modalLabel}>{isTr ? 'Ziyaret Nedeni' : 'Visit reason'}</Text>
@@ -711,7 +745,12 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
                     {reasonOptions.map((option) => (
                       <Pressable
                         key={option.value}
-                        style={[styles.chipBtn, visitReason === option.value ? styles.chipBtnActive : null]}
+                        style={({ pressed }) => [
+                          styles.chipBtn,
+                          visitReason !== option.value ? styles.chipBtnInactive : null,
+                          visitReason === option.value ? styles.chipBtnActive : null,
+                          pressed ? styles.chipBtnPressed : null,
+                        ]}
                         onPress={() => setVisitReason(option.value)}
                       >
                         <Text style={[styles.chipBtnText, visitReason === option.value ? styles.chipBtnTextActive : null]}>{option.label}</Text>
@@ -730,7 +769,12 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
                     {actionOrder.map((type) => (
                       <Pressable
                         key={type}
-                        style={[styles.chipBtn, selectedActions[type] ? styles.chipBtnActive : null]}
+                        style={({ pressed }) => [
+                          styles.chipBtn,
+                          !selectedActions[type] ? styles.chipBtnInactive : null,
+                          selectedActions[type] ? styles.chipBtnActive : null,
+                          pressed ? styles.chipBtnPressed : null,
+                        ]}
                         onPress={() => toggleAction(type)}
                       >
                         <Text style={[styles.chipBtnText, selectedActions[type] ? styles.chipBtnTextActive : null]}>{actionLabels[type]}</Text>
@@ -754,7 +798,12 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
                             {actionOptions[type].map((option) => (
                               <Pressable
                                 key={`${type}-${option.value}`}
-                                style={[styles.chipBtn, selectedActionOptions[type] === option.value ? styles.chipBtnActive : null]}
+                                style={({ pressed }) => [
+                                  styles.chipBtn,
+                                  selectedActionOptions[type] !== option.value ? styles.chipBtnInactive : null,
+                                  selectedActionOptions[type] === option.value ? styles.chipBtnActive : null,
+                                  pressed ? styles.chipBtnPressed : null,
+                                ]}
                                 onPress={() => setSelectedActionOptions((prev) => ({ ...prev, [type]: option.value }))}
                               >
                                 <Text style={[styles.chipBtnText, selectedActionOptions[type] === option.value ? styles.chipBtnTextActive : null]}>{option.label}</Text>
@@ -764,21 +813,25 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
 
                           {selectedActionOptions[type] === 'other' ? (
                             <TextInput
-                              style={styles.modalInput}
+                              style={[styles.modalInput, focusedField === `${type}-title` ? styles.modalInputFocused : null]}
                               value={customActionTitles[type]}
                               onChangeText={(value) => setCustomActionTitles((prev) => ({ ...prev, [type]: value }))}
                               placeholder={isTr ? 'Kisa baslik yazin' : 'Write a short title'}
                               placeholderTextColor="#a4a4a4"
+                              onFocus={() => setFocusedField(`${type}-title`)}
+                              onBlur={() => setFocusedField(null)}
                             />
                           ) : null}
 
                           <TextInput
-                            style={[styles.modalInput, styles.modalInputTall]}
+                            style={[styles.modalInput, styles.modalInputTall, focusedField === `${type}-note` ? styles.modalInputFocused : null]}
                             value={actionNotes[type]}
                             onChangeText={(value) => setActionNotes((prev) => ({ ...prev, [type]: value }))}
                             placeholder={isTr ? 'Opsiyonel not' : 'Optional note'}
                             placeholderTextColor="#a4a4a4"
                             multiline
+                            onFocus={() => setFocusedField(`${type}-note`)}
+                            onBlur={() => setFocusedField(null)}
                           />
                         </View>
                       ) : null
@@ -805,7 +858,12 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
                         {reminderPresetOptions.map((option) => (
                           <Pressable
                             key={option.value}
-                            style={[styles.chipBtn, reminderPreset === option.value ? styles.chipBtnActive : null]}
+                            style={({ pressed }) => [
+                              styles.chipBtn,
+                              reminderPreset !== option.value ? styles.chipBtnInactive : null,
+                              reminderPreset === option.value ? styles.chipBtnActive : null,
+                              pressed ? styles.chipBtnPressed : null,
+                            ]}
                             onPress={() => setReminderPreset(option.value)}
                           >
                             <Text style={[styles.chipBtnText, reminderPreset === option.value ? styles.chipBtnTextActive : null]}>{option.label}</Text>
@@ -817,12 +875,14 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
                         <>
                           <Text style={styles.modalLabel}>{isTr ? 'Ozel tarih (YYYY-AA-GG)' : 'Custom date (YYYY-MM-DD)'}</Text>
                           <TextInput
-                            style={styles.modalInput}
+                            style={[styles.modalInput, focusedField === 'reminderDate' ? styles.modalInputFocused : null]}
                             value={reminderDate}
                             onChangeText={setReminderDate}
                             placeholder="2026-03-29"
                             placeholderTextColor="#a4a4a4"
                             autoCapitalize="none"
+                            onFocus={() => setFocusedField('reminderDate')}
+                            onBlur={() => setFocusedField(null)}
                           />
                         </>
                       ) : null}
@@ -845,9 +905,21 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
                 >
                   <Text style={styles.modalSecondaryText}>{isTr ? 'Vazgec' : 'Cancel'}</Text>
                 </Pressable>
-                <Pressable style={styles.modalPrimaryBtn} onPress={handleSubmitCreate}>
-                  <Text style={styles.modalPrimaryText}>{isTr ? 'Kaydet' : 'Save'}</Text>
-                </Pressable>
+                <Animated.View style={{ transform: [{ scale: savePressScale }] }}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.modalPrimaryBtn,
+                      !isCreateFormValid ? styles.modalPrimaryBtnDisabled : null,
+                      pressed && isCreateFormValid ? styles.modalPrimaryBtnPressed : null,
+                    ]}
+                    disabled={!isCreateFormValid}
+                    onPress={handleSubmitCreate}
+                    onPressIn={() => Animated.spring(savePressScale, { toValue: 0.98, useNativeDriver: true, speed: 40, bounciness: 6 }).start()}
+                    onPressOut={() => Animated.spring(savePressScale, { toValue: 1, useNativeDriver: true, speed: 36, bounciness: 5 }).start()}
+                  >
+                    <Text style={styles.modalPrimaryText}>{isTr ? 'Kaydet' : 'Save'}</Text>
+                  </Pressable>
+                </Animated.View>
               </View>
             </View>
           </KeyboardAvoidingView>
@@ -1158,22 +1230,24 @@ const styles = StyleSheet.create({
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.24)',
-    justifyContent: 'center',
+    backgroundColor: '#faf9f8',
     paddingHorizontal: 16,
+    paddingTop: 36,
+    paddingBottom: 16,
   },
   modalKeyboardWrap: {
+    flex: 1,
     width: '100%',
   },
   modalCard: {
-    borderRadius: 20,
-    backgroundColor: '#faf9f8',
+    flex: 1,
+    borderRadius: 22,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.05)',
     paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 14,
-    maxHeight: '88%',
   },
   modalTitle: {
     fontSize: 20,
@@ -1233,6 +1307,14 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: '#2d2d2d',
   },
+  modalInputFocused: {
+    borderColor: '#9ab395',
+    shadowColor: '#8ca486',
+    shadowOpacity: 0.16,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
   modalInputTall: {
     minHeight: 56,
   },
@@ -1255,6 +1337,12 @@ const styles = StyleSheet.create({
   chipBtnActive: {
     borderColor: '#7f9a70',
     backgroundColor: '#eef5ea',
+  },
+  chipBtnInactive: {
+    opacity: 0.82,
+  },
+  chipBtnPressed: {
+    transform: [{ scale: 0.98 }],
   },
   chipBtnText: {
     fontSize: 13,
@@ -1326,6 +1414,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#2d2d2d',
+  },
+  modalPrimaryBtnDisabled: {
+    opacity: 0.55,
+  },
+  modalPrimaryBtnPressed: {
+    opacity: 0.92,
   },
   modalPrimaryText: {
     fontSize: 14,
