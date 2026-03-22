@@ -1,6 +1,6 @@
 ﻿import React, { useMemo, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Check, ChevronLeft, ChevronRight, Save } from 'lucide-react-native';
 import { useLocale } from '../hooks/useLocale';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -19,6 +19,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [draftWeightUnit, setDraftWeightUnit] = useState<WeightUnit>(settings.weightUnit);
   const [draftDateFormat, setDraftDateFormat] = useState<DateFormat>(settings.dateFormat);
   const [saving, setSaving] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
 
   const languageValue = draftLocale === 'tr' ? t(locale, 'turkish') : t(locale, 'english');
   const weightUnitValue = draftWeightUnit === 'kg' ? t(locale, 'kilograms') : t(locale, 'pounds');
@@ -64,12 +65,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     );
   };
 
-  const saveAndExit = async () => {
-    if (!hasChanges) {
-      onBack();
-      return;
-    }
-
+  const performSaveAndExit = async () => {
     setSaving(true);
     await setSettings({
       weightUnit: draftWeightUnit,
@@ -78,6 +74,14 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     await setLocale(draftLocale);
     setSaving(false);
     onBack();
+  };
+
+  const saveAndExit = async () => {
+    if (!hasChanges) {
+      onBack();
+      return;
+    }
+    setConfirmVisible(true);
   };
 
   return (
@@ -100,10 +104,6 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
           </Pressable>
         </View>
 
-        <Pressable style={styles.saveExitRow} onPress={saveAndExit} disabled={!hasChanges || saving}>
-          <Text style={[styles.saveExitText, (!hasChanges || saving) && styles.saveExitTextDisabled]}>{saving ? t(locale, 'saving') : t(locale, 'saveAndExit')}</Text>
-        </Pressable>
-
         <Text style={styles.sectionTitle}>{t(locale, 'preferences')}</Text>
         <View style={styles.card}>
           <Row label={t(locale, 'notifications')} value={t(locale, 'on')} />
@@ -118,6 +118,30 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
           <Text style={styles.noticeText}>{t(locale, 'dataIntegrityDesc')}</Text>
         </View>
       </ScrollView>
+
+      <Modal transparent visible={confirmVisible} animationType="fade" onRequestClose={() => setConfirmVisible(false)}>
+        <View style={styles.confirmOverlay}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmTitle}>{locale === 'tr' ? 'Degisiklikleri onayliyor musunuz?' : 'Confirm saved changes?'}</Text>
+            <Text style={styles.confirmBody}>{locale === 'tr' ? 'Ayarlar kaydedilecek ve bu ekrandan cikilacak.' : 'Your preferences will be saved and you will exit this screen.'}</Text>
+            <View style={styles.confirmActions}>
+              <Pressable style={styles.confirmSecondaryBtn} onPress={() => setConfirmVisible(false)}>
+                <Text style={styles.confirmSecondaryText}>{t(locale, 'cancel')}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.confirmPrimaryBtn, saving && styles.confirmPrimaryBtnDisabled]}
+                disabled={saving}
+                onPress={async () => {
+                  setConfirmVisible(false);
+                  await performSaveAndExit();
+                }}
+              >
+                <Text style={styles.confirmPrimaryText}>{saving ? t(locale, 'saving') : (locale === 'tr' ? 'Kaydet ve Cik' : 'Save & Exit')}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -177,18 +201,77 @@ const styles = StyleSheet.create({
     color: '#2d2d2d',
     fontWeight: '700',
   },
-  saveExitRow: {
-    alignSelf: 'flex-end',
-    marginBottom: 4,
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(16,16,16,0.34)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
   },
-  saveExitText: {
-    fontSize: 13,
-    lineHeight: 18,
+  confirmCard: {
+    width: '100%',
+    borderRadius: 20,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 6,
+  },
+  confirmTitle: {
+    fontSize: 17,
+    lineHeight: 22,
     color: '#2d2d2d',
     fontWeight: '700',
   },
-  saveExitTextDisabled: {
-    color: '#9a9a9a',
+  confirmBody: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#6f6f6f',
+    fontWeight: '500',
+  },
+  confirmActions: {
+    marginTop: 14,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  confirmSecondaryBtn: {
+    height: 34,
+    borderRadius: 17,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f3f1',
+  },
+  confirmSecondaryText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#4b4b4b',
+    fontWeight: '700',
+  },
+  confirmPrimaryBtn: {
+    height: 34,
+    borderRadius: 17,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2d2d2d',
+  },
+  confirmPrimaryBtnDisabled: {
+    opacity: 0.65,
+  },
+  confirmPrimaryText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#fff',
+    fontWeight: '700',
   },
   sectionTitle: {
     marginTop: 8,

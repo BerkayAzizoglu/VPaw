@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Alert,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,11 +14,32 @@ import { useLocale } from '../hooks/useLocale';
 import { getWording } from '../lib/wording';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 
+export type HealthRecordsSegmentContent = {
+  activeTitle: string;
+  activeDate: string;
+  activeBody: string;
+  activeBadge: string;
+  activeSeverity: string;
+  historyTitle: string;
+  historyDate: string;
+  historyBody: string;
+  resolvedBadge: string;
+  historySeverity: string;
+};
+
+export type HealthRecordsData = {
+  recordsCountText?: string;
+  activeCountText?: string;
+  upToDateText?: string;
+  bySegment?: Partial<Record<'allergies' | 'diagnoses' | 'labResults', HealthRecordsSegmentContent>>;
+};
+
 type HealthRecordsScreenProps = {
   onBack: () => void;
   onAddRecord?: () => void;
   status?: 'ready' | ScreenStateMode;
   onRetry?: () => void;
+  recordsData?: HealthRecordsData;
 };
 
 function Icon({ kind, size = 20, color = '#7a7a7a' }: { kind: 'back' | 'record' | 'pulse' | 'clock' | 'alert' | 'plus'; size?: number; color?: string }) {
@@ -85,40 +107,40 @@ function StatPill({ kind, text }: { kind: 'record' | 'pulse' | 'clock'; text: st
   );
 }
 
-export default function HealthRecordsScreen({ onBack, onAddRecord, status = 'ready', onRetry }: HealthRecordsScreenProps) {
+export default function HealthRecordsScreen({ onBack, onAddRecord, status = 'ready', onRetry, recordsData }: HealthRecordsScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).healthRecords;
   const isTr = locale === 'tr';
   const [activeSegment, setActiveSegment] = useState<'allergies' | 'diagnoses' | 'labResults'>('allergies');
 
-  const segmentContent = useMemo(() => {
+  const fallbackSegmentContent = useMemo(() => {
     if (activeSegment === 'diagnoses') {
       return {
         activeTitle: isTr ? 'Hafif Artrit' : 'Mild Arthritis',
         activeDate: isTr ? '18 Oca 2026' : 'Jan 18, 2026',
-        activeBody: isTr ? 'Soðuk havalarda eklem hassasiyeti\ngözlemleniyor.' : 'Joint sensitivity observed\nduring cold weather.',
+        activeBody: isTr ? 'Soï¿½uk havalarda eklem hassasiyeti\ngï¿½zlemleniyor.' : 'Joint sensitivity observed\nduring cold weather.',
         activeBadge: isTr ? 'Takipte' : 'Monitoring',
         activeSeverity: isTr ? 'Orta' : 'Medium',
         historyTitle: isTr ? 'Kulak Enfeksiyonu' : 'Ear Infection',
         historyDate: isTr ? '12 Eki 2025' : 'Oct 12, 2025',
-        historyBody: isTr ? 'Tedavi tamamlandý ve tekrar etmedi.' : 'Treatment completed with no recurrence.',
-        resolvedBadge: isTr ? 'Çözüldü' : 'Resolved',
-        historySeverity: isTr ? 'Düþük' : 'Low',
+        historyBody: isTr ? 'Tedavi tamamlandï¿½ ve tekrar etmedi.' : 'Treatment completed with no recurrence.',
+        resolvedBadge: isTr ? 'ï¿½ï¿½zï¿½ldï¿½' : 'Resolved',
+        historySeverity: isTr ? 'Dï¿½ï¿½ï¿½k' : 'Low',
       };
     }
 
     if (activeSegment === 'labResults') {
       return {
-        activeTitle: isTr ? 'Karaciðer Paneli' : 'Liver Panel',
-        activeDate: isTr ? '03 Þub 2026' : 'Feb 03, 2026',
-        activeBody: isTr ? 'Deðerler referans aralýkta,\n3 ay sonra tekrar önerilir.' : 'Values are within reference range,\nrepeat in 3 months is recommended.',
+        activeTitle: isTr ? 'Karaciï¿½er Paneli' : 'Liver Panel',
+        activeDate: isTr ? '03 ï¿½ub 2026' : 'Feb 03, 2026',
+        activeBody: isTr ? 'Deï¿½erler referans aralï¿½kta,\n3 ay sonra tekrar ï¿½nerilir.' : 'Values are within reference range,\nrepeat in 3 months is recommended.',
         activeBadge: isTr ? 'Normal' : 'Normal',
-        activeSeverity: isTr ? 'Düþük' : 'Low',
+        activeSeverity: isTr ? 'Dï¿½ï¿½ï¿½k' : 'Low',
         historyTitle: isTr ? 'Hemogram' : 'Complete Blood Count',
         historyDate: isTr ? '05 Haz 2024' : 'Jun 05, 2024',
-        historyBody: isTr ? 'Önceki test deðerleri stabil seyretmiþ.' : 'Previous test values were stable.',
-        resolvedBadge: isTr ? 'Arþiv' : 'Archived',
-        historySeverity: isTr ? 'Düþük' : 'Low',
+        historyBody: isTr ? 'ï¿½nceki test deï¿½erleri stabil seyretmiï¿½.' : 'Previous test values were stable.',
+        resolvedBadge: isTr ? 'Arï¿½iv' : 'Archived',
+        historySeverity: isTr ? 'Dï¿½ï¿½ï¿½k' : 'Low',
       };
     }
 
@@ -136,22 +158,45 @@ export default function HealthRecordsScreen({ onBack, onAddRecord, status = 'rea
     };
   }, [activeSegment, copy, isTr]);
 
+  const segmentContent = recordsData?.bySegment?.[activeSegment] ?? fallbackSegmentContent;
+
   const screenState = status;
   const showMainContent = screenState === 'ready';
   const showAddButton = screenState !== 'loading' && screenState !== 'error';
   const stateTitle = screenState === 'loading'
-    ? (isTr ? 'Saðlýk kayýtlarý yükleniyor' : 'Loading health records')
+    ? (isTr ? 'Saï¿½lï¿½k kayï¿½tlarï¿½ yï¿½kleniyor' : 'Loading health records')
     : screenState === 'empty'
-      ? (isTr ? 'Henüz saðlýk kaydý yok' : 'No health records yet')
-      : (isTr ? 'Saðlýk kayýtlarý alýnamadý' : 'Could not load health records');
+      ? (isTr ? 'Henï¿½z saï¿½lï¿½k kaydï¿½ yok' : 'No health records yet')
+      : (isTr ? 'Saï¿½lï¿½k kayï¿½tlarï¿½ alï¿½namadï¿½' : 'Could not load health records');
   const stateBody = screenState === 'loading'
-    ? (isTr ? 'Kayýtlar hazýrlanýyor, lütfen kýsa bir süre bekleyin.' : 'Preparing records, please wait a moment.')
+    ? (isTr ? 'Kayï¿½tlar hazï¿½rlanï¿½yor, lï¿½tfen kï¿½sa bir sï¿½re bekleyin.' : 'Preparing records, please wait a moment.')
     : screenState === 'empty'
-      ? (isTr ? 'Ýlk kayýt eklendiðinde bu alan otomatik olarak dolacaktýr.' : 'This area will populate automatically once the first record is added.')
-      : (isTr ? 'Baðlantýyý kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
+      ? (isTr ? 'ï¿½lk kayï¿½t eklendiï¿½inde bu alan otomatik olarak dolacaktï¿½r.' : 'This area will populate automatically once the first record is added.')
+      : (isTr ? 'Baï¿½lantï¿½yï¿½ kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
+
+  const swipeTriggeredRef = useRef(false);
+  const swipePanResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => {
+      const horizontalIntent = Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.25;
+      return horizontalIntent && gesture.dx > 22;
+    },
+    onPanResponderMove: (_, gesture) => {
+      if (swipeTriggeredRef.current) return;
+      if (gesture.dx > 78 && Math.abs(gesture.dy) < 34) {
+        swipeTriggeredRef.current = true;
+        onBack();
+      }
+    },
+    onPanResponderRelease: () => {
+      swipeTriggeredRef.current = false;
+    },
+    onPanResponderTerminate: () => {
+      swipeTriggeredRef.current = false;
+    },
+  }), [onBack]);
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
@@ -167,9 +212,9 @@ export default function HealthRecordsScreen({ onBack, onAddRecord, status = 'rea
             <Text style={styles.pageTitle}>{copy.overview}</Text>
 
             <View style={styles.statsRow}>
-              <StatPill kind="record" text={copy.recordsCount} />
-              <StatPill kind="pulse" text={copy.activeCount} />
-              <StatPill kind="clock" text={copy.upToDate} />
+              <StatPill kind="record" text={recordsData?.recordsCountText ?? copy.recordsCount} />
+              <StatPill kind="pulse" text={recordsData?.activeCountText ?? copy.activeCount} />
+              <StatPill kind="clock" text={recordsData?.upToDateText ?? copy.upToDate} />
             </View>
             <View style={styles.segmentWrap}>
               <Pressable style={[styles.segmentPill, activeSegment === 'allergies' && styles.segmentActive]} onPress={() => setActiveSegment('allergies')}>
@@ -255,7 +300,7 @@ export default function HealthRecordsScreen({ onBack, onAddRecord, status = 'rea
             title={stateTitle}
             body={stateBody}
             actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : undefined}
-            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lütfen kýsa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
+            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lï¿½tfen kï¿½sa bir sï¿½re sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
           />
         )}
       </ScrollView>
@@ -269,8 +314,8 @@ export default function HealthRecordsScreen({ onBack, onAddRecord, status = 'rea
               return;
             }
             Alert.alert(
-              isTr ? 'Yakýnda' : 'Coming soon',
-              isTr ? 'Kayýt ekleme akýþý bir sonraki adýmda aktif edilecek.' : 'Add record flow will be enabled in the next step.',
+              isTr ? 'Yakï¿½nda' : 'Coming soon',
+              isTr ? 'Kayï¿½t ekleme akï¿½ï¿½ï¿½ bir sonraki adï¿½mda aktif edilecek.' : 'Add record flow will be enabled in the next step.',
             );
           }}
         >
@@ -291,7 +336,7 @@ const styles = StyleSheet.create({
     paddingTop: 32,
     paddingHorizontal: 24,
     paddingBottom: 110,
-    gap: 16,
+    gap: 18,
   },
   headerRow: {
     height: 44,
@@ -300,27 +345,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: '#f1f1ef',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 30,
-    lineHeight: 34,
+    fontSize: 28,
+    lineHeight: 32,
     color: '#2d2d2d',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   headerPh: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
   },
   pageTitle: {
     marginTop: 8,
-    fontSize: 40,
-    lineHeight: 46,
+    fontSize: 36,
+    lineHeight: 42,
     color: '#2d2d2d',
     fontWeight: '700',
     letterSpacing: -0.7,
@@ -331,9 +376,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   statPill: {
-    height: 38,
+    height: 30,
     borderRadius: 999,
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.04)',
@@ -354,8 +399,8 @@ const styles = StyleSheet.create({
   },
   segmentWrap: {
     marginTop: 8,
-    height: 49,
-    borderRadius: 16,
+    height: 46,
+    borderRadius: 14,
     backgroundColor: 'rgba(0,0,0,0.04)',
     flexDirection: 'row',
     alignItems: 'center',
@@ -364,15 +409,15 @@ const styles = StyleSheet.create({
   },
   segmentPill: {
     width: 107,
-    height: 41,
-    borderRadius: 20,
+    height: 38,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
   },
   segmentActive: {
     width: 107,
-    height: 41,
-    borderRadius: 20,
+    height: 38,
+    borderRadius: 18,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.02)',
@@ -399,7 +444,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   sectionHead: {
-    marginTop: 10,
+    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -421,12 +466,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.02)',
     backgroundColor: '#fff',
-    paddingHorizontal: 21,
-    paddingTop: 21,
-    paddingBottom: 12,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 14,
     shadowColor: '#000',
     shadowOpacity: 0.05,
-    shadowRadius: 24,
+    shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 2,
   },
@@ -454,9 +499,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   cardIconDanger: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.02)',
     backgroundColor: '#faf9f8',
@@ -464,9 +509,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardIconNeutral: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.02)',
     backgroundColor: '#faf9f8',
@@ -474,60 +519,60 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   cardTitle: {
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: 28,
+    lineHeight: 34,
     color: '#2d2d2d',
     fontWeight: '700',
   },
   cardDate: {
-    fontSize: 20,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 20,
     color: '#787878',
     fontWeight: '600',
   },
   cardTitleMuted: {
-    fontSize: 34,
-    lineHeight: 40,
+    fontSize: 26,
+    lineHeight: 32,
     color: 'rgba(45,45,45,0.7)',
     fontWeight: '700',
   },
   cardDateMuted: {
-    fontSize: 28,
-    lineHeight: 30,
+    fontSize: 15,
+    lineHeight: 20,
     color: '#787878',
     fontWeight: '600',
   },
   cardBody: {
-    marginTop: 14,
-    marginLeft: 60,
-    fontSize: 28,
-    lineHeight: 38,
+    marginTop: 10,
+    marginLeft: 56,
+    fontSize: 15,
+    lineHeight: 22,
     color: '#787878',
   },
   cardBodyMuted: {
-    marginTop: 14,
-    marginLeft: 60,
-    fontSize: 28,
-    lineHeight: 38,
+    marginTop: 10,
+    marginLeft: 56,
+    fontSize: 15,
+    lineHeight: 22,
     color: 'rgba(120,120,120,0.8)',
   },
   cardDivider: {
-    marginTop: 16,
+    marginTop: 12,
     height: 1,
     backgroundColor: 'rgba(0,0,0,0.03)',
-    marginLeft: 60,
+    marginLeft: 56,
   },
   cardBottomRow: {
-    marginTop: 12,
-    marginLeft: 60,
+    marginTop: 10,
+    marginLeft: 56,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
   activePill: {
-    height: 34,
+    height: 30,
     borderRadius: 999,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: '#f5e3e3',
     backgroundColor: '#fff0f0',
@@ -546,9 +591,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   resolvedPill: {
-    height: 34,
+    height: 30,
     borderRadius: 999,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     borderWidth: 1,
     borderColor: 'rgba(228,235,224,0.6)',
     backgroundColor: 'rgba(244,247,242,0.6)',
@@ -562,23 +607,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   severityWrap: {
-    height: 32,
+    height: 30,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.02)',
     backgroundColor: '#faf9f8',
-    paddingHorizontal: 13,
+    paddingHorizontal: 11,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
   severityWrapMuted: {
-    height: 32,
+    height: 30,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.02)',
     backgroundColor: '#faf9f8',
-    paddingHorizontal: 13,
+    paddingHorizontal: 11,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -615,7 +660,7 @@ const styles = StyleSheet.create({
   },
   addBtn: {
     position: 'absolute',
-    bottom: 26,
+    bottom: 24,
     alignSelf: 'center',
     height: 50,
     borderRadius: 999,

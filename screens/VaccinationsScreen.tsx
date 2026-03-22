@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Alert,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -19,14 +20,29 @@ type VaccinationsScreenProps = {
   onAddVaccination?: () => void;
   status?: 'ready' | ScreenStateMode;
   onRetry?: () => void;
+  historyItems?: VaccinationsHistoryItem[];
+  attentionCounts?: VaccinationsAttentionCounts;
+  nextUpData?: VaccinationsNextUpData;
 };
 
-type HistoryItem = {
+export type VaccinationsHistoryItem = {
   name: string;
   subtitle: string;
   status: 'overdue' | 'dueSoon' | 'upToDate';
   dueDate: string;
   tint?: 'danger' | 'neutral';
+};
+
+export type VaccinationsAttentionCounts = {
+  overdueCount: number;
+  dueSoonCount: number;
+};
+
+export type VaccinationsNextUpData = {
+  name: string;
+  subtitle: string;
+  date: string;
+  inWeeks: string;
 };
 
 function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' | 'warning' | 'clock' | 'check' | 'syringe' | 'arrow'; size?: number; color?: string }) {
@@ -90,7 +106,7 @@ function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' 
   );
 }
 
-function StatusPill({ status, labels }: { status: HistoryItem['status']; labels: { overdue: string; dueSoon: string; upToDate: string } }) {
+function StatusPill({ status, labels }: { status: VaccinationsHistoryItem['status']; labels: { overdue: string; dueSoon: string; upToDate: string } }) {
   if (status === 'overdue') {
     return (
       <View style={[styles.pill, styles.pillDanger]}>
@@ -114,7 +130,7 @@ function StatusPill({ status, labels }: { status: HistoryItem['status']; labels:
   );
 }
 
-function HistoryCard({ item, statusLabels, dueDateLabel }: { item: HistoryItem; statusLabels: { overdue: string; dueSoon: string; upToDate: string }; dueDateLabel: string }) {
+function HistoryCard({ item, statusLabels, dueDateLabel }: { item: VaccinationsHistoryItem; statusLabels: { overdue: string; dueSoon: string; upToDate: string }; dueDateLabel: string }) {
   const iconColor = item.status === 'overdue' ? '#c96a6a' : item.status === 'dueSoon' ? '#c48d42' : '#718562';
   const iconKind = item.status === 'overdue' ? 'warning' : item.status === 'dueSoon' ? 'clock' : 'shield';
 
@@ -143,34 +159,68 @@ function HistoryCard({ item, statusLabels, dueDateLabel }: { item: HistoryItem; 
   );
 }
 
-export default function VaccinationsScreen({ onBack, onResolve, onAddVaccination, status = 'ready', onRetry }: VaccinationsScreenProps) {
+export default function VaccinationsScreen({
+  onBack,
+  onResolve,
+  onAddVaccination,
+  status = 'ready',
+  onRetry,
+  historyItems,
+  attentionCounts,
+  nextUpData,
+}: VaccinationsScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).vaccinations;
   const isTr = locale === 'tr';
 
-  const history: HistoryItem[] = [
+  const fallbackHistory: VaccinationsHistoryItem[] = [
     { name: 'Bordetella', subtitle: copy.history.bordetellaSub, status: 'overdue', dueDate: copy.history.bordetellaDate, tint: 'danger' },
     { name: copy.nextCard.name, subtitle: copy.history.rabiesSub, status: 'dueSoon', dueDate: copy.history.rabiesDate, tint: 'neutral' },
     { name: 'DHPP', subtitle: copy.history.dhppSub, status: 'upToDate', dueDate: copy.history.dhppDate, tint: 'neutral' },
     { name: 'Leptospirosis', subtitle: copy.history.leptoSub, status: 'upToDate', dueDate: copy.history.leptoDate, tint: 'neutral' },
   ];
+  const history = historyItems && historyItems.length > 0 ? historyItems : fallbackHistory;
+  const overdueLabel = attentionCounts ? `${attentionCounts.overdueCount} ${copy.statuses.overdue}` : copy.oneOverdue;
+  const dueSoonLabel = attentionCounts ? `${attentionCounts.dueSoonCount} ${copy.statuses.dueSoon}` : copy.oneDueSoon;
+  const nextCard = nextUpData ?? copy.nextCard;
 
   const screenState = status;
   const showMainContent = screenState === 'ready';
   const showAddButton = screenState !== 'loading' && screenState !== 'error';
   const stateTitle = screenState === 'loading'
-    ? (isTr ? 'Aþýlar yükleniyor' : 'Loading vaccinations')
+    ? (isTr ? 'Aï¿½ï¿½lar yï¿½kleniyor' : 'Loading vaccinations')
     : screenState === 'empty'
-      ? (isTr ? 'Henüz aþý kaydý yok' : 'No vaccination records yet')
-      : (isTr ? 'Aþý kayýtlarý alýnamadý' : 'Could not load vaccinations');
+      ? (isTr ? 'Henï¿½z aï¿½ï¿½ kaydï¿½ yok' : 'No vaccination records yet')
+      : (isTr ? 'Aï¿½ï¿½ kayï¿½tlarï¿½ alï¿½namadï¿½' : 'Could not load vaccinations');
   const stateBody = screenState === 'loading'
-    ? (isTr ? 'Kayýtlar hazýrlanýyor, lütfen kýsa bir süre bekleyin.' : 'Preparing records, please wait a moment.')
+    ? (isTr ? 'Kayï¿½tlar hazï¿½rlanï¿½yor, lï¿½tfen kï¿½sa bir sï¿½re bekleyin.' : 'Preparing records, please wait a moment.')
     : screenState === 'empty'
-      ? (isTr ? 'Ýlk aþý kaydýný eklediðinizde bu alan otomatik olarak dolacaktýr.' : 'This area will populate automatically once you add the first vaccination.')
-      : (isTr ? 'Baðlantýyý kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
+      ? (isTr ? 'ï¿½lk aï¿½ï¿½ kaydï¿½nï¿½ eklediï¿½inizde bu alan otomatik olarak dolacaktï¿½r.' : 'This area will populate automatically once you add the first vaccination.')
+      : (isTr ? 'Baï¿½lantï¿½yï¿½ kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
+
+  const swipeTriggeredRef = useRef(false);
+  const swipePanResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => {
+      const horizontalIntent = Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.25;
+      return horizontalIntent && gesture.dx > 22;
+    },
+    onPanResponderMove: (_, gesture) => {
+      if (swipeTriggeredRef.current) return;
+      if (gesture.dx > 78 && Math.abs(gesture.dy) < 34) {
+        swipeTriggeredRef.current = true;
+        onBack();
+      }
+    },
+    onPanResponderRelease: () => {
+      swipeTriggeredRef.current = false;
+    },
+    onPanResponderTerminate: () => {
+      swipeTriggeredRef.current = false;
+    },
+  }), [onBack]);
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.header}>
@@ -199,11 +249,11 @@ export default function VaccinationsScreen({ onBack, onResolve, onAddVaccination
               <View style={styles.attentionPillsRow}>
                 <View style={[styles.pill, styles.pillDanger]}>
                   <Icon kind="warning" size={15} color="#b55858" />
-                  <Text style={[styles.pillText, styles.pillTextDanger]}>{copy.oneOverdue}</Text>
+                  <Text style={[styles.pillText, styles.pillTextDanger]}>{overdueLabel}</Text>
                 </View>
                 <View style={[styles.pill, styles.pillWarn]}>
                   <Icon kind="clock" size={15} color="#ad762d" />
-                  <Text style={[styles.pillText, styles.pillTextWarn]}>{copy.oneDueSoon}</Text>
+                  <Text style={[styles.pillText, styles.pillTextWarn]}>{dueSoonLabel}</Text>
                 </View>
               </View>
 
@@ -215,8 +265,8 @@ export default function VaccinationsScreen({ onBack, onResolve, onAddVaccination
                     return;
                   }
                   Alert.alert(
-                    isTr ? 'Yakýnda' : 'Coming soon',
-                    isTr ? 'Bu iþlem bir sonraki adýmda aktif edilecek.' : 'This action will be enabled in the next step.',
+                    isTr ? 'Yakï¿½nda' : 'Coming soon',
+                    isTr ? 'Bu iï¿½lem bir sonraki adï¿½mda aktif edilecek.' : 'This action will be enabled in the next step.',
                   );
                 }}
               >
@@ -232,12 +282,12 @@ export default function VaccinationsScreen({ onBack, onResolve, onAddVaccination
                 <Icon kind="syringe" size={28} color="#c48d42" />
               </View>
               <View style={styles.nextMain}>
-                <Text style={styles.nextTitle}>{copy.nextCard.name}</Text>
-                <Text style={styles.nextSub}>{copy.nextCard.subtitle}</Text>
+                <Text style={styles.nextTitle}>{nextCard.name}</Text>
+                <Text style={styles.nextSub}>{nextCard.subtitle}</Text>
               </View>
               <View style={styles.nextRight}>
-                <Text style={styles.nextDate}>{copy.nextCard.date}</Text>
-                <Text style={styles.nextSoon}>{copy.nextCard.inWeeks}</Text>
+                <Text style={styles.nextDate}>{nextCard.date}</Text>
+                <Text style={styles.nextSoon}>{nextCard.inWeeks}</Text>
               </View>
             </View>
 
@@ -254,7 +304,7 @@ export default function VaccinationsScreen({ onBack, onResolve, onAddVaccination
             title={stateTitle}
             body={stateBody}
             actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : undefined}
-            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lütfen kýsa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
+            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lï¿½tfen kï¿½sa bir sï¿½re sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
           />
         )}
       </ScrollView>
@@ -268,8 +318,8 @@ export default function VaccinationsScreen({ onBack, onResolve, onAddVaccination
               return;
             }
             Alert.alert(
-              isTr ? 'Yakýnda' : 'Coming soon',
-              isTr ? 'Aþý ekleme akýþý bir sonraki adýmda aktif edilecek.' : 'Add vaccination flow will be enabled in the next step.',
+              isTr ? 'Yakï¿½nda' : 'Coming soon',
+              isTr ? 'Aï¿½ï¿½ ekleme akï¿½ï¿½ï¿½ bir sonraki adï¿½mda aktif edilecek.' : 'Add vaccination flow will be enabled in the next step.',
             );
           }}
         >
@@ -289,8 +339,8 @@ const styles = StyleSheet.create({
   content: {
     paddingTop: 32,
     paddingHorizontal: 24,
-    paddingBottom: 28,
-    gap: 16,
+    paddingBottom: 110,
+    gap: 18,
   },
   header: {
     height: 44,
@@ -307,8 +357,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 29,
-    lineHeight: 33,
+    fontSize: 28,
+    lineHeight: 32,
     fontWeight: '700',
     color: '#2d2d2d',
     letterSpacing: -0.4,
@@ -319,13 +369,13 @@ const styles = StyleSheet.create({
   },
   attentionCard: {
     marginTop: 8,
-    borderRadius: 28,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: '#f5ece1',
     backgroundColor: '#fff',
-    paddingHorizontal: 28,
-    paddingTop: 28,
-    paddingBottom: 20,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 18,
     shadowColor: '#000',
     shadowOpacity: 0.04,
     shadowRadius: 14,
@@ -341,23 +391,23 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   attentionTitle: {
-    fontSize: 39,
-    lineHeight: 49,
+    fontSize: 34,
+    lineHeight: 40,
     fontWeight: '700',
     color: '#2d2d2d',
     letterSpacing: -0.6,
   },
   attentionSub: {
     marginTop: 8,
-    fontSize: 23,
-    lineHeight: 31,
+    fontSize: 16,
+    lineHeight: 24,
     color: '#787878',
     fontWeight: '500',
   },
   attentionIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#f5e3e3',
     backgroundColor: '#fdf3f3',
@@ -370,14 +420,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(245,236,225,0.7)',
   },
   attentionPillsRow: {
-    marginTop: 20,
+    marginTop: 16,
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
   pill: {
-    height: 34,
+    height: 32,
     borderRadius: 18,
-    paddingHorizontal: 11,
+    paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
@@ -419,13 +469,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   resolveText: {
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 20,
     fontWeight: '700',
     color: '#c96a6a',
   },
   sectionLabel: {
-    marginTop: 2,
+    marginTop: 6,
     marginLeft: 4,
     fontSize: 14,
     lineHeight: 21,
@@ -434,17 +484,17 @@ const styles = StyleSheet.create({
     letterSpacing: 1.4,
   },
   nextCard: {
-    height: 122,
+    height: 116,
     borderRadius: 24,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.03)',
     backgroundColor: '#fff',
-    paddingHorizontal: 28,
+    paddingHorizontal: 24,
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 10 },
     elevation: 4,
   },
@@ -459,21 +509,21 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(196,141,66,0.9)',
   },
   nextIconWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 58,
+    height: 58,
+    borderRadius: 29,
     backgroundColor: '#fcf6ee',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 20,
+    marginRight: 16,
   },
   nextMain: {
     flex: 1,
     gap: 2,
   },
   nextTitle: {
-    fontSize: 29,
-    lineHeight: 35,
+    fontSize: 24,
+    lineHeight: 30,
     color: '#2d2d2d',
     fontWeight: '700',
   },
@@ -490,8 +540,8 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   nextDate: {
-    fontSize: 18,
-    lineHeight: 27,
+    fontSize: 16,
+    lineHeight: 24,
     color: '#2d2d2d',
     fontWeight: '700',
   },
@@ -502,15 +552,15 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   historyList: {
-    gap: 16,
+    gap: 12,
   },
   historyCard: {
-    height: 146,
+    minHeight: 140,
     borderRadius: 24,
     borderWidth: 1,
     backgroundColor: '#fff',
     paddingHorizontal: 21,
-    paddingVertical: 21,
+    paddingVertical: 18,
   },
   historyCardDanger: {
     borderColor: '#f5e3e3',
@@ -536,12 +586,12 @@ const styles = StyleSheet.create({
   historyLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 12,
     flex: 1,
   },
   historyIconWrap: {
-    width: 48,
-    height: 48,
+    width: 44,
+    height: 44,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
@@ -590,11 +640,11 @@ const styles = StyleSheet.create({
   },
   addBtn: {
     position: 'absolute',
-    left: 88,
-    right: 88,
-    bottom: 44,
-    height: 48,
-    borderRadius: 24,
+    alignSelf: 'center',
+    bottom: 28,
+    height: 52,
+    borderRadius: 999,
+    paddingHorizontal: 30,
     backgroundColor: '#2d2d2d',
     flexDirection: 'row',
     alignItems: 'center',

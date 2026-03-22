@@ -17,14 +17,20 @@ import { Nunito_600SemiBold } from '@expo-google-fonts/nunito';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
-import { ChevronRight, FileText, HeartPulse, Mars, PawPrint, Pencil, Stethoscope, Syringe, Venus } from 'lucide-react-native';
+import { ChevronRight, Mars, PawPrint, Pencil, Venus } from 'lucide-react-native';
 import type { PetProfile } from '../components/AuthGate';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
 import { useAppSettings } from '../hooks/useAppSettings';
 
 const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
+const vaccinesCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/vaccines.svg')).uri;
+const vetVisitCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/vet-visit.svg')).uri;
+const healthCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/health-card.svg')).uri;
+const healthRecordsCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/health-records.svg')).uri;
 const AVATAR_IMAGE = 'https://www.figma.com/api/mcp/asset/c1377527-400c-4e5e-8c97-bd4806f77781';
+const HOME_CARD_ICON_SIZE = 26;
+const HOME_CARD_ICON_SIZE_LARGE = 30;
 
 type PetId = 'luna' | 'milo';
 
@@ -81,9 +87,9 @@ const BASE_PETS: HomePetData[] = [
     records: '4 types',
     recordsSub: 'Log health',
     upcoming: [
-      { title: 'Annual checkup', date: 'March 28, 2026 · 10:30 AM' },
+      { title: 'Annual checkup', date: 'March 28, 2026 ï¿½ 10:30 AM' },
       { title: 'Flea & tick prevention', date: 'April 1, 2026' },
-      { title: 'Grooming appointment', date: 'April 15, 2026 · 2:00 PM' },
+      { title: 'Grooming appointment', date: 'April 15, 2026 ï¿½ 2:00 PM' },
     ],
   },
   {
@@ -103,8 +109,8 @@ const BASE_PETS: HomePetData[] = [
     records: '3 types',
     recordsSub: 'Track notes',
     upcoming: [
-      { title: 'Weight review', date: 'March 30, 2026 · 09:30 AM' },
-      { title: 'Dental check', date: 'April 5, 2026 · 2:00 PM' },
+      { title: 'Weight review', date: 'March 30, 2026 ï¿½ 09:30 AM' },
+      { title: 'Dental check', date: 'April 5, 2026 ï¿½ 2:00 PM' },
       { title: 'Vaccine reminder', date: 'April 12, 2026' },
     ],
   },
@@ -124,7 +130,7 @@ function formatPetAge(birthDate: string, locale: 'en' | 'tr') {
   }
   years = Math.max(0, years);
   months = Math.max(0, months);
-  if (locale === 'tr') return `${years} yýl ${months} ay`;
+  if (locale === 'tr') return `${years} yï¿½l ${months} ay`;
   return `${years} years ${months} months`;
 }
 function parseWeightKg(value: string) {
@@ -283,7 +289,7 @@ export default function HomeScreen({
     };
   }, [activePet.id, activePet.weight, activeWeightHistory]);
 
-  const weightUpdatedText = weightSpark.latestDate ?? (isTr ? 'Son güncelleme bugün' : 'Last updated today');
+  const weightUpdatedText = weightSpark.latestDate ?? (isTr ? 'Son gï¿½ncelleme bugï¿½n' : 'Last updated today');
 
   useEffect(() => {
     setFrontImageLoaded(false);
@@ -450,7 +456,7 @@ export default function HomeScreen({
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>{isTr ? 'Saðlýk Özeti' : 'Health Overview'}</Text>
+        <Text style={styles.sectionTitle}>{isTr ? 'Saï¿½lï¿½k ï¿½zeti' : 'Health Overview'}</Text>
 
         <Pressable style={styles.weightCard} onPress={() => onOpenPetProfile?.(activePet.id)}>
           <View style={styles.weightHeader}>
@@ -461,7 +467,7 @@ export default function HomeScreen({
           <View style={styles.weightMainRow}>
             <View style={styles.weightLeftCol}>
               <Text style={styles.weightValue}>{activePet.weight}</Text>
-              <Text style={styles.weightSub}>{isTr ? 'Ýdeal kilo korunuyor' : 'Ideal weight maintained'}</Text>
+              <Text style={styles.weightSub}>{isTr ? 'ï¿½deal kilo korunuyor' : 'Ideal weight maintained'}</Text>
             </View>
 
             <View style={styles.sparkWrap}>
@@ -488,15 +494,15 @@ export default function HomeScreen({
 
         <View style={styles.gridRow}>
           <MiniCard
-            icon={<Syringe size={14} color="#777" strokeWidth={2} />}
+            icon={<SvgUri uri={vaccinesCardIconUri} width={HOME_CARD_ICON_SIZE_LARGE} height={HOME_CARD_ICON_SIZE_LARGE} style={styles.miniSvgIcon} />}
             title={isTr ? 'ASILAR' : 'VACCINES'}
             value={activePet.vaccines}
             sub={activePet.vaccinesSub}
             onPress={() => onOpenVaccinations?.(activePet.id)}
           />
           <MiniCard
-            icon={<Stethoscope size={14} color="#6f7b63" strokeWidth={2.2} />}
-            title={isTr ? 'VETERINER' : 'VET'}
+            icon={<SvgUri uri={vetVisitCardIconUri} width={HOME_CARD_ICON_SIZE} height={HOME_CARD_ICON_SIZE} style={styles.miniSvgIcon} />}
+            title={isTr ? 'VET VISITS' : 'VET VISITS'}
             value={activePet.vetVisits}
             sub={activePet.vetVisitsSub}
             onPress={() => onOpenVetVisits?.(activePet.id)}
@@ -505,14 +511,14 @@ export default function HomeScreen({
 
         <View style={styles.gridRow}>
           <MiniCard
-            icon={<FileText size={14} color="#777" strokeWidth={2} />}
-            title={isTr ? 'SAÐLIK PASAPORTU' : 'HEALTH PASSPORT'}
-            value={isTr ? 'Dýþa Aktar' : 'Export'}
+            icon={<SvgUri uri={healthCardIconUri} width={HOME_CARD_ICON_SIZE_LARGE} height={HOME_CARD_ICON_SIZE_LARGE} style={styles.miniSvgIcon} />}
+            title={isTr ? 'HEALTH CARD' : 'HEALTH CARD'}
+            value={isTr ? 'Dï¿½ï¿½a Aktar' : 'Export'}
             sub={isTr ? 'PDF Belgesi' : 'PDF Document'}
             onPress={() => onOpenPetPassport?.(activePet.id)}
           />
           <MiniCard
-            icon={<HeartPulse size={14} color="#c96a6a" strokeWidth={2.2} />}
+            icon={<SvgUri uri={healthRecordsCardIconUri} width={HOME_CARD_ICON_SIZE_LARGE} height={HOME_CARD_ICON_SIZE_LARGE} style={styles.miniSvgIcon} />}
             title={isTr ? 'SAGLIK KAYITLARI' : 'HEALTH RECORDS'}
             value={activePet.records}
             sub={activePet.recordsSub}
@@ -521,8 +527,8 @@ export default function HomeScreen({
         </View>
 
         <View style={styles.upcomingHeader}>
-          <Text style={styles.sectionTitle}>{isTr ? 'Yaklaþan' : 'Upcoming'}</Text>
-          <Text style={styles.seeAll}>{isTr ? 'Tümünü gör' : 'See all'}</Text>
+          <Text style={styles.sectionTitle}>{isTr ? 'Yaklaï¿½an' : 'Upcoming'}</Text>
+          <Text style={styles.seeAll}>{isTr ? 'Tï¿½mï¿½nï¿½ gï¿½r' : 'See all'}</Text>
         </View>
 
         <View style={styles.upcomingCard}>
@@ -898,12 +904,13 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   miniIconWrap: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#f2f3f0',
+    width: 38,
+    height: 38,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  miniSvgIcon: {
+    opacity: 1,
   },
   miniTitle: {
     fontSize: 11,

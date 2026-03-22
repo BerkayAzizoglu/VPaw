@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Alert,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -222,18 +223,39 @@ export default function VetVisitsScreen({ onBack, onAddVisit, status = 'ready', 
   const showMainContent = screenState === 'ready';
   const showAddButton = screenState !== 'loading' && screenState !== 'error';
   const stateTitle = screenState === 'loading'
-    ? (isTr ? 'Ziyaretler yükleniyor' : 'Loading vet visits')
+    ? (isTr ? 'Ziyaretler yï¿½kleniyor' : 'Loading vet visits')
     : screenState === 'empty'
-      ? (isTr ? 'Henüz ziyaret kaydý yok' : 'No vet visits yet')
-      : (isTr ? 'Ziyaret kayýtlarý alýnamadý' : 'Could not load vet visits');
+      ? (isTr ? 'Henï¿½z ziyaret kaydï¿½ yok' : 'No vet visits yet')
+      : (isTr ? 'Ziyaret kayï¿½tlarï¿½ alï¿½namadï¿½' : 'Could not load vet visits');
   const stateBody = screenState === 'loading'
-    ? (isTr ? 'Geçmiþ kayýtlar hazýrlanýyor, lütfen bekleyin.' : 'Preparing your medical history, please wait.')
+    ? (isTr ? 'Geï¿½miï¿½ kayï¿½tlar hazï¿½rlanï¿½yor, lï¿½tfen bekleyin.' : 'Preparing your medical history, please wait.')
     : screenState === 'empty'
-      ? (isTr ? 'Ýlk veteriner ziyaretinizi eklediðinizde bu alan otomatik olarak dolacaktýr.' : 'This area will fill automatically once your first visit is added.')
-      : (isTr ? 'Baðlantýyý kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
+      ? (isTr ? 'ï¿½lk veteriner ziyaretinizi eklediï¿½inizde bu alan otomatik olarak dolacaktï¿½r.' : 'This area will fill automatically once your first visit is added.')
+      : (isTr ? 'Baï¿½lantï¿½yï¿½ kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
+
+  const swipeTriggeredRef = useRef(false);
+  const swipePanResponder = useMemo(() => PanResponder.create({
+    onMoveShouldSetPanResponder: (_, gesture) => {
+      const horizontalIntent = Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.25;
+      return horizontalIntent && gesture.dx > 22;
+    },
+    onPanResponderMove: (_, gesture) => {
+      if (swipeTriggeredRef.current) return;
+      if (gesture.dx > 78 && Math.abs(gesture.dy) < 34) {
+        swipeTriggeredRef.current = true;
+        onBack();
+      }
+    },
+    onPanResponderRelease: () => {
+      swipeTriggeredRef.current = false;
+    },
+    onPanResponderTerminate: () => {
+      swipeTriggeredRef.current = false;
+    },
+  }), [onBack]);
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
@@ -269,7 +291,7 @@ export default function VetVisitsScreen({ onBack, onAddVisit, status = 'ready', 
             title={stateTitle}
             body={stateBody}
             actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : undefined}
-            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lütfen kýsa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
+            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lï¿½tfen kï¿½sa bir sï¿½re sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
           />
         )}
       </ScrollView>
@@ -283,8 +305,8 @@ export default function VetVisitsScreen({ onBack, onAddVisit, status = 'ready', 
               return;
             }
             Alert.alert(
-              isTr ? 'Yakýnda' : 'Coming soon',
-              isTr ? 'Ziyaret ekleme akýþý bir sonraki adýmda aktif edilecek.' : 'Add visit flow will be enabled in the next step.',
+              isTr ? 'Yakï¿½nda' : 'Coming soon',
+              isTr ? 'Ziyaret ekleme akï¿½ï¿½ï¿½ bir sonraki adï¿½mda aktif edilecek.' : 'Add visit flow will be enabled in the next step.',
             );
           }}
         >
@@ -305,7 +327,7 @@ const styles = StyleSheet.create({
     paddingTop: 32,
     paddingHorizontal: 24,
     paddingBottom: 110,
-    gap: 24,
+    gap: 20,
   },
   headerRow: {
     height: 44,
@@ -322,8 +344,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headerTitle: {
-    fontSize: 30,
-    lineHeight: 34,
+    fontSize: 28,
+    lineHeight: 32,
     fontWeight: '700',
     color: '#2d2d2d',
     letterSpacing: -0.4,
@@ -334,11 +356,11 @@ const styles = StyleSheet.create({
   },
   titleWrap: {
     gap: 10,
-    paddingLeft: 4,
+    paddingLeft: 2,
   },
   title: {
-    fontSize: 45,
-    lineHeight: 52,
+    fontSize: 38,
+    lineHeight: 44,
     fontWeight: '700',
     color: '#2d2d2d',
     letterSpacing: -0.8,
@@ -348,9 +370,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   statPill: {
-    height: 34,
+    height: 32,
     borderRadius: 999,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.04)',
@@ -359,7 +381,7 @@ const styles = StyleSheet.create({
     gap: 7,
     shadowColor: '#000',
     shadowOpacity: 0.05,
-    shadowRadius: 8,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
   },
@@ -375,12 +397,12 @@ const styles = StyleSheet.create({
   },
   timelineLine: {
     position: 'absolute',
-    left: 19,
+    left: 18,
     top: 14,
     bottom: 12,
     width: 2,
     borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.06)',
   },
   cardsColumn: {
     gap: 20,
@@ -396,11 +418,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: '#fff',
     borderWidth: 3,
-    borderColor: '#faf9f8',
+    borderColor: '#f6f5f3',
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
-    shadowOpacity: 0.08,
+    shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
@@ -412,12 +434,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.02)',
     backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 18,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 16,
     shadowColor: '#000',
     shadowOpacity: 0.05,
-    shadowRadius: 16,
+    shadowRadius: 12,
     shadowOffset: { width: 0, height: 8 },
     elevation: 2,
   },
@@ -488,15 +510,15 @@ const styles = StyleSheet.create({
     color: '#b55858',
   },
   cardTitle: {
-    marginTop: 12,
-    fontSize: 37,
-    lineHeight: 43,
+    marginTop: 10,
+    fontSize: 30,
+    lineHeight: 36,
     fontWeight: '700',
     letterSpacing: -0.6,
     color: '#2d2d2d',
   },
   metaRow: {
-    marginTop: 6,
+    marginTop: 4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -521,7 +543,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   cardDivider: {
-    marginTop: 16,
+    marginTop: 14,
     height: 1,
     backgroundColor: 'rgba(0,0,0,0.03)',
   },
@@ -565,12 +587,12 @@ const styles = StyleSheet.create({
   },
   addBtn: {
     position: 'absolute',
-    bottom: 26,
+    bottom: 24,
     alignSelf: 'center',
-    height: 56,
+    height: 52,
     borderRadius: 999,
     backgroundColor: '#2d2d2d',
-    paddingHorizontal: 32,
+    paddingHorizontal: 28,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

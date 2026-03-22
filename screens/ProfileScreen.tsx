@@ -56,7 +56,6 @@ type IconName =
 
 const fallbackAvatar = 'https://www.figma.com/api/mcp/asset/7f9b54a3-43e6-4459-a7f9-0ae7b68618e2';
 const petProfilesIconUri = Image.resolveAssetSource(require('../assets/vpaw-login-illustrator.svg')).uri;
-const catDogHomeButtonUri = Image.resolveAssetSource(require('../assets/cat-dog-home-button.svg')).uri;
 
 const navRows: Record<'pets' | 'health' | 'preferences', Array<{ key: string; label: string; icon: IconName }>> = {
   pets: [
@@ -282,7 +281,7 @@ export default function ProfileScreen({ onBackHome, onOpenPremium, onOpenProfile
         <View style={styles.topActionRow}>
           {onBackHome ? (
             <Pressable style={styles.homeIconBtn} onPress={onBackHome}>
-              <SvgUri uri={catDogHomeButtonUri} width={36} height={36} style={styles.homeIconAsset} />
+              <AppIcon name="home" size={22} color="#6f6f6f" strokeWidth={2.1} />
             </Pressable>
           ) : <View />}
 
@@ -431,16 +430,13 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   homeIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: -2,
-  },
-  homeIconAsset: {
-    opacity: 1,
-  },
+    marginLeft: 0,
+  },
   editIconBtn: {
     width: 36,
     height: 36,
