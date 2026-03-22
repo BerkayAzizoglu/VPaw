@@ -2,6 +2,13 @@ import type { PetProfile } from '../components/AuthGate';
 import type { VisitItem } from '../screens/VetVisitsScreen';
 import type { HealthRecordsData } from '../screens/HealthRecordsScreen';
 import type { VaccinationsAttentionCounts, VaccinationsHistoryItem, VaccinationsNextUpData } from '../screens/VaccinationsScreen';
+import type {
+  ByPet,
+  MedicalEvent as MvpMedicalEvent,
+  MedicationCourse,
+  Reminder,
+  VetVisit as MvpVetVisit,
+} from './healthMvpModel';
 
 type PetId = 'luna' | 'milo';
 
@@ -121,6 +128,46 @@ export function getVaccinationsFromEvents(
   return { historyItems, attentionCounts, nextUpData };
 }
 
+export function getVaccinesForUI(
+  petId: PetId,
+  medicalEventsByPet: ByPet<MvpMedicalEvent>,
+  legacyHealthEventsByPet: Record<PetId, HealthEvent[]>,
+  legacyProfile?: PetProfile,
+): {
+  historyItems: VaccinationsHistoryItem[];
+  attentionCounts: VaccinationsAttentionCounts;
+  nextUpData?: VaccinationsNextUpData;
+} | null {
+  const vaccineEvents = (medicalEventsByPet[petId] ?? []).filter((event) => event.type === 'vaccine');
+  if (vaccineEvents.length === 0) {
+    return getVaccinationsFromEvents(petId, legacyHealthEventsByPet, legacyProfile);
+  }
+
+  const syntheticHealthEvents: HealthEvent[] = vaccineEvents.map((event) => ({
+    id: `mvp-vaccine-${event.id}`,
+    petId,
+    type: 'vaccination',
+    title: event.title,
+    description: event.note,
+    date: event.eventDate,
+    metadata: {
+      vaccineType: event.subcategory ?? event.title,
+      source: 'mvp-medical-event',
+    },
+    createdAt: event.createdAt,
+    updatedAt: event.updatedAt,
+  }));
+
+  return getVaccinationsFromEvents(
+    petId,
+    {
+      ...legacyHealthEventsByPet,
+      [petId]: syntheticHealthEvents,
+    },
+    legacyProfile,
+  );
+}
+
 export function getVetVisitsFromEvents(
   petId: PetId,
   healthEventsByPet: Record<PetId, HealthEvent[]>,
@@ -165,6 +212,70 @@ export function getVetVisitsFromEvents(
     attachments: [],
     attachPlaceholder: true,
   }));
+}
+
+function getVisitFallbackTitle(reason: MvpVetVisit['reasonCategory']) {
+  if (reason === 'checkup') return 'General Checkup';
+  if (reason === 'vaccine') return 'Vaccination Visit';
+  if (reason === 'illness') return 'Illness Visit';
+  if (reason === 'injury') return 'Injury Visit';
+  if (reason === 'follow_up') return 'Follow-up Visit';
+  return 'Vet Visit';
+}
+
+function getPrimaryEventForVisit(events: MvpMedicalEvent[]) {
+  const sorted = [...events].sort((a, b) => (parseDateMs(b.eventDate) ?? 0) - (parseDateMs(a.eventDate) ?? 0));
+  return sorted[0];
+}
+
+export function getVetVisitsForUI(
+  petId: PetId,
+  vetVisitsByPet: ByPet<MvpVetVisit>,
+  medicalEventsByPet: ByPet<MvpMedicalEvent>,
+  legacyHealthEventsByPet: Record<PetId, HealthEvent[]>,
+  legacyProfile?: PetProfile,
+): VisitItem[] | null {
+  const visits = [...(vetVisitsByPet[petId] ?? [])].sort((a, b) => (parseDateMs(b.visitDate) ?? 0) - (parseDateMs(a.visitDate) ?? 0));
+  if (visits.length === 0) {
+    return getVetVisitsFromEvents(petId, legacyHealthEventsByPet, legacyProfile);
+  }
+
+  const visitAsHealthEvents: HealthEvent[] = visits.map((visit) => {
+    const relatedEvents = (medicalEventsByPet[petId] ?? []).filter((event) => event.vetVisitId === visit.id);
+    const primary = getPrimaryEventForVisit(relatedEvents);
+    const attachments = relatedEvents
+      .filter((event) => event.type === 'attachment' || event.type === 'test' || event.type === 'prescription')
+      .map((event) => event.title)
+      .filter((title) => title && title.trim().length > 0);
+
+    return {
+      id: `mvp-vet-${visit.id}`,
+      petId,
+      type: 'vet_visit',
+      title: primary?.title || getVisitFallbackTitle(visit.reasonCategory),
+      description: visit.notes,
+      date: visit.visitDate,
+      metadata: {
+        icon: primary?.type === 'test' ? 'pulse' : 'stethoscope',
+        clinic: visit.clinicName || 'Veterinary Clinic',
+        doctor: visit.vetName || 'Veterinarian',
+        paymentText: visit.status === 'planned' ? 'Planned' : 'Recorded',
+        attachments,
+        attachPlaceholder: attachments.length === 0,
+      },
+      createdAt: visit.createdAt,
+      updatedAt: visit.updatedAt,
+    };
+  });
+
+  return getVetVisitsFromEvents(
+    petId,
+    {
+      ...legacyHealthEventsByPet,
+      [petId]: visitAsHealthEvents,
+    },
+    legacyProfile,
+  );
 }
 
 export function getHealthRecordsFromEvents(
@@ -225,3 +336,215 @@ export function getHealthRecordsFromEvents(
     },
   };
 }
+
+function mapMedicalEventTypeToLegacyCategory(type: MvpMedicalEvent['type']): string {
+  if (type === 'diagnosis') return 'diagnosis';
+  if (type === 'procedure') return 'surgery';
+  if (type === 'test') return 'lab_result';
+  if (type === 'prescription') return 'treatment';
+  if (type === 'note') return 'general';
+  return 'general';
+}
+
+export function getHealthRecordsForUI(
+  petId: PetId,
+  medicalEventsByPet: ByPet<MvpMedicalEvent>,
+  legacyHealthEventsByPet: Record<PetId, HealthEvent[]>,
+  legacyProfile?: PetProfile,
+): HealthRecordsData | null {
+  const supportedTypes: MvpMedicalEvent['type'][] = ['diagnosis', 'procedure', 'test', 'prescription', 'note'];
+  const records = (medicalEventsByPet[petId] ?? []).filter((event) => supportedTypes.includes(event.type));
+  if (records.length === 0) {
+    return getHealthRecordsFromEvents(petId, legacyHealthEventsByPet, legacyProfile);
+  }
+
+  const syntheticHealthEvents: HealthEvent[] = records.map((event) => ({
+    id: `mvp-record-${event.id}`,
+    petId,
+    type: 'health_note',
+    title: event.title,
+    description: event.note,
+    date: event.eventDate,
+    metadata: {
+      category: mapMedicalEventTypeToLegacyCategory(event.type),
+      status: event.status ?? 'active',
+      source: 'mvp-medical-event',
+    },
+    createdAt: event.createdAt,
+    updatedAt: event.updatedAt,
+  }));
+
+  return getHealthRecordsFromEvents(
+    petId,
+    {
+      ...legacyHealthEventsByPet,
+      [petId]: syntheticHealthEvents,
+    },
+    legacyProfile,
+  );
+}
+
+export type HealthCardExportRowKey = 'vaccines' | 'visits' | 'health' | 'weight' | 'allergy' | 'surgery' | 'meds';
+
+export type HealthCardSummary = {
+  lastVisit: {
+    title: string;
+    date: string;
+    clinic?: string;
+    doctor?: string;
+  } | null;
+  vaccinesSummary: {
+    latest: string | null;
+    next: string | null;
+    total: number;
+  };
+  activeMedications: Array<{
+    name: string;
+    startDate: string;
+    status: string;
+  }>;
+  recentEvents: Array<{
+    id: string;
+    title: string;
+    category: string;
+    date: string;
+    note?: string;
+  }>;
+  alerts: string[];
+  exportRows: Record<HealthCardExportRowKey, string[]>;
+};
+
+function categoryLabelFromMedicalEventType(type: MvpMedicalEvent['type']) {
+  if (type === 'diagnosis') return 'Diagnosis';
+  if (type === 'procedure') return 'Procedure';
+  if (type === 'test') return 'Test / Imaging';
+  if (type === 'prescription') return 'Medication / Treatment';
+  if (type === 'vaccine') return 'Vaccine';
+  return 'General';
+}
+
+export function getHealthCardSummary(
+  petId: PetId,
+  vetVisitsByPet: ByPet<MvpVetVisit>,
+  medicalEventsByPet: ByPet<MvpMedicalEvent>,
+  remindersByPet: ByPet<Reminder>,
+  medicationCoursesByPet: ByPet<MedicationCourse>,
+  weightEntries: Array<{ value: number; date: string }>,
+  legacyHealthEventsByPet: Record<PetId, HealthEvent[]>,
+  legacyProfile?: PetProfile,
+): HealthCardSummary {
+  const visits = [...(vetVisitsByPet[petId] ?? [])].sort((a, b) => (parseDateMs(b.visitDate) ?? 0) - (parseDateMs(a.visitDate) ?? 0));
+  const medicalEvents = [...(medicalEventsByPet[petId] ?? [])].sort((a, b) => (parseDateMs(b.eventDate) ?? 0) - (parseDateMs(a.eventDate) ?? 0));
+  const reminders = remindersByPet[petId] ?? [];
+  const medications = (medicationCoursesByPet[petId] ?? []).filter((course) => course.status === 'active');
+
+  const hasNewModelData = visits.length > 0 || medicalEvents.length > 0 || reminders.length > 0 || medications.length > 0;
+
+  if (!hasNewModelData) {
+    const legacyVisits = getVetVisitsFromEvents(petId, legacyHealthEventsByPet, legacyProfile) ?? [];
+    const legacyVaccines = getVaccinationsFromEvents(petId, legacyHealthEventsByPet, legacyProfile);
+    const legacyHealth = getHealthRecordsFromEvents(petId, legacyHealthEventsByPet, legacyProfile);
+    const legacyWeight = weightEntries.map((entry) => `${entry.value.toFixed(1)} kg • ${entry.date}`);
+    const legacyAllergies = (legacyProfile?.allergiesLog ?? []).map((item) => `${item.category} • ${item.status}`);
+    const legacySurgeries = (legacyProfile?.surgeriesLog ?? []).map((item) => `${item.name} • ${item.date}`);
+    const legacyMeds = (legacyProfile?.diabetesLog ?? []).map((item) => `${item.type} • ${item.status}`);
+
+    return {
+      lastVisit: legacyVisits.length > 0 ? {
+        title: legacyVisits[0].title,
+        date: legacyVisits[0].date,
+        clinic: legacyVisits[0].clinic,
+        doctor: legacyVisits[0].doctor,
+      } : null,
+      vaccinesSummary: {
+        latest: legacyVaccines?.historyItems?.[0]?.name ?? null,
+        next: legacyVaccines?.nextUpData?.name ?? null,
+        total: legacyVaccines?.historyItems?.length ?? 0,
+      },
+      activeMedications: [],
+      recentEvents: [],
+      alerts: [],
+      exportRows: {
+        vaccines: legacyVaccines?.historyItems?.slice(0, 5).map((item) => `${item.name} • ${item.dueDate}`) ?? ['Rabies • Apr 12, 2026'],
+        visits: legacyVisits.slice(0, 5).map((item) => `${item.title} • ${item.date}`),
+        health: [
+          legacyHealth?.bySegment?.allergies?.activeTitle,
+          legacyHealth?.bySegment?.diagnoses?.activeTitle,
+          legacyHealth?.bySegment?.labResults?.activeTitle,
+        ].filter((item): item is string => Boolean(item)).slice(0, 5),
+        weight: legacyWeight.length ? legacyWeight.slice(-5).reverse() : ['5.2 kg • Apr 15, 2026'],
+        allergy: legacyAllergies.length ? legacyAllergies.slice(0, 5) : ['No allergy records'],
+        surgery: legacySurgeries.length ? legacySurgeries.slice(0, 5) : ['No surgery records'],
+        meds: legacyMeds.length ? legacyMeds.slice(0, 5) : ['No active medication'],
+      },
+    };
+  }
+
+  const vaccineEvents = medicalEvents.filter((event) => event.type === 'vaccine');
+  const latestVaccine = vaccineEvents[0];
+  const nextVaccine = [...vaccineEvents]
+    .filter((event) => {
+      const dueDate = typeof event.dueDate === 'string' ? event.dueDate : undefined;
+      const dueMs = parseDateMs(dueDate);
+      return dueMs != null && dueMs > Date.now();
+    })
+    .sort((a, b) => (parseDateMs(a.dueDate) ?? Number.MAX_SAFE_INTEGER) - (parseDateMs(b.dueDate) ?? Number.MAX_SAFE_INTEGER))[0];
+
+  const recentSupportedTypes: MvpMedicalEvent['type'][] = ['diagnosis', 'procedure', 'test', 'prescription', 'note'];
+  const recentEvents = medicalEvents
+    .filter((event) => recentSupportedTypes.includes(event.type))
+    .slice(0, 5)
+    .map((event) => ({
+      id: event.id,
+      title: event.title,
+      category: categoryLabelFromMedicalEventType(event.type),
+      date: toDateLabel(event.eventDate),
+      note: event.note,
+    }));
+
+  const alerts: string[] = [];
+  const pendingReminderCount = reminders.filter((item) => item.status === 'pending').length;
+  if (pendingReminderCount > 0) alerts.push(`${pendingReminderCount} pending reminder${pendingReminderCount > 1 ? 's' : ''}`);
+  if (medications.length > 0) alerts.push(`${medications.length} active medication${medications.length > 1 ? 's' : ''}`);
+  const overdueVaccineCount = vaccineEvents.filter((event) => {
+    const dueDate = typeof event.dueDate === 'string' ? event.dueDate : undefined;
+    const dueMs = parseDateMs(dueDate);
+    return dueMs != null && dueMs < Date.now();
+  }).length;
+  if (overdueVaccineCount > 0) alerts.push(`${overdueVaccineCount} overdue vaccine${overdueVaccineCount > 1 ? 's' : ''}`);
+
+  const diagnosisRows = medicalEvents.filter((event) => event.type === 'diagnosis').slice(0, 5).map((event) => `${event.title} • ${toDateLabel(event.eventDate)}`);
+  const procedureRows = medicalEvents.filter((event) => event.type === 'procedure').slice(0, 5).map((event) => `${event.title} • ${toDateLabel(event.eventDate)}`);
+  const medicationRows = medications.slice(0, 5).map((course) => `${course.name} • ${toDateLabel(course.startDate)}`);
+
+  return {
+    lastVisit: visits.length > 0 ? {
+      title: getVisitFallbackTitle(visits[0].reasonCategory),
+      date: toDateLabel(visits[0].visitDate),
+      clinic: visits[0].clinicName,
+      doctor: visits[0].vetName,
+    } : null,
+    vaccinesSummary: {
+      latest: latestVaccine ? `${latestVaccine.title} • ${toDateLabel(latestVaccine.eventDate)}` : null,
+      next: nextVaccine ? `${nextVaccine.title} • ${toDateLabel(nextVaccine.dueDate ?? nextVaccine.eventDate)}` : null,
+      total: vaccineEvents.length,
+    },
+    activeMedications: medications.slice(0, 5).map((course) => ({
+      name: course.name,
+      startDate: course.startDate,
+      status: course.status,
+    })),
+    recentEvents,
+    alerts,
+    exportRows: {
+      vaccines: vaccineEvents.slice(0, 5).map((event) => `${event.title} • ${toDateLabel(event.eventDate)}`),
+      visits: visits.slice(0, 5).map((visit) => `${getVisitFallbackTitle(visit.reasonCategory)} • ${toDateLabel(visit.visitDate)}`),
+      health: recentEvents.map((event) => `${event.title} • ${event.category}`).slice(0, 5),
+      weight: weightEntries.length ? weightEntries.slice(-5).reverse().map((entry) => `${entry.value.toFixed(1)} kg • ${entry.date}`) : ['No weight records'],
+      allergy: diagnosisRows.length ? diagnosisRows : ['No allergy records'],
+      surgery: procedureRows.length ? procedureRows : ['No surgery records'],
+      meds: medicationRows.length ? medicationRows : ['No active medication'],
+    },
+  };
+}
+

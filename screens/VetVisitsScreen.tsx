@@ -1,22 +1,56 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
+  Animated,
   Alert,
-  PanResponder,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
+  Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
+import type { VetVisitReasonCategory } from '../lib/healthMvpModel';
+
+export type VisitActionType = 'vaccine' | 'diagnosis' | 'procedure' | 'test' | 'prescription';
+type ReminderPreset = 'same_day' | 'one_day_before' | 'custom';
+
+export type VetVisitCreatePreset = {
+  reason?: VetVisitReasonCategory;
+  actions?: VisitActionType[];
+  openCreate?: boolean;
+  source?: 'vaccinations' | 'healthRecords' | 'other';
+  nonce?: number;
+};
+
+export type CreateVetVisitPayload = {
+  date: string;
+  reason: VetVisitReasonCategory;
+  note?: string;
+  reminderEnabled: boolean;
+  reminderDate?: string;
+  actions: Array<{
+    type: VisitActionType;
+    title: string;
+    note?: string;
+  }>;
+};
 
 type VetVisitsScreenProps = {
   onBack: () => void;
+  backPreview?: ReactNode;
+  createPreset?: VetVisitCreatePreset | null;
   onAddVisit?: () => void;
+  onCreateVisit?: (payload: CreateVetVisitPayload) => void;
   status?: 'ready' | ScreenStateMode;
   onRetry?: () => void;
   visits?: VisitItem[];
@@ -172,10 +206,261 @@ function TimelineCard({ item, attachDocuments }: { item: VisitItem; attachDocume
   );
 }
 
-export default function VetVisitsScreen({ onBack, onAddVisit, status = 'ready', onRetry, visits }: VetVisitsScreenProps) {
+export default function VetVisitsScreen({ onBack, backPreview, createPreset, onAddVisit, onCreateVisit, status = 'ready', onRetry, visits }: VetVisitsScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).vetVisits;
   const isTr = locale === 'tr';
+
+  const [isCreateVisible, setIsCreateVisible] = useState(false);
+  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [visitDate, setVisitDate] = useState(today);
+  const [visitReason, setVisitReason] = useState<VetVisitReasonCategory>('checkup');
+  const [visitNote, setVisitNote] = useState('');
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderPreset, setReminderPreset] = useState<ReminderPreset>('same_day');
+  const [reminderDate, setReminderDate] = useState(today);
+  const [selectedActions, setSelectedActions] = useState<Record<VisitActionType, boolean>>({
+    vaccine: false,
+    diagnosis: false,
+    procedure: false,
+    test: false,
+    prescription: false,
+  });
+  const [selectedActionOptions, setSelectedActionOptions] = useState<Record<VisitActionType, string>>({
+    vaccine: '',
+    diagnosis: '',
+    procedure: '',
+    test: '',
+    prescription: '',
+  });
+  const [customActionTitles, setCustomActionTitles] = useState<Record<VisitActionType, string>>({
+    vaccine: '',
+    diagnosis: '',
+    procedure: '',
+    test: '',
+    prescription: '',
+  });
+  const [actionNotes, setActionNotes] = useState<Record<VisitActionType, string>>({
+    vaccine: '',
+    diagnosis: '',
+    procedure: '',
+    test: '',
+    prescription: '',
+  });
+  const lastPresetRef = useRef<string | null>(null);
+
+  const actionOrder: VisitActionType[] = ['vaccine', 'diagnosis', 'procedure', 'test', 'prescription'];
+  const actionLabels: Record<VisitActionType, string> = isTr
+    ? {
+      vaccine: 'Asi',
+      diagnosis: 'Tani',
+      procedure: 'Prosedur',
+      test: 'Test',
+      prescription: 'Recete',
+    }
+    : {
+      vaccine: 'Vaccine',
+      diagnosis: 'Diagnosis',
+      procedure: 'Procedure',
+      test: 'Test',
+      prescription: 'Prescription',
+    };
+
+  const actionOptions: Record<VisitActionType, Array<{ value: string; label: string }>> = isTr
+    ? {
+      vaccine: [
+        { value: 'rabies', label: 'Kuduz' },
+        { value: 'dhpp', label: 'DHPP' },
+        { value: 'bordetella', label: 'Bordetella' },
+        { value: 'leptospirosis', label: 'Leptospirosis' },
+        { value: 'other', label: 'Diger' },
+      ],
+      diagnosis: [
+        { value: 'allergy', label: 'Alerji' },
+        { value: 'infection', label: 'Enfeksiyon' },
+        { value: 'gastro', label: 'Gastrointestinal' },
+        { value: 'dermatology', label: 'Dermatoloji' },
+        { value: 'other', label: 'Diger' },
+      ],
+      procedure: [
+        { value: 'neutering', label: 'Kisirlastirma' },
+        { value: 'dental_cleaning', label: 'Dis Temizligi' },
+        { value: 'minor_surgery', label: 'Minor Cerrahi' },
+        { value: 'wound_care', label: 'Yara Bakimi' },
+        { value: 'other', label: 'Diger' },
+      ],
+      test: [
+        { value: 'blood_test', label: 'Kan Testi' },
+        { value: 'fecal_test', label: 'Diski Testi' },
+        { value: 'xray', label: 'Rontgen' },
+        { value: 'ultrasound', label: 'Ultrason' },
+        { value: 'other', label: 'Diger' },
+      ],
+      prescription: [
+        { value: 'antibiotic', label: 'Antibiyotik' },
+        { value: 'anti_inflammatory', label: 'Anti-inflamatuar' },
+        { value: 'antiparasitic', label: 'Antiparaziter' },
+        { value: 'supplement', label: 'Takviye' },
+        { value: 'other', label: 'Diger' },
+      ],
+    }
+    : {
+      vaccine: [
+        { value: 'rabies', label: 'Rabies' },
+        { value: 'dhpp', label: 'DHPP' },
+        { value: 'bordetella', label: 'Bordetella' },
+        { value: 'leptospirosis', label: 'Leptospirosis' },
+        { value: 'other', label: 'Other' },
+      ],
+      diagnosis: [
+        { value: 'allergy', label: 'Allergy' },
+        { value: 'infection', label: 'Infection' },
+        { value: 'gastro', label: 'Gastrointestinal' },
+        { value: 'dermatology', label: 'Dermatology' },
+        { value: 'other', label: 'Other' },
+      ],
+      procedure: [
+        { value: 'neutering', label: 'Neutering' },
+        { value: 'dental_cleaning', label: 'Dental Cleaning' },
+        { value: 'minor_surgery', label: 'Minor Surgery' },
+        { value: 'wound_care', label: 'Wound Care' },
+        { value: 'other', label: 'Other' },
+      ],
+      test: [
+        { value: 'blood_test', label: 'Blood Test' },
+        { value: 'fecal_test', label: 'Fecal Test' },
+        { value: 'xray', label: 'X-ray' },
+        { value: 'ultrasound', label: 'Ultrasound' },
+        { value: 'other', label: 'Other' },
+      ],
+      prescription: [
+        { value: 'antibiotic', label: 'Antibiotic' },
+        { value: 'anti_inflammatory', label: 'Anti-inflammatory' },
+        { value: 'antiparasitic', label: 'Antiparasitic' },
+        { value: 'supplement', label: 'Supplement' },
+        { value: 'other', label: 'Other' },
+      ],
+    };
+
+  const reasonOptions: Array<{ value: VetVisitReasonCategory; label: string }> = isTr
+    ? [
+      { value: 'checkup', label: 'Kontrol' },
+      { value: 'vaccine', label: 'Asi' },
+      { value: 'illness', label: 'Hastalik' },
+      { value: 'injury', label: 'Yaralanma' },
+      { value: 'follow_up', label: 'Takip' },
+      { value: 'other', label: 'Diger' },
+    ]
+    : [
+      { value: 'checkup', label: 'Checkup' },
+      { value: 'vaccine', label: 'Vaccine' },
+      { value: 'illness', label: 'Illness' },
+      { value: 'injury', label: 'Injury' },
+      { value: 'follow_up', label: 'Follow-up' },
+      { value: 'other', label: 'Other' },
+    ];
+
+  const toggleAction = (type: VisitActionType) => {
+    setSelectedActions((prev) => {
+      const nextEnabled = !prev[type];
+      if (!nextEnabled) {
+        setSelectedActionOptions((optPrev) => ({ ...optPrev, [type]: '' }));
+        setCustomActionTitles((titlePrev) => ({ ...titlePrev, [type]: '' }));
+        setActionNotes((notePrev) => ({ ...notePrev, [type]: '' }));
+      }
+      return { ...prev, [type]: nextEnabled };
+    });
+  };
+
+  const resetCreateForm = () => {
+    setVisitDate(today);
+    setVisitReason('checkup');
+    setVisitNote('');
+    setReminderEnabled(false);
+    setReminderPreset('same_day');
+    setReminderDate(today);
+    setSelectedActions({
+      vaccine: false,
+      diagnosis: false,
+      procedure: false,
+      test: false,
+      prescription: false,
+    });
+    setSelectedActionOptions({
+      vaccine: '',
+      diagnosis: '',
+      procedure: '',
+      test: '',
+      prescription: '',
+    });
+    setCustomActionTitles({
+      vaccine: '',
+      diagnosis: '',
+      procedure: '',
+      test: '',
+      prescription: '',
+    });
+    setActionNotes({
+      vaccine: '',
+      diagnosis: '',
+      procedure: '',
+      test: '',
+      prescription: '',
+    });
+  };
+
+  const reminderPresetOptions: Array<{ value: ReminderPreset; label: string }> = isTr
+    ? [
+      { value: 'one_day_before', label: '1 gun once' },
+      { value: 'same_day', label: 'Ayni gun' },
+      { value: 'custom', label: 'Ozel tarih' },
+    ]
+    : [
+      { value: 'one_day_before', label: '1 day before' },
+      { value: 'same_day', label: 'Same day' },
+      { value: 'custom', label: 'Custom' },
+    ];
+
+  const getReminderDateByPreset = (baseIso: string, preset: ReminderPreset) => {
+    const base = new Date(baseIso);
+    if (!Number.isFinite(base.getTime())) return baseIso;
+    if (preset === 'same_day') return base.toISOString();
+    if (preset === 'one_day_before') {
+      const next = new Date(base.getTime() - 24 * 60 * 60 * 1000);
+      return next.toISOString();
+    }
+    return reminderDate;
+  };
+
+  useEffect(() => {
+    if (!createPreset?.openCreate) return;
+    const actionsKey = (createPreset.actions ?? []).join(',');
+    const reasonKey = createPreset.reason ?? '';
+    const sourceKey = createPreset.source ?? '';
+    const presetKey = `${sourceKey}|${reasonKey}|${actionsKey}|${String(createPreset.nonce ?? '')}`;
+    if (lastPresetRef.current === presetKey) return;
+    lastPresetRef.current = presetKey;
+
+    setVisitReason(createPreset.reason ?? 'checkup');
+    setSelectedActions({
+      vaccine: createPreset.actions?.includes('vaccine') ?? false,
+      diagnosis: createPreset.actions?.includes('diagnosis') ?? false,
+      procedure: createPreset.actions?.includes('procedure') ?? false,
+      test: createPreset.actions?.includes('test') ?? false,
+      prescription: createPreset.actions?.includes('prescription') ?? false,
+    });
+    setIsCreateVisible(true);
+  }, [createPreset]);
+
+  useEffect(() => {
+    if (!reminderEnabled) return;
+    if (reminderPreset === 'custom') return;
+    const visitIso = parseInputDate(visitDate);
+    if (!visitIso) return;
+    const autoReminder = getReminderDateByPreset(visitIso, reminderPreset);
+    const dateOnly = autoReminder.slice(0, 10);
+    setReminderDate(dateOnly);
+  }, [reminderEnabled, reminderPreset, visitDate]);
 
   const fallbackVisits: VisitItem[] = [
     {
@@ -211,6 +496,98 @@ export default function VetVisitsScreen({ onBack, onAddVisit, status = 'ready', 
     },
   ];
 
+  const parseInputDate = (value: string) => {
+    const normalized = value.trim();
+    if (!normalized) return null;
+    const parsed = new Date(`${normalized}T12:00:00.000Z`);
+    if (!Number.isFinite(parsed.getTime())) return null;
+    return parsed.toISOString();
+  };
+
+  const handleSubmitCreate = () => {
+    const visitDateIso = parseInputDate(visitDate);
+    if (!visitDateIso) {
+      Alert.alert(
+        isTr ? 'Gecersiz tarih' : 'Invalid date',
+        isTr ? 'Tarihi YYYY-AA-GG formatinda girin.' : 'Please enter date as YYYY-MM-DD.',
+      );
+      return;
+    }
+
+    const actions = actionOrder
+      .filter((type) => selectedActions[type])
+      .map((type) => {
+        const selectedValue = selectedActionOptions[type];
+        const selectedLabel = actionOptions[type].find((item) => item.value === selectedValue)?.label;
+        const title =
+          selectedValue === 'other'
+            ? (customActionTitles[type].trim() || actionLabels[type])
+            : (selectedLabel || actionLabels[type]);
+
+        return {
+          type,
+          title,
+          note: actionNotes[type].trim() || undefined,
+        };
+      });
+
+    const hasInvalidStructuredSelection = actionOrder.some((type) => {
+      if (!selectedActions[type]) return false;
+      const selectedValue = selectedActionOptions[type];
+      if (!selectedValue) return true;
+      if (selectedValue === 'other' && !customActionTitles[type].trim()) return true;
+      return false;
+    });
+    if (hasInvalidStructuredSelection) {
+      Alert.alert(
+        isTr ? 'Eksik secim' : 'Missing selection',
+        isTr ? 'Secili islemler icin kategori secin. Diger sectiyseniz kisa bir baslik yazin.' : 'Select a category for each chosen action. If you picked Other, add a short title.',
+      );
+      return;
+    }
+
+    const reminderDateIso = reminderEnabled
+      ? (reminderPreset === 'custom'
+          ? parseInputDate(reminderDate)
+          : getReminderDateByPreset(visitDateIso, reminderPreset))
+      : null;
+    if (reminderEnabled && !reminderDateIso) {
+      Alert.alert(
+        isTr ? 'Gecersiz hatirlatma tarihi' : 'Invalid reminder date',
+        isTr ? 'Hatirlatma tarihi YYYY-AA-GG formatinda olmali.' : 'Reminder date must be in YYYY-MM-DD format.',
+      );
+      return;
+    }
+
+    const payload: CreateVetVisitPayload = {
+      date: visitDateIso,
+      reason: visitReason,
+      note: visitNote.trim() || undefined,
+      reminderEnabled,
+      reminderDate: reminderDateIso ?? undefined,
+      actions,
+    };
+
+    if (onCreateVisit) {
+      onCreateVisit(payload);
+      setIsCreateVisible(false);
+      resetCreateForm();
+      return;
+    }
+
+    if (onAddVisit) {
+      onAddVisit();
+      setIsCreateVisible(false);
+      resetCreateForm();
+      return;
+    }
+
+    Alert.alert(
+      isTr ? 'Yakinda' : 'Coming soon',
+      isTr ? 'Ziyaret ekleme akis bir sonraki adimda aktif edilecek.' : 'Add visit flow will be enabled in the next step.',
+    );
+  };
+
   const visitsData = visits ?? fallbackVisits;
   const totalAmount = visitsData.reduce((sum, item) => {
     const raw = item.amount ? Number(item.amount.replace(/[^0-9.-]/g, '')) : 0;
@@ -223,41 +600,34 @@ export default function VetVisitsScreen({ onBack, onAddVisit, status = 'ready', 
   const showMainContent = screenState === 'ready';
   const showAddButton = screenState !== 'loading' && screenState !== 'error';
   const stateTitle = screenState === 'loading'
-    ? (isTr ? 'Ziyaretler y�kleniyor' : 'Loading vet visits')
+    ? (isTr ? 'Ziyaretler yukleniyor' : 'Loading vet visits')
     : screenState === 'empty'
-      ? (isTr ? 'Hen�z ziyaret kayd� yok' : 'No vet visits yet')
-      : (isTr ? 'Ziyaret kay�tlar� al�namad�' : 'Could not load vet visits');
+      ? (isTr ? 'Henuz ziyaret kaydi yok' : 'No vet visits yet')
+      : (isTr ? 'Ziyaret kayitlari alinamadi' : 'Could not load vet visits');
   const stateBody = screenState === 'loading'
-    ? (isTr ? 'Ge�mi� kay�tlar haz�rlan�yor, l�tfen bekleyin.' : 'Preparing your medical history, please wait.')
+    ? (isTr ? 'Gecmis kayitlar hazirlaniyor, lutfen bekleyin.' : 'Preparing your medical history, please wait.')
     : screenState === 'empty'
-      ? (isTr ? '�lk veteriner ziyaretinizi ekledi�inizde bu alan otomatik olarak dolacakt�r.' : 'This area will fill automatically once your first visit is added.')
-      : (isTr ? 'Ba�lant�y� kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
+      ? (isTr ? 'Ilk veteriner ziyaretinizi eklediginizde bu alan otomatik olarak dolacaktir.' : 'This area will fill automatically once your first visit is added.')
+      : (isTr ? 'Baglantiyi kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
 
-  const swipeTriggeredRef = useRef(false);
-  const swipePanResponder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesture) => {
-      const horizontalIntent = Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.25;
-      return horizontalIntent && gesture.dx > 22;
-    },
-    onPanResponderMove: (_, gesture) => {
-      if (swipeTriggeredRef.current) return;
-      if (gesture.dx > 78 && Math.abs(gesture.dy) < 34) {
-        swipeTriggeredRef.current = true;
-        onBack();
-      }
-    },
-    onPanResponderRelease: () => {
-      swipeTriggeredRef.current = false;
-    },
-    onPanResponderTerminate: () => {
-      swipeTriggeredRef.current = false;
-    },
-  }), [onBack]);
+  const swipePanResponder = useEdgeSwipeBack({
+    onBack,
+    enabled: !isCreateVisible,
+    edgeWidth: 24,
+    triggerDx: 70,
+    maxDy: 30,
+  });
 
   return (
-    <View style={styles.screen} {...swipePanResponder.panHandlers}>
+    <View style={styles.screen}>
+      {backPreview ? (
+        <Animated.View pointerEvents="none" style={[styles.backLayer, swipePanResponder.backLayerStyle]}>
+          {backPreview}
+        </Animated.View>
+      ) : null}
+      <Animated.View style={[styles.frontLayer, swipePanResponder.frontLayerStyle]} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={!swipePanResponder.isSwiping}>
         <View style={styles.headerRow}>
           <Pressable style={styles.backBtn} onPress={onBack}>
             <Icon kind="back" size={22} color="#7a7a7a" />
@@ -291,7 +661,7 @@ export default function VetVisitsScreen({ onBack, onAddVisit, status = 'ready', 
             title={stateTitle}
             body={stateBody}
             actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : undefined}
-            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'L�tfen k�sa bir s�re sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
+            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lutfen kisa bir sure sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
           />
         )}
       </ScrollView>
@@ -299,21 +669,191 @@ export default function VetVisitsScreen({ onBack, onAddVisit, status = 'ready', 
       {showAddButton ? (
         <Pressable
           style={styles.addBtn}
-          onPress={() => {
-            if (onAddVisit) {
-              onAddVisit();
-              return;
-            }
-            Alert.alert(
-              isTr ? 'Yak�nda' : 'Coming soon',
-              isTr ? 'Ziyaret ekleme ak��� bir sonraki ad�mda aktif edilecek.' : 'Add visit flow will be enabled in the next step.',
-            );
-          }}
+          onPress={() => setIsCreateVisible(true)}
         >
           <Icon kind="plus" size={20} color="#faf8f5" />
           <Text style={styles.addBtnText}>{copy.addVisit}</Text>
         </Pressable>
       ) : null}
+
+      <Modal
+        visible={isCreateVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsCreateVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalKeyboardWrap}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>{isTr ? 'Veteriner Ziyareti Ekle' : 'Create Vet Visit'}</Text>
+              <ScrollView style={styles.modalMainScroll} showsVerticalScrollIndicator={false}>
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>{isTr ? 'Ziyaret Bilgisi' : 'Visit info'}</Text>
+                  <Text style={styles.modalHelperText}>
+                    {isTr ? 'Veteriner gorusmesinin tarihini ve ana nedenini secin.' : 'Set the encounter date and the primary reason for this visit.'}
+                  </Text>
+
+                  <Text style={styles.modalLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={visitDate}
+                    onChangeText={setVisitDate}
+                    placeholder="2026-03-22"
+                    placeholderTextColor="#a4a4a4"
+                    autoCapitalize="none"
+                  />
+
+                  <Text style={styles.modalLabel}>{isTr ? 'Ziyaret Nedeni' : 'Visit reason'}</Text>
+                  <Text style={styles.modalLabelHint}>
+                    {isTr ? 'Ornek: rutin kontrol, asi takibi, hastalik' : 'Example: routine checkup, vaccine follow-up, illness'}
+                  </Text>
+                  <View style={styles.chipsRow}>
+                    {reasonOptions.map((option) => (
+                      <Pressable
+                        key={option.value}
+                        style={[styles.chipBtn, visitReason === option.value ? styles.chipBtnActive : null]}
+                        onPress={() => setVisitReason(option.value)}
+                      >
+                        <Text style={[styles.chipBtnText, visitReason === option.value ? styles.chipBtnTextActive : null]}>{option.label}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>{isTr ? 'Islemler' : 'Actions'}</Text>
+                  <Text style={styles.modalHelperText}>
+                    {isTr ? 'Bu ziyarette yapilan islemleri secin. Sonra her islem icin kategori belirleyin.' : 'Select what happened during this visit, then choose a category for each action.'}
+                  </Text>
+                  <Text style={styles.modalLabel}>{isTr ? 'Yapilan Islemler' : 'Actions performed'}</Text>
+                  <View style={styles.chipsRow}>
+                    {actionOrder.map((type) => (
+                      <Pressable
+                        key={type}
+                        style={[styles.chipBtn, selectedActions[type] ? styles.chipBtnActive : null]}
+                        onPress={() => toggleAction(type)}
+                      >
+                        <Text style={[styles.chipBtnText, selectedActions[type] ? styles.chipBtnTextActive : null]}>{actionLabels[type]}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>{isTr ? 'Detaylar' : 'Details'}</Text>
+                  <Text style={styles.modalHelperText}>
+                    {isTr ? 'Serbest metin yerine secenek kullanin. Not alani opsiyoneldir.' : 'Prefer structured options over free text. Note is optional.'}
+                  </Text>
+
+                  <ScrollView style={styles.inlineFieldsWrap} showsVerticalScrollIndicator={false}>
+                    {actionOrder.map((type) => (
+                      selectedActions[type] ? (
+                        <View key={type} style={styles.inlineFieldBlock}>
+                          <Text style={styles.inlineFieldTitle}>{actionLabels[type]}</Text>
+                          <View style={styles.chipsRow}>
+                            {actionOptions[type].map((option) => (
+                              <Pressable
+                                key={`${type}-${option.value}`}
+                                style={[styles.chipBtn, selectedActionOptions[type] === option.value ? styles.chipBtnActive : null]}
+                                onPress={() => setSelectedActionOptions((prev) => ({ ...prev, [type]: option.value }))}
+                              >
+                                <Text style={[styles.chipBtnText, selectedActionOptions[type] === option.value ? styles.chipBtnTextActive : null]}>{option.label}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+
+                          {selectedActionOptions[type] === 'other' ? (
+                            <TextInput
+                              style={styles.modalInput}
+                              value={customActionTitles[type]}
+                              onChangeText={(value) => setCustomActionTitles((prev) => ({ ...prev, [type]: value }))}
+                              placeholder={isTr ? 'Kisa baslik yazin' : 'Write a short title'}
+                              placeholderTextColor="#a4a4a4"
+                            />
+                          ) : null}
+
+                          <TextInput
+                            style={[styles.modalInput, styles.modalInputTall]}
+                            value={actionNotes[type]}
+                            onChangeText={(value) => setActionNotes((prev) => ({ ...prev, [type]: value }))}
+                            placeholder={isTr ? 'Opsiyonel not' : 'Optional note'}
+                            placeholderTextColor="#a4a4a4"
+                            multiline
+                          />
+                        </View>
+                      ) : null
+                    ))}
+                  </ScrollView>
+                </View>
+
+                <View style={styles.modalSection}>
+                  <Text style={styles.modalSectionTitle}>{isTr ? 'Hatirlatma' : 'Reminder'}</Text>
+                  <View style={styles.switchRow}>
+                    <Text style={styles.switchLabel}>{isTr ? 'Hatirlatma olustur' : 'Create reminder'}</Text>
+                    <Switch
+                      value={reminderEnabled}
+                      onValueChange={setReminderEnabled}
+                      thumbColor="#ffffff"
+                      trackColor={{ false: '#d8d8d8', true: '#7f9a70' }}
+                    />
+                  </View>
+
+                  {reminderEnabled ? (
+                    <>
+                      <Text style={styles.modalLabel}>{isTr ? 'Hatirlatma zamani' : 'Reminder timing'}</Text>
+                      <View style={styles.chipsRow}>
+                        {reminderPresetOptions.map((option) => (
+                          <Pressable
+                            key={option.value}
+                            style={[styles.chipBtn, reminderPreset === option.value ? styles.chipBtnActive : null]}
+                            onPress={() => setReminderPreset(option.value)}
+                          >
+                            <Text style={[styles.chipBtnText, reminderPreset === option.value ? styles.chipBtnTextActive : null]}>{option.label}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+
+                      {reminderPreset === 'custom' ? (
+                        <>
+                          <Text style={styles.modalLabel}>{isTr ? 'Ozel tarih (YYYY-AA-GG)' : 'Custom date (YYYY-MM-DD)'}</Text>
+                          <TextInput
+                            style={styles.modalInput}
+                            value={reminderDate}
+                            onChangeText={setReminderDate}
+                            placeholder="2026-03-29"
+                            placeholderTextColor="#a4a4a4"
+                            autoCapitalize="none"
+                          />
+                        </>
+                      ) : null}
+                    </>
+                  ) : null}
+                </View>
+
+                <Text style={styles.attachmentHint}>
+                  {isTr ? 'Dosya ekleme (yakinda): Rapor / recete PDF' : 'Attachment (coming soon): report / prescription PDF'}
+                </Text>
+              </ScrollView>
+
+              <View style={styles.modalActions}>
+                <Pressable
+                  style={styles.modalSecondaryBtn}
+                  onPress={() => {
+                    setIsCreateVisible(false);
+                    resetCreateForm();
+                  }}
+                >
+                  <Text style={styles.modalSecondaryText}>{isTr ? 'Vazgec' : 'Cancel'}</Text>
+                </Pressable>
+                <Pressable style={styles.modalPrimaryBtn} onPress={handleSubmitCreate}>
+                  <Text style={styles.modalPrimaryText}>{isTr ? 'Kaydet' : 'Save'}</Text>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+      </Animated.View>
     </View>
   );
 }
@@ -322,6 +862,13 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#faf9f8',
+  },
+  backLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  frontLayer: {
+    flex: 1,
+    overflow: 'hidden',
   },
   content: {
     paddingTop: 32,
@@ -608,5 +1155,182 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#faf8f5',
     letterSpacing: 0.4,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.24)',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  modalKeyboardWrap: {
+    width: '100%',
+  },
+  modalCard: {
+    borderRadius: 20,
+    backgroundColor: '#faf9f8',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+    maxHeight: '88%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    lineHeight: 26,
+    fontWeight: '700',
+    color: '#2d2d2d',
+    marginBottom: 12,
+  },
+  modalMainScroll: {
+    maxHeight: 560,
+  },
+  modalSection: {
+    marginBottom: 14,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.04)',
+  },
+  modalSectionTitle: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '700',
+    color: '#2d2d2d',
+    marginBottom: 4,
+  },
+  modalHelperText: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#7f7f7f',
+    marginBottom: 4,
+  },
+  modalLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: '#7a7a7a',
+    textTransform: 'uppercase',
+    marginBottom: 6,
+    marginTop: 8,
+  },
+  modalLabelHint: {
+    marginTop: -2,
+    marginBottom: 6,
+    fontSize: 11,
+    lineHeight: 16,
+    color: '#8b8b8b',
+  },
+  modalInput: {
+    minHeight: 42,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#2d2d2d',
+  },
+  modalInputTall: {
+    minHeight: 56,
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 4,
+  },
+  chipBtn: {
+    minHeight: 34,
+    borderRadius: 17,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipBtnActive: {
+    borderColor: '#7f9a70',
+    backgroundColor: '#eef5ea',
+  },
+  chipBtnText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#5f5f5f',
+    fontWeight: '600',
+  },
+  chipBtnTextActive: {
+    color: '#4f6b43',
+  },
+  inlineFieldsWrap: {
+    marginTop: 6,
+    maxHeight: 240,
+  },
+  inlineFieldBlock: {
+    marginBottom: 10,
+    gap: 6,
+  },
+  inlineFieldTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#4d4d4d',
+  },
+  switchRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  switchLabel: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: '#4a4a4a',
+  },
+  attachmentHint: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#8d8d8d',
+  },
+  modalActions: {
+    marginTop: 14,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  modalSecondaryBtn: {
+    height: 40,
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+  },
+  modalSecondaryText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#5c5c5c',
+    fontWeight: '600',
+  },
+  modalPrimaryBtn: {
+    height: 40,
+    borderRadius: 20,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#2d2d2d',
+  },
+  modalPrimaryText: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#faf8f5',
+    fontWeight: '700',
   },
 });

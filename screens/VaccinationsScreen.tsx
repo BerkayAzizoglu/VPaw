@@ -1,8 +1,8 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
+  Animated,
   Alert,
-  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,11 +11,13 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 
 type VaccinationsScreenProps = {
   onBack: () => void;
+  backPreview?: ReactNode;
   onResolve?: () => void;
   onAddVaccination?: () => void;
   status?: 'ready' | ScreenStateMode;
@@ -161,6 +163,7 @@ function HistoryCard({ item, statusLabels, dueDateLabel }: { item: VaccinationsH
 
 export default function VaccinationsScreen({
   onBack,
+  backPreview,
   onResolve,
   onAddVaccination,
   status = 'ready',
@@ -198,31 +201,18 @@ export default function VaccinationsScreen({
       ? (isTr ? '�lk a�� kayd�n� ekledi�inizde bu alan otomatik olarak dolacakt�r.' : 'This area will populate automatically once you add the first vaccination.')
       : (isTr ? 'Ba�lant�y� kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
 
-  const swipeTriggeredRef = useRef(false);
-  const swipePanResponder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesture) => {
-      const horizontalIntent = Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.25;
-      return horizontalIntent && gesture.dx > 22;
-    },
-    onPanResponderMove: (_, gesture) => {
-      if (swipeTriggeredRef.current) return;
-      if (gesture.dx > 78 && Math.abs(gesture.dy) < 34) {
-        swipeTriggeredRef.current = true;
-        onBack();
-      }
-    },
-    onPanResponderRelease: () => {
-      swipeTriggeredRef.current = false;
-    },
-    onPanResponderTerminate: () => {
-      swipeTriggeredRef.current = false;
-    },
-  }), [onBack]);
+  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: true, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
 
   return (
-    <View style={styles.screen} {...swipePanResponder.panHandlers}>
+    <View style={styles.screen}>
+      {backPreview ? (
+        <Animated.View pointerEvents="none" style={[styles.backLayer, swipePanResponder.backLayerStyle]}>
+          {backPreview}
+        </Animated.View>
+      ) : null}
+      <Animated.View style={[styles.frontLayer, swipePanResponder.frontLayerStyle]} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={!swipePanResponder.isSwiping}>
         <View style={styles.header}>
           <Pressable style={styles.backBtn} onPress={onBack}>
             <Icon kind="back" size={22} color="#7a7a7a" />
@@ -327,6 +317,7 @@ export default function VaccinationsScreen({
           <Text style={styles.addText}>{copy.addVaccination}</Text>
         </Pressable>
       ) : null}
+      </Animated.View>
     </View>
   );
 }
@@ -335,6 +326,13 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#faf9f8',
+  },
+  backLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  frontLayer: {
+    flex: 1,
+    overflow: 'hidden',
   },
   content: {
     paddingTop: 32,

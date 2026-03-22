@@ -17,7 +17,7 @@ import { Nunito_600SemiBold } from '@expo-google-fonts/nunito';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
-import { ChevronRight, Mars, PawPrint, Pencil, Venus } from 'lucide-react-native';
+import { Bell, ChevronRight, Mars, PawPrint, Pencil, Venus } from 'lucide-react-native';
 import type { PetProfile } from '../components/AuthGate';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
@@ -28,7 +28,6 @@ const vaccinesCardIconUri = Image.resolveAssetSource(require('../assets/home-ico
 const vetVisitCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/vet-visit.svg')).uri;
 const healthCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/health-card.svg')).uri;
 const healthRecordsCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/health-records.svg')).uri;
-const AVATAR_IMAGE = 'https://www.figma.com/api/mcp/asset/c1377527-400c-4e5e-8c97-bd4806f77781';
 const HOME_CARD_ICON_SIZE = 26;
 const HOME_CARD_ICON_SIZE_LARGE = 30;
 
@@ -37,6 +36,7 @@ type PetId = 'luna' | 'milo';
 type HomePetData = {
   id: PetId;
   name: string;
+  petType: 'Dog' | 'Cat';
   breed: string;
   coatPattern: string;
   age: string;
@@ -54,7 +54,8 @@ type HomePetData = {
 };
 
 type HomeScreenProps = {
-  onOpenProfile: () => void;
+  onOpenReminders?: () => void;
+  reminderBadgeCount?: number;
   onOpenPetProfile?: (petId?: string) => void;
   onOpenVaccinations?: (petId?: string) => void;
   onOpenHealthRecords?: (petId?: string) => void;
@@ -67,12 +68,17 @@ type HomeScreenProps = {
   onChangeActivePet?: (petId: string) => void;
   petLockEnabled?: boolean;
   onChangePetLockEnabled?: (enabled: boolean) => void;
+  upcomingRemindersByPet?: Partial<Record<PetId, Array<{ id: string; title: string; date: string }>>>;
+  completedRemindersByPet?: Partial<Record<PetId, Array<{ id: string; title: string; date: string }>>>;
+  onCompleteReminder?: (petId: string, reminderId: string) => void;
+  onAddCareReminder?: (petId: string, subtype: 'food' | 'litter' | 'walk' | 'custom') => void;
 };
 
 const BASE_PETS: HomePetData[] = [
   {
     id: 'luna',
     name: 'Luna',
+    petType: 'Dog',
     breed: 'Golden Retriever',
     coatPattern: 'Solid',
     age: '3 years old',
@@ -95,6 +101,7 @@ const BASE_PETS: HomePetData[] = [
   {
     id: 'milo',
     name: 'Milo',
+    petType: 'Cat',
     breed: 'British Shorthair',
     coatPattern: 'Tabby',
     age: '2 years old',
@@ -163,7 +170,8 @@ function buildSmoothPath(points: Array<{ x: number; y: number }>) {
 }
 
 export default function HomeScreen({
-  onOpenProfile,
+  onOpenReminders,
+  reminderBadgeCount = 0,
   onOpenPetProfile,
   onOpenVaccinations,
   onOpenHealthRecords,
@@ -176,6 +184,10 @@ export default function HomeScreen({
   onChangeActivePet,
   petLockEnabled,
   onChangePetLockEnabled,
+  upcomingRemindersByPet,
+  completedRemindersByPet,
+  onCompleteReminder,
+  onAddCareReminder,
 }: HomeScreenProps) {
   const { locale } = useLocale();
   const { settings } = useAppSettings();
@@ -240,6 +252,7 @@ export default function HomeScreen({
       return {
         ...p,
         name: profile.name,
+        petType: profile.petType,
         breed: profile.breed,
         coatPattern: profile.coatPattern,
         age: formatPetAge(profile.birthDate, locale),
@@ -257,6 +270,8 @@ export default function HomeScreen({
   }, [activePetId, pets]);
 
   const activePet = pets[activeIndex];
+  const activeUpcoming = upcomingRemindersByPet?.[activePet.id] ?? activePet.upcoming.map((item, index) => ({ id: `legacy-${index}`, ...item }));
+  const activeCompleted = completedRemindersByPet?.[activePet.id] ?? [];
   const backPet = pets[(activeIndex + 1) % pets.length];
   const prevPet = pets[(activeIndex - 1 + pets.length) % pets.length];
 
@@ -394,8 +409,13 @@ export default function HomeScreen({
             </View>
           </View>
 
-          <Pressable onPress={onOpenProfile} style={styles.avatarBtn}>
-            <Image source={{ uri: AVATAR_IMAGE }} style={styles.avatar} />
+          <Pressable onPress={onOpenReminders} style={styles.bellBtn}>
+            <Bell size={18} color="#5f5f5f" strokeWidth={2.1} />
+            {reminderBadgeCount > 0 ? (
+              <View style={styles.bellBadge}>
+                <Text style={styles.bellBadgeText}>{reminderBadgeCount > 9 ? '9+' : String(reminderBadgeCount)}</Text>
+              </View>
+            ) : null}
           </Pressable>
         </View>
 
@@ -532,12 +552,48 @@ export default function HomeScreen({
         </View>
 
         <View style={styles.upcomingCard}>
-          {activePet.upcoming.map((event) => (
-            <EventRow key={event.title} title={event.title} date={event.date} />
+          <View style={styles.quickReminderRow}>
+            <QuickReminderChip label={isTr ? '+ Mama' : '+ Food'} onPress={() => onAddCareReminder?.(activePet.id, 'food')} />
+            <QuickReminderChip label={isTr ? '+ Kum' : '+ Litter'} onPress={() => onAddCareReminder?.(activePet.id, 'litter')} />
+            {activePet.petType === 'Dog' ? (
+              <QuickReminderChip label={isTr ? '+ Yürüyüş' : '+ Walk'} onPress={() => onAddCareReminder?.(activePet.id, 'walk')} />
+            ) : null}
+          </View>
+
+          <Text style={styles.reminderGroupTitle}>{isTr ? 'Yaklaşan' : 'Upcoming'}</Text>
+          {activeUpcoming.map((event) => (
+            <EventRow
+              key={event.id}
+              title={event.title}
+              date={event.date}
+              onPress={event.id.startsWith('legacy-') ? undefined : () => onCompleteReminder?.(activePet.id, event.id)}
+            />
           ))}
+
+          {activeCompleted.length > 0 ? (
+            <>
+              <View style={styles.reminderDivider} />
+              <Text style={styles.reminderGroupTitle}>{isTr ? 'Tamamlanan' : 'Completed'}</Text>
+              {activeCompleted.map((event) => (
+                <EventRow
+                  key={event.id}
+                  title={event.title}
+                  date={event.date}
+                />
+              ))}
+            </>
+          ) : null}
         </View>
       </ScrollView>
     </Animated.View>
+  );
+}
+
+function QuickReminderChip({ label, onPress }: { label: string; onPress?: () => void }) {
+  return (
+    <Pressable style={styles.quickReminderChip} onPress={onPress}>
+      <Text style={styles.quickReminderChipText}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -567,9 +623,9 @@ function MiniCard({
   );
 }
 
-function EventRow({ title, date }: { title: string; date: string }) {
+function EventRow({ title, date, onPress }: { title: string; date: string; onPress?: () => void }) {
   return (
-    <View style={styles.eventRow}>
+    <Pressable style={styles.eventRow} onPress={onPress} disabled={!onPress}>
       <View style={styles.eventDotWrap}>
         <View style={styles.eventDotLine} />
         <View style={styles.eventDot} />
@@ -578,7 +634,7 @@ function EventRow({ title, date }: { title: string; date: string }) {
         <Text style={styles.eventTitle}>{title}</Text>
         <Text style={styles.eventDate}>{date}</Text>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -622,15 +678,32 @@ const styles = StyleSheet.create({
   brandSubNunito: {
     fontFamily: 'Nunito_600SemiBold',
   },
-  avatarBtn: {
+  bellBtn: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    overflow: 'hidden',
+    backgroundColor: '#f1f1ef',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
-  avatar: {
-    width: '100%',
-    height: '100%',
+  bellBadge: {
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    position: 'absolute',
+    right: -3,
+    top: -2,
+    backgroundColor: '#c96a6a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  bellBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    lineHeight: 10,
+    fontWeight: '700',
   },
   heroStackWrap: {
     height: 288,
@@ -952,6 +1025,39 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingHorizontal: 12,
     gap: 8,
+  },
+  quickReminderRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 4,
+  },
+  quickReminderChip: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: '#faf9f7',
+  },
+  quickReminderChipText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#5f5f5f',
+    fontWeight: '600',
+  },
+  reminderGroupTitle: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 16,
+    letterSpacing: 0.5,
+    color: '#8d8d8d',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  reminderDivider: {
+    height: 1,
+    backgroundColor: '#efefef',
+    marginVertical: 4,
   },
   eventRow: {
     flexDirection: 'row',

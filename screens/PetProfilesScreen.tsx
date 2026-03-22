@@ -4,6 +4,7 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { ChevronLeft, ChevronRight, Mars, Venus } from 'lucide-react-native';
 import type { PetProfile } from '../components/AuthGate';
 import type { Locale } from '../hooks/useLocale';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 
 type PetProfilesScreenProps = {
   locale: Locale;
@@ -48,9 +49,10 @@ export default function PetProfilesScreen({
 }: PetProfilesScreenProps) {
   const isTr = locale === 'tr';
   const pets = (Object.keys(petProfiles) as Array<'luna' | 'milo'>).map((id) => petProfiles[id]);
+  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: true, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>
@@ -236,3 +238,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+

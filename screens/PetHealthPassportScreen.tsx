@@ -1,14 +1,17 @@
-﻿import React, { useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View, Image, RefreshControl, Switch } from 'react-native';
+import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View, Image, RefreshControl, Switch } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { Plus, RefreshCw, Trash2, PawPrint, ChevronDown, ChevronUp } from 'lucide-react-native';
 import type { PetProfile } from '../components/AuthGate';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
+import type { HealthCardSummary } from '../lib/healthEventAdapters';
 
 type PetHealthPassportScreenProps = {
   onBack: () => void;
+  backPreview?: ReactNode;
   pet: PetProfile;
   weightEntries: WeightPoint[];
   onOpenVaccinations?: () => void;
@@ -16,6 +19,7 @@ type PetHealthPassportScreenProps = {
   onOpenHealthRecords?: () => void;
   onOpenWeight?: () => void;
   isPremiumPlan?: boolean;
+  healthCardSummary?: HealthCardSummary;
 };
 
 type ExportRowKey = 'vaccines' | 'visits' | 'health' | 'weight' | 'allergy' | 'surgery' | 'meds';
@@ -62,6 +66,7 @@ function PawSwitch({ value, onValueChange, disabled }: { value: boolean; onValue
 
 export default function PetHealthPassportScreen({
   onBack,
+  backPreview,
   pet,
   weightEntries,
   onOpenVaccinations,
@@ -69,21 +74,39 @@ export default function PetHealthPassportScreen({
   onOpenHealthRecords,
   onOpenWeight,
   isPremiumPlan = false,
+  healthCardSummary,
 }: PetHealthPassportScreenProps) {
   const { locale } = useLocale();
   const isTr = locale === 'tr';
   const [refreshing, setRefreshing] = useState(false);
+  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: true, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
   const [expandedKey, setExpandedKey] = useState<ExportRowKey | null>(null);
 
-  const [recordsByRow, setRecordsByRow] = useState<Record<ExportRowKey, string[]>>({
-    vaccines: pet.vaccinations.length ? pet.vaccinations.map((v) => `${v.name} • ${v.date}`) : ['Rabies • Apr 12, 2026'],
-    visits: ['Annual Checkup • Mar 5, 2026', 'Ear follow-up • Oct 12, 2025', 'Dental check • Jan 20, 2025'],
-    health: ['Chicken Protein • Active', 'Flea Bites • Resolved'],
-    weight: weightEntries.length ? weightEntries.map((w) => `${w.value.toFixed(1)} kg • ${w.date}`) : ['5.2 kg • Apr 15, 2026'],
-    allergy: pet.allergiesLog.length ? pet.allergiesLog.map((a) => `${a.category} • ${a.status}`) : ['No allergy records'],
-    surgery: pet.surgeriesLog.length ? pet.surgeriesLog.map((s) => `${s.name} • ${s.date}`) : ['No surgery records'],
-    meds: pet.diabetesLog.length ? pet.diabetesLog.map((d) => `${d.type} • ${d.status}`) : ['No active medication'],
-  });
+  const initialRows = useMemo<Record<ExportRowKey, string[]>>(() => {
+    const fallback: Record<ExportRowKey, string[]> = {
+      vaccines: pet.vaccinations.length ? pet.vaccinations.map((v) => `${v.name} • ${v.date}`) : ['Rabies • Apr 12, 2026'],
+      visits: ['Annual Checkup • Mar 5, 2026', 'Ear follow-up • Oct 12, 2025', 'Dental check • Jan 20, 2025'],
+      health: ['Chicken Protein • Active', 'Flea Bites • Resolved'],
+      weight: weightEntries.length ? weightEntries.map((w) => `${w.value.toFixed(1)} kg • ${w.date}`) : ['5.2 kg • Apr 15, 2026'],
+      allergy: pet.allergiesLog.length ? pet.allergiesLog.map((a) => `${a.category} • ${a.status}`) : ['No allergy records'],
+      surgery: pet.surgeriesLog.length ? pet.surgeriesLog.map((s) => `${s.name} • ${s.date}`) : ['No surgery records'],
+      meds: pet.diabetesLog.length ? pet.diabetesLog.map((d) => `${d.type} • ${d.status}`) : ['No active medication'],
+    };
+
+    if (!healthCardSummary) return fallback;
+
+    return {
+      vaccines: healthCardSummary.exportRows.vaccines.length ? healthCardSummary.exportRows.vaccines : fallback.vaccines,
+      visits: healthCardSummary.exportRows.visits.length ? healthCardSummary.exportRows.visits : fallback.visits,
+      health: healthCardSummary.exportRows.health.length ? healthCardSummary.exportRows.health : fallback.health,
+      weight: healthCardSummary.exportRows.weight.length ? healthCardSummary.exportRows.weight : fallback.weight,
+      allergy: healthCardSummary.exportRows.allergy.length ? healthCardSummary.exportRows.allergy : fallback.allergy,
+      surgery: healthCardSummary.exportRows.surgery.length ? healthCardSummary.exportRows.surgery : fallback.surgery,
+      meds: healthCardSummary.exportRows.meds.length ? healthCardSummary.exportRows.meds : fallback.meds,
+    };
+  }, [healthCardSummary, pet, weightEntries]);
+
+  const [recordsByRow, setRecordsByRow] = useState<Record<ExportRowKey, string[]>>(initialRows);
 
   const [recordIncluded, setRecordIncluded] = useState<Record<ExportRowKey, boolean[]>>(() => ({
     vaccines: recordsByRow.vaccines.map(() => true),
@@ -104,6 +127,28 @@ export default function PetHealthPassportScreen({
     surgery: isPremiumPlan,
     meds: isPremiumPlan,
   });
+
+  useEffect(() => {
+    setRecordsByRow(initialRows);
+    setRecordIncluded({
+      vaccines: initialRows.vaccines.map(() => true),
+      visits: initialRows.visits.map(() => isPremiumPlan),
+      health: initialRows.health.map(() => isPremiumPlan),
+      weight: initialRows.weight.map(() => isPremiumPlan),
+      allergy: initialRows.allergy.map(() => isPremiumPlan),
+      surgery: initialRows.surgery.map(() => isPremiumPlan),
+      meds: initialRows.meds.map(() => isPremiumPlan),
+    });
+    setSectionIncluded({
+      vaccines: true,
+      visits: isPremiumPlan,
+      health: isPremiumPlan,
+      weight: isPremiumPlan,
+      allergy: isPremiumPlan,
+      surgery: isPremiumPlan,
+      meds: isPremiumPlan,
+    });
+  }, [initialRows, isPremiumPlan, pet.id]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -218,10 +263,17 @@ export default function PetHealthPassportScreen({
 
   return (
     <View style={styles.screen}>
+      {backPreview ? (
+        <Animated.View pointerEvents="none" style={[styles.backLayer, swipePanResponder.backLayerStyle]}>
+          {backPreview}
+        </Animated.View>
+      ) : null}
+      <Animated.View style={[styles.frontLayer, swipePanResponder.frontLayerStyle]} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        scrollEnabled={!swipePanResponder.isSwiping}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6f6f6f" colors={['#6f6f6f']} />}
       >
         <View style={styles.header}>
@@ -330,12 +382,15 @@ export default function PetHealthPassportScreen({
             : (isTr ? 'PDF Dışa Aktar (Demo)' : 'Export PDF (Demo)')}
         </Text>
       </Pressable>
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#faf9f8' },
+  backLayer: { ...StyleSheet.absoluteFillObject },
+  frontLayer: { flex: 1, overflow: 'hidden' },
   content: { paddingHorizontal: 22, paddingTop: 34, paddingBottom: 110, gap: 14 },
   header: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f1ef', alignItems: 'center', justifyContent: 'center' },
@@ -428,3 +483,7 @@ const styles = StyleSheet.create({
   exportBtn: { position: 'absolute', left: 50, right: 50, bottom: 24, height: 52, borderRadius: 26, backgroundColor: '#2d2d2d', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   exportBtnText: { fontSize: 16, lineHeight: 22, color: '#faf8f5', fontWeight: '700' },
 });
+
+
+
+

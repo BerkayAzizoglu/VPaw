@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Animated,
@@ -8,11 +8,11 @@ import {
   Text,
   TextInput,
   useWindowDimensions,
-  PanResponder,
   View,
 } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 
 export type WeightPoint = {
@@ -24,6 +24,8 @@ export type WeightPoint = {
 
 type WeightTrackingScreenProps = {
   onBack: () => void;
+  backPreview?: ReactNode;
+  previewMode?: boolean;
   onOpenHealthRecords?: () => void;
   onOpenVetVisits?: () => void;
   petName: string;
@@ -31,7 +33,7 @@ type WeightTrackingScreenProps = {
   petBreed?: string;
   microchip?: string;
   entries: WeightPoint[];
-  onAddEntry: (value: number) => void;
+  onAddEntry: (value: number, options?: { date?: string; note?: string }) => void;
 };
 
 type WeightReference = {
@@ -164,11 +166,18 @@ function parseEntryDate(raw: string) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+function toYmd(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function formatTemplate(template: string, params: Record<string, string>) {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => params[key] ?? '');
 }
 
-export default function WeightTrackingScreen({ onBack, onOpenHealthRecords, onOpenVetVisits, petName, petType, petBreed, microchip, entries, onAddEntry }: WeightTrackingScreenProps) {
+export default function WeightTrackingScreen({ onBack, backPreview, previewMode = false, onOpenHealthRecords, onOpenVetVisits, petName, petType, petBreed, microchip, entries, onAddEntry }: WeightTrackingScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).weightTracking;
 
@@ -177,34 +186,27 @@ export default function WeightTrackingScreen({ onBack, onOpenHealthRecords, onOp
   const [scrubX, setScrubX] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [newWeight, setNewWeight] = useState('');
+  const [entryDate, setEntryDate] = useState(toYmd(new Date()));
+  const [entryNote, setEntryNote] = useState('');
+  const [focusedField, setFocusedField] = useState<'weight' | 'date' | 'note' | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const lineAnim = useRef(new Animated.Value(0)).current;
+  const savePressScale = useRef(new Animated.Value(1)).current;
   const { width } = useWindowDimensions();
   const chartWidth = Math.max(240, width - 96);
   const chartHeight = CHART_HEIGHT;
-  const hasTriggeredBackSwipe = useRef(false);
-  const edgeSwipeResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_evt, gestureState) =>
-          gestureState.moveX < 24 && gestureState.dx > 8 && Math.abs(gestureState.dy) < 18,
-        onPanResponderGrant: () => {
-          hasTriggeredBackSwipe.current = false;
-        },
-        onPanResponderMove: (_evt, gestureState) => {
-          if (!hasTriggeredBackSwipe.current && gestureState.dx > 78 && Math.abs(gestureState.dy) < 30) {
-            hasTriggeredBackSwipe.current = true;
-            onBack();
-          }
-        },
-      }),
-    [onBack],
-  );
+  const edgeSwipeResponder = useEdgeSwipeBack({
+    onBack,
+    enabled: !previewMode && !isScrubbing && !focusedField,
+    edgeWidth: 24,
+    triggerDx: 70,
+    maxDy: 30,
+  });
 
   const reference = useMemo(() => getWeightReference(petType, petBreed, copy.refs), [petType, petBreed, copy.refs]);
   const microchipDisplay = microchip && microchip.trim().length > 0
     ? microchip
-    : (locale === 'tr' ? 'Tan�ml� de�il' : 'Not set');
+    : (locale === 'tr' ? 'Tanımlı değil' : 'Not set');
 
   useEffect(() => {
     setSelectedIndex(Math.max(entries.length - 1, 0));
@@ -246,13 +248,17 @@ export default function WeightTrackingScreen({ onBack, onOpenHealthRecords, onOp
   }, [chartHeight, chartWidth, safeEntries, selectedIndex, yBounds.max, yBounds.min]);
 
   useEffect(() => {
+    if (previewMode) {
+      lineAnim.setValue(1);
+      return;
+    }
     lineAnim.setValue(0);
     Animated.timing(lineAnim, {
       toValue: 1,
       duration: 620,
       useNativeDriver: false,
     }).start();
-  }, [safeEntries.length, lineAnim]);
+  }, [previewMode, safeEntries.length, lineAnim]);
 
   const lineDashOffset = lineAnim.interpolate({
     inputRange: [0, 1],
@@ -343,17 +349,33 @@ export default function WeightTrackingScreen({ onBack, onOpenHealthRecords, onOp
       setFormError(copy.enterValidWeight);
       return;
     }
+    const parsedDate = new Date(`${entryDate.trim()}T12:00:00.000Z`);
+    if (!Number.isFinite(parsedDate.getTime())) {
+      setFormError(locale === 'tr' ? 'Lütfen tarihi YYYY-AA-GG formatında girin.' : 'Please enter date as YYYY-MM-DD.');
+      return;
+    }
 
-    onAddEntry(parsed);
+    onAddEntry(parsed, {
+      date: parsedDate.toISOString(),
+      note: entryNote.trim() || undefined,
+    });
     setNewWeight('');
+    setEntryDate(toYmd(new Date()));
+    setEntryNote('');
     setFormError(null);
     setShowAdd(false);
   };
 
   return (
-    <View style={styles.screen} {...edgeSwipeResponder.panHandlers}>
+    <View style={styles.screen}>
+      {backPreview ? (
+        <Animated.View pointerEvents="none" style={[styles.backLayer, edgeSwipeResponder.backLayerStyle]}>
+          {backPreview}
+        </Animated.View>
+      ) : null}
+      <Animated.View style={[styles.frontLayer, edgeSwipeResponder.frontLayerStyle]} {...edgeSwipeResponder.panHandlers}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={!isScrubbing}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={!previewMode && !isScrubbing && !edgeSwipeResponder.isSwiping}>
         <View style={styles.headerRow}>
           <Pressable style={styles.topIconBtn} onPress={onBack}>
             <Icon kind="back" size={22} color="#808080" />
@@ -364,9 +386,7 @@ export default function WeightTrackingScreen({ onBack, onOpenHealthRecords, onOp
             <Text style={styles.petSub}>{copy.subtitle}</Text>
           </View>
 
-          <Pressable style={styles.topIconBtn} onPress={() => setShowAdd(true)}>
-            <Icon kind="plus" size={20} color="#808080" />
-          </Pressable>
+          <View style={styles.topIconBtnPlaceholder} />
         </View>
 
         <View style={styles.currentCard}>
@@ -387,7 +407,7 @@ export default function WeightTrackingScreen({ onBack, onOpenHealthRecords, onOp
 
           <Text style={styles.currentSub}>{displayedDate}</Text>
           <Text style={styles.referenceLine}>{copy.healthyReferencePrefix} ({petBreed ?? petType ?? 'Pet'}): {rangeText}</Text>
-          <Text style={styles.microchipLine}>{locale === 'tr' ? 'Mikro�ip: ' : 'Microchip: '}{microchipDisplay}</Text>
+          <Text style={styles.microchipLine}>{locale === 'tr' ? 'Mikroçip: ' : 'Microchip: '}{microchipDisplay}</Text>
           <Text style={styles.referenceNote}>{reference.note}</Text>
         </View>
 
@@ -396,8 +416,8 @@ export default function WeightTrackingScreen({ onBack, onOpenHealthRecords, onOp
           <View style={styles.chartWrap}>
             <View
               style={[styles.chartTouchLayer, { width: chartWidth, height: chartHeight }]}
-              onStartShouldSetResponder={() => true}
-              onMoveShouldSetResponder={() => true}
+              onStartShouldSetResponder={() => !previewMode}
+              onMoveShouldSetResponder={() => !previewMode}
               onResponderGrant={(e) => {
                 setIsScrubbing(true);
                 updateSelectionFromX(e.nativeEvent.locationX);
@@ -476,7 +496,80 @@ export default function WeightTrackingScreen({ onBack, onOpenHealthRecords, onOp
               </Pressable>
             ))}
           </View>
+          <Pressable style={styles.inlineToggle} onPress={() => { setShowAdd((prev) => !prev); setFormError(null); }}>
+            <Icon kind={showAdd ? 'close' : 'plus'} size={16} color="#faf8f5" />
+            <Text style={styles.inlineToggleText}>{showAdd ? (locale === 'tr' ? 'Girişi Kapat' : 'Close Entry') : (locale === 'tr' ? 'Kilo Girişi Ekle' : 'Add Weight Entry')}</Text>
+          </Pressable>
         </View>
+
+        {showAdd ? (
+          <View style={styles.inlineEntryCard}>
+            <Text style={styles.inlineEntryTitle}>{copy.addWeightEntry}</Text>
+            <Text style={styles.addSheetHint}>{locale === 'tr' ? 'Grafik ile bağlantılı, tarihli bir kayıt ekleyin.' : 'Add a dated entry linked to this chart.'}</Text>
+
+            <Text style={styles.addFieldLabel}>{locale === 'tr' ? 'Ağırlık (kg)' : 'Weight (kg)'}</Text>
+            <TextInput
+              value={newWeight}
+              onChangeText={setNewWeight}
+              keyboardType="decimal-pad"
+              placeholder={copy.weightPlaceholder}
+              placeholderTextColor="#9b9b9b"
+              onFocus={() => setFocusedField('weight')}
+              onBlur={() => setFocusedField(null)}
+              style={[styles.addInput, focusedField === 'weight' && styles.addInputFocused]}
+            />
+
+            <Text style={styles.addFieldLabel}>{locale === 'tr' ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
+            <View style={styles.quickDateRow}>
+              <Pressable style={styles.quickDateChip} onPress={() => setEntryDate(toYmd(new Date()))}>
+                <Text style={styles.quickDateChipText}>{locale === 'tr' ? 'Bugün' : 'Today'}</Text>
+              </Pressable>
+              <Pressable
+                style={styles.quickDateChip}
+                onPress={() => {
+                  const yesterday = new Date();
+                  yesterday.setDate(yesterday.getDate() - 1);
+                  setEntryDate(toYmd(yesterday));
+                }}
+              >
+                <Text style={styles.quickDateChipText}>{locale === 'tr' ? 'Dün' : 'Yesterday'}</Text>
+              </Pressable>
+            </View>
+            <TextInput
+              value={entryDate}
+              onChangeText={setEntryDate}
+              placeholder="2026-03-22"
+              placeholderTextColor="#9b9b9b"
+              onFocus={() => setFocusedField('date')}
+              onBlur={() => setFocusedField(null)}
+              style={[styles.addInput, focusedField === 'date' && styles.addInputFocused]}
+            />
+
+            <Text style={styles.addFieldLabel}>{locale === 'tr' ? 'Not (opsiyonel)' : 'Note (optional)'}</Text>
+            <TextInput
+              value={entryNote}
+              onChangeText={setEntryNote}
+              placeholder={locale === 'tr' ? 'Örn. yemek değişti, aktivite arttı...' : 'e.g. diet changed, activity increased...'}
+              placeholderTextColor="#9b9b9b"
+              onFocus={() => setFocusedField('note')}
+              onBlur={() => setFocusedField(null)}
+              multiline
+              style={[styles.addInput, styles.addInputNote, focusedField === 'note' && styles.addInputFocused]}
+            />
+
+            {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+            <Animated.View style={{ transform: [{ scale: savePressScale }] }}>
+              <Pressable
+                style={styles.addSaveBtn}
+                onPress={saveEntry}
+                onPressIn={() => Animated.timing(savePressScale, { toValue: 0.98, duration: 90, useNativeDriver: true }).start()}
+                onPressOut={() => Animated.timing(savePressScale, { toValue: 1, duration: 110, useNativeDriver: true }).start()}
+              >
+                <Text style={styles.addSaveText}>{locale === 'tr' ? 'Kaydı Kaydet' : 'Save Entry'}</Text>
+              </Pressable>
+            </Animated.View>
+          </View>
+        ) : null}
 
         <Text style={styles.sectionTitle}>{copy.smartInsights}</Text>
         <Pressable style={styles.insightCard} onPress={onOpenHealthRecords}>
@@ -518,33 +611,7 @@ export default function WeightTrackingScreen({ onBack, onOpenHealthRecords, onOp
         </View>
       </ScrollView>
 
-      {showAdd ? (
-        <View style={styles.addSheet}>
-          <View style={styles.addSheetHeader}>
-            <Text style={styles.addSheetTitle}>{copy.addWeightEntry}</Text>
-            <Pressable onPress={() => { setShowAdd(false); setFormError(null); }}>
-              <Icon kind="close" size={18} color="#7a7a7a" />
-            </Pressable>
-          </View>
-          <TextInput
-            value={newWeight}
-            onChangeText={setNewWeight}
-            keyboardType="decimal-pad"
-            placeholder={copy.weightPlaceholder}
-            placeholderTextColor="#9b9b9b"
-            style={styles.addInput}
-          />
-          {formError ? <Text style={styles.formError}>{formError}</Text> : null}
-          <Pressable style={styles.addSaveBtn} onPress={saveEntry}>
-            <Text style={styles.addSaveText}>{copy.save}</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      <Pressable style={styles.addBtn} onPress={() => setShowAdd(true)}>
-        <Icon kind="plus" size={20} color="#faf8f5" />
-        <Text style={styles.addText}>{copy.addEntry}</Text>
-      </Pressable>
+      </Animated.View>
     </View>
   );
 }
@@ -554,10 +621,17 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#faf8f5',
   },
+  backLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  frontLayer: {
+    flex: 1,
+    overflow: 'hidden',
+  },
   content: {
     paddingTop: 44,
     paddingHorizontal: 24,
-    paddingBottom: 110,
+    paddingBottom: 44,
     gap: 20,
   },
   headerRow: {
@@ -573,6 +647,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f1ef',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  topIconBtnPlaceholder: {
+    width: 40,
+    height: 40,
   },
   headerTitles: {
     flex: 1,
@@ -834,34 +912,25 @@ const styles = StyleSheet.create({
     color: '#8a8a8a',
     fontWeight: '500',
   },
-  addBtn: {
-    position: 'absolute',
-    bottom: 26,
-    alignSelf: 'center',
-    height: 54,
-    borderRadius: 27,
+  inlineToggle: {
+    marginTop: 10,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#2d2d2d',
-    paddingHorizontal: 26,
+    paddingHorizontal: 14,
+    alignSelf: 'flex-start',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.22,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 8,
   },
-  addText: {
-    fontSize: 28,
-    lineHeight: 30,
+  inlineToggleText: {
     color: '#faf8f5',
-    fontWeight: '600',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '700',
   },
-  addSheet: {
-    position: 'absolute',
-    left: 18,
-    right: 18,
-    bottom: 92,
+  inlineEntryCard: {
+    marginTop: -4,
     borderRadius: 18,
     backgroundColor: '#fff',
     borderWidth: 1,
@@ -869,21 +938,30 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
     shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
-  addSheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  addSheetTitle: {
+  inlineEntryTitle: {
     fontSize: 16,
     lineHeight: 20,
     color: '#2d2d2d',
     fontWeight: '700',
+  },
+  addSheetHint: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#7a7a7a',
+    fontWeight: '500',
+  },
+  addFieldLabel: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#747474',
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   addInput: {
     height: 44,
@@ -894,6 +972,40 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#2d2d2d',
     backgroundColor: '#fafafa',
+  },
+  addInputFocused: {
+    borderColor: 'rgba(168,197,181,0.95)',
+    backgroundColor: '#fff',
+    shadowColor: '#9bb7a7',
+    shadowOpacity: 0.22,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  addInputNote: {
+    height: 72,
+    textAlignVertical: 'top',
+    paddingTop: 11,
+  },
+  quickDateRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  quickDateChip: {
+    height: 30,
+    borderRadius: 15,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: '#f8f8f6',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickDateChipText: {
+    fontSize: 12,
+    lineHeight: 14,
+    color: '#5f5f5f',
+    fontWeight: '700',
   },
   formError: {
     fontSize: 12,
@@ -915,6 +1027,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
+
 
 
 

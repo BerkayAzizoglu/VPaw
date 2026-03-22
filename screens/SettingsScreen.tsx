@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Check, ChevronLeft, ChevronRight, Save } from 'lucide-react-native';
 import { useLocale } from '../hooks/useLocale';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { useAppSettings } from '../hooks/useAppSettings';
 import type { DateFormat, WeightUnit } from '../hooks/useAppSettings';
 import { t } from '../lib/i18n';
@@ -20,6 +21,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [draftDateFormat, setDraftDateFormat] = useState<DateFormat>(settings.dateFormat);
   const [saving, setSaving] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
+  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: !confirmVisible, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
 
   const languageValue = draftLocale === 'tr' ? t(locale, 'turkish') : t(locale, 'english');
   const weightUnitValue = draftWeightUnit === 'kg' ? t(locale, 'kilograms') : t(locale, 'pounds');
@@ -85,7 +87,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   };
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>
@@ -331,3 +333,4 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
+

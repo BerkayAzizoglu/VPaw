@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   ImageBackground,
@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 
 const HERO_IMAGE = 'https://www.figma.com/api/mcp/asset/a2048b0f-f9f0-482d-a0fe-39eacf8fd35e';
@@ -137,6 +138,8 @@ export default function PremiumScreen({ onBack }: PremiumScreenProps) {
     { title: copy.features.remindersTitle, desc: copy.features.remindersDesc, icon: 'reminder' },
   ];
 
+  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: true, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
+
   const comparisonRows: CompareRow[] = [
     { label: copy.table.petProfiles, free: copy.table.one, pro: copy.table.unlimited, proAccent: true },
     { label: copy.table.healthRecords, free: copy.table.threeMonths, pro: copy.table.lifetime, proAccent: true },
@@ -145,7 +148,7 @@ export default function PremiumScreen({ onBack }: PremiumScreenProps) {
   ];
 
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} {...swipePanResponder.panHandlers}>
       <StatusBar style="light" />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
@@ -484,3 +487,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+

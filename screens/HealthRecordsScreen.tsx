@@ -1,8 +1,8 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
+  Animated,
   Alert,
-  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 
@@ -36,6 +37,7 @@ export type HealthRecordsData = {
 
 type HealthRecordsScreenProps = {
   onBack: () => void;
+  backPreview?: ReactNode;
   onAddRecord?: () => void;
   status?: 'ready' | ScreenStateMode;
   onRetry?: () => void;
@@ -107,7 +109,7 @@ function StatPill({ kind, text }: { kind: 'record' | 'pulse' | 'clock'; text: st
   );
 }
 
-export default function HealthRecordsScreen({ onBack, onAddRecord, status = 'ready', onRetry, recordsData }: HealthRecordsScreenProps) {
+export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, status = 'ready', onRetry, recordsData }: HealthRecordsScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).healthRecords;
   const isTr = locale === 'tr';
@@ -174,31 +176,18 @@ export default function HealthRecordsScreen({ onBack, onAddRecord, status = 'rea
       ? (isTr ? '�lk kay�t eklendi�inde bu alan otomatik olarak dolacakt�r.' : 'This area will populate automatically once the first record is added.')
       : (isTr ? 'Ba�lant�y� kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
 
-  const swipeTriggeredRef = useRef(false);
-  const swipePanResponder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_, gesture) => {
-      const horizontalIntent = Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.25;
-      return horizontalIntent && gesture.dx > 22;
-    },
-    onPanResponderMove: (_, gesture) => {
-      if (swipeTriggeredRef.current) return;
-      if (gesture.dx > 78 && Math.abs(gesture.dy) < 34) {
-        swipeTriggeredRef.current = true;
-        onBack();
-      }
-    },
-    onPanResponderRelease: () => {
-      swipeTriggeredRef.current = false;
-    },
-    onPanResponderTerminate: () => {
-      swipeTriggeredRef.current = false;
-    },
-  }), [onBack]);
+  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: true, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
 
   return (
-    <View style={styles.screen} {...swipePanResponder.panHandlers}>
+    <View style={styles.screen}>
+      {backPreview ? (
+        <Animated.View pointerEvents="none" style={[styles.backLayer, swipePanResponder.backLayerStyle]}>
+          {backPreview}
+        </Animated.View>
+      ) : null}
+      <Animated.View style={[styles.frontLayer, swipePanResponder.frontLayerStyle]} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={!swipePanResponder.isSwiping}>
         <View style={styles.headerRow}>
           <Pressable style={styles.backBtn} onPress={onBack}>
             <Icon kind="back" size={22} color="#7a7a7a" />
@@ -323,6 +312,7 @@ export default function HealthRecordsScreen({ onBack, onAddRecord, status = 'rea
           <Text style={styles.addBtnText}>{copy.addRecord}</Text>
         </Pressable>
       ) : null}
+      </Animated.View>
     </View>
   );
 }
@@ -331,6 +321,13 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#faf9f8',
+  },
+  backLayer: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  frontLayer: {
+    flex: 1,
+    overflow: 'hidden',
   },
   content: {
     paddingTop: 32,
