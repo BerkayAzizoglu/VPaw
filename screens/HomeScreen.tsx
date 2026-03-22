@@ -17,7 +17,7 @@ import { Nunito_600SemiBold } from '@expo-google-fonts/nunito';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
-import { Bell, ChevronRight, Mars, PawPrint, Pencil, Venus } from 'lucide-react-native';
+import { Bell, ChevronRight, Mars, PawPrint, Pencil, Settings, Venus } from 'lucide-react-native';
 import type { PetProfile } from '../components/AuthGate';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
@@ -55,6 +55,7 @@ type HomePetData = {
 
 type HomeScreenProps = {
   onOpenReminders?: () => void;
+  onOpenSettings?: () => void;
   reminderBadgeCount?: number;
   onOpenPetProfile?: (petId?: string) => void;
   onOpenVaccinations?: (petId?: string) => void;
@@ -171,6 +172,7 @@ function buildSmoothPath(points: Array<{ x: number; y: number }>) {
 
 export default function HomeScreen({
   onOpenReminders,
+  onOpenSettings,
   reminderBadgeCount = 0,
   onOpenPetProfile,
   onOpenVaccinations,
@@ -270,7 +272,7 @@ export default function HomeScreen({
   }, [activePetId, pets]);
 
   const activePet = pets[activeIndex];
-  const activeUpcoming = upcomingRemindersByPet?.[activePet.id] ?? activePet.upcoming.map((item, index) => ({ id: `legacy-${index}`, ...item }));
+  const activeUpcoming = (upcomingRemindersByPet?.[activePet.id] ?? activePet.upcoming.map((item, index) => ({ id: `legacy-${index}`, ...item }))).slice(0, 2);
   const activeCompleted = completedRemindersByPet?.[activePet.id] ?? [];
   const backPet = pets[(activeIndex + 1) % pets.length];
   const prevPet = pets[(activeIndex - 1 + pets.length) % pets.length];
@@ -409,14 +411,19 @@ export default function HomeScreen({
             </View>
           </View>
 
-          <Pressable onPress={onOpenReminders} style={styles.bellBtn}>
-            <Bell size={18} color="#5f5f5f" strokeWidth={2.1} />
-            {reminderBadgeCount > 0 ? (
-              <View style={styles.bellBadge}>
-                <Text style={styles.bellBadgeText}>{reminderBadgeCount > 9 ? '9+' : String(reminderBadgeCount)}</Text>
-              </View>
-            ) : null}
-          </Pressable>
+          <View style={styles.topRightActions}>
+            <Pressable onPress={onOpenSettings} style={styles.bellBtn}>
+              <Settings size={17} color="#5f5f5f" strokeWidth={2.1} />
+            </Pressable>
+            <Pressable onPress={onOpenReminders} style={styles.bellBtn}>
+              <Bell size={18} color="#5f5f5f" strokeWidth={2.1} />
+              {reminderBadgeCount > 0 ? (
+                <View style={styles.bellBadge}>
+                  <Text style={styles.bellBadgeText}>{reminderBadgeCount > 9 ? '9+' : String(reminderBadgeCount)}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.heroStackWrap}>
@@ -570,19 +577,7 @@ export default function HomeScreen({
             />
           ))}
 
-          {activeCompleted.length > 0 ? (
-            <>
-              <View style={styles.reminderDivider} />
-              <Text style={styles.reminderGroupTitle}>{isTr ? 'Tamamlanan' : 'Completed'}</Text>
-              {activeCompleted.map((event) => (
-                <EventRow
-                  key={event.id}
-                  title={event.title}
-                  date={event.date}
-                />
-              ))}
-            </>
-          ) : null}
+          {activeCompleted.length > 0 ? null : null}
         </View>
       </ScrollView>
     </Animated.View>
@@ -677,6 +672,11 @@ const styles = StyleSheet.create({
   },
   brandSubNunito: {
     fontFamily: 'Nunito_600SemiBold',
+  },
+  topRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   bellBtn: {
     width: 36,

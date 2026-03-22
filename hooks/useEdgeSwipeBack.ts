@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Dimensions, PanResponder } from 'react-native';
 
 type UseEdgeSwipeBackParams = {
@@ -17,9 +17,15 @@ export function useEdgeSwipeBack({
   maxDy = 30,
 }: UseEdgeSwipeBackParams) {
   const hasTriggeredRef = useRef(false);
+  const navigatingRef = useRef(false);
+  const onBackRef = useRef(onBack);
   const translateX = useRef(new Animated.Value(0)).current;
   const screenWidth = Dimensions.get('window').width;
   const [isSwiping, setIsSwiping] = useState(false);
+
+  useEffect(() => {
+    onBackRef.current = onBack;
+  }, [onBack]);
 
   const responder = useMemo(
     () =>
@@ -34,16 +40,18 @@ export function useEdgeSwipeBack({
           return startsFromLeftEdge && enoughHorizontalIntent && lowVerticalNoise;
         },
         onPanResponderGrant: () => {
+          if (navigatingRef.current) return;
           hasTriggeredRef.current = false;
           translateX.setValue(0);
           setIsSwiping(true);
         },
         onPanResponderMove: (_evt, gesture) => {
-          if (!enabled) return;
+          if (!enabled || navigatingRef.current) return;
           const clamped = Math.max(0, gesture.dx);
           translateX.setValue(clamped);
         },
         onPanResponderRelease: (_evt, gesture) => {
+          if (navigatingRef.current) return;
           if (!enabled) {
             translateX.setValue(0);
             return;
@@ -52,10 +60,20 @@ export function useEdgeSwipeBack({
           const shouldGoBack = gesture.dx >= triggerDx && Math.abs(gesture.dy) < maxDy;
           if (shouldGoBack && !hasTriggeredRef.current) {
             hasTriggeredRef.current = true;
-            // Avoid end-of-gesture flash by navigating immediately from current interactive position.
-            onBack();
-            hasTriggeredRef.current = false;
-            setIsSwiping(false);
+            navigatingRef.current = true;
+            Animated.timing(translateX, {
+              toValue: screenWidth,
+              duration: 150,
+              useNativeDriver: true,
+            }).start(({ finished }) => {
+              if (finished) {
+                onBackRef.current();
+              }
+              translateX.setValue(0);
+              hasTriggeredRef.current = false;
+              navigatingRef.current = false;
+              setIsSwiping(false);
+            });
             return;
           }
 
@@ -69,6 +87,7 @@ export function useEdgeSwipeBack({
           setIsSwiping(false);
         },
         onPanResponderTerminate: () => {
+          if (navigatingRef.current) return;
           Animated.spring(translateX, {
             toValue: 0,
             useNativeDriver: true,
@@ -81,7 +100,7 @@ export function useEdgeSwipeBack({
         onPanResponderTerminationRequest: () => false,
         onShouldBlockNativeResponder: () => true,
       }),
-    [edgeWidth, enabled, maxDy, onBack, screenWidth, translateX, triggerDx],
+    [edgeWidth, enabled, maxDy, screenWidth, translateX, triggerDx],
   );
 
   const parallax = translateX.interpolate({
