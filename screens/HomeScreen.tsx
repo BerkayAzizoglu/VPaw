@@ -32,6 +32,17 @@ const healthRecordsCardIconUri = Image.resolveAssetSource(require('../assets/hom
 const HOME_CARD_ICON_SIZE = 26;
 const HOME_CARD_ICON_SIZE_LARGE = 30;
 
+type JourneyEventItem = {
+  id: string;
+  eventType: 'reminder' | 'vaccine' | 'vet' | 'insight';
+  title: string;
+  subtitle?: string;
+  date?: string;
+  urgent?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
+};
+
 type HomePetData = {
   id: string;
   name: string;
@@ -217,6 +228,35 @@ export default function HomeScreen({
   const isPetLockEnabled = petLockEnabled ?? false;
   const [frontImageLoaded, setFrontImageLoaded] = useState(false);
 
+  // ── Native Animated: weight card breathing + urgent pulse ──
+  const breathAnim = useRef(new Animated.Value(0)).current;
+  const pulseAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const breathLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(breathAnim, { toValue: 1, duration: 3400, useNativeDriver: true }),
+        Animated.timing(breathAnim, { toValue: 0, duration: 3400, useNativeDriver: true }),
+      ]),
+    );
+    const pulseLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1, duration: 680, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 0, duration: 820, useNativeDriver: true }),
+      ]),
+    );
+    breathLoop.start();
+    pulseLoop.start();
+    return () => {
+      breathLoop.stop();
+      pulseLoop.stop();
+    };
+  }, [breathAnim, pulseAnim]);
+
+  const breathAnimStyle = {
+    transform: [{ scale: breathAnim.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.004] }) }],
+  };
+
   useEffect(() => {
     Animated.parallel([
       Animated.timing(enterOpacity, {
@@ -282,6 +322,24 @@ export default function HomeScreen({
   const hasWeightData = activeWeightHistory.length > 0;
 
   const nextImportantEvent = activeUpcoming.length > 0 ? activeUpcoming[0] : null;
+
+  const journeyEvents = useMemo<JourneyEventItem[]>(() => {
+    const events: JourneyEventItem[] = [];
+    for (const r of activeUpcoming) {
+      events.push({ id: r.id, eventType: 'reminder', title: r.title, date: r.date });
+    }
+    for (const insight of topInsights.slice(0, 2)) {
+      events.push({
+        id: `insight-${insight.type}-${insight.priority}`,
+        eventType: insight.actionType === 'addVaccine' ? 'vaccine' : insight.actionType === 'addVisit' ? 'vet' : 'insight',
+        title: insight.message,
+        urgent: insight.priority === 'high',
+        actionLabel: insight.actionLabel ?? undefined,
+        onAction: insight.actionType ? () => onInsightAction?.(insight) : undefined,
+      });
+    }
+    return events;
+  }, [activeUpcoming, onInsightAction, topInsights]);
   const weightSpark = useMemo(() => {
     const chartW = 106;
     const chartH = 42;
@@ -499,74 +557,119 @@ export default function HomeScreen({
             </View>
           </View>
         </View>
-        <Pressable style={styles.weightCard} onPress={() => onOpenPetProfile?.(activePet.id)}>
-          <View style={styles.weightHeader}>
-            <Text style={styles.weightHeaderText}>{isTr ? 'WEIGHT PROFILE' : 'WEIGHT PROFILE'}</Text>
-            <Text style={styles.weightPill}>{hasWeightData ? activePet.weightDelta : (isTr ? '0.0 kg' : '0.0 kg')}</Text>
-          </View>
-
-          <View style={styles.weightMainRow}>
-            <View style={styles.weightLeftCol}>
-              <View style={styles.weightValueRow}>
-                <Text style={styles.weightValue}>{activePet.weight}</Text>
+        {/* ── PRIMARY HEALTH CARD (breathing animation) ── */}
+        <Animated.View style={breathAnimStyle}>
+          <Pressable style={styles.weightCard} onPress={() => onOpenPetProfile?.(activePet.id)}>
+            <View style={styles.weightHeader}>
+              <Text style={styles.weightLabel}>{isTr ? 'AĞIRLIK PROFİLİ' : 'WEIGHT PROFILE'}</Text>
+              <View style={styles.weightDeltaBadge}>
+                <Text style={styles.weightDeltaBadgeText}>{hasWeightData ? activePet.weightDelta : '—'}</Text>
               </View>
-              <Text style={styles.weightSub}>{isTr ? 'İdeal kilo korunuyor' : 'Ideal weight maintained'}</Text>
             </View>
-
-            <View style={styles.sparkWrap}>
-              <Svg width={106} height={42} viewBox="0 0 106 42">
-                <Defs>
-                  <LinearGradient id="weightArea" x1="0" y1="0" x2="0" y2="1">
-                    <Stop offset="0" stopColor="#c8ddc8" stopOpacity="0.24" />
-                    <Stop offset="1" stopColor="#c8ddc8" stopOpacity="0" />
-                  </LinearGradient>
-                </Defs>
-                <Path d={weightSpark.areaPath} fill="url(#weightArea)" />
-                <Path d={weightSpark.linePath} stroke="#9cbf9c" strokeWidth={2.6} fill="none" strokeLinecap="round" />
-              </Svg>
+            <View style={styles.weightMainRow}>
+              <View style={styles.weightLeftCol}>
+                <Text style={styles.weightValue}>{activePet.weight}</Text>
+                <Text style={styles.weightStatusText}>{isTr ? 'İdeal kilo korunuyor' : 'Ideal weight maintained'}</Text>
+              </View>
+              <View style={styles.sparkWrap}>
+                <Svg width={120} height={50} viewBox="0 0 106 42">
+                  <Defs>
+                    <LinearGradient id="wAreaGrad" x1="0" y1="0" x2="0" y2="1">
+                      <Stop offset="0" stopColor="#6b9e6b" stopOpacity="0.20" />
+                      <Stop offset="1" stopColor="#6b9e6b" stopOpacity="0" />
+                    </LinearGradient>
+                  </Defs>
+                  <Path d={weightSpark.areaPath} fill="url(#wAreaGrad)" />
+                  <Path d={weightSpark.linePath} stroke="#6b9e6b" strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+              </View>
             </View>
-          </View>
-          <Text style={styles.weightSub2}>{weightUpdatedText}</Text>
-        </Pressable>
+            <Text style={styles.weightDateText}>{weightUpdatedText}</Text>
+          </Pressable>
+        </Animated.View>
 
-        <Text style={styles.sectionTitle}>{isTr ? 'Sonraki onemli olay' : 'Next important event'}</Text>
-        <View style={styles.upcomingCard}>
-          {nextImportantEvent ? (
-            <EventRow
-              title={nextImportantEvent.title}
-              date={nextImportantEvent.date}
-              onPress={() => onCompleteReminder?.(activePet.id, nextImportantEvent.id)}
-            />
-          ) : (
-            <View style={styles.emptyInlineWrap}>
-              <Text style={styles.emptyInlineTitle}>{isTr ? 'Henuz planli olay yok' : 'No upcoming event yet'}</Text>
-              <Text style={styles.emptyInlineBody}>
-                {isTr ? 'Bir hatirlatma veya ziyaret ekleyerek baslayabilirsin.' : 'Start by adding a reminder or a visit.'}
+        {/* ── SECONDARY HEALTH STRIP ── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.stripContent}
+        >
+          <SecondaryHealthChip
+            label={isTr ? 'AŞILAR' : 'VACCINES'}
+            value={activePet.vaccines}
+            sub={activePet.vaccinesSub || (isTr ? 'Detay' : 'View all')}
+            accentColor="#5a7a5a"
+            onPress={() => onOpenVaccinations?.(activePet.id)}
+          />
+          <SecondaryHealthChip
+            label={isTr ? 'VET ZİYARETİ' : 'VET VISIT'}
+            value={activePet.vetVisits !== '—' ? activePet.vetVisits : (isTr ? 'Ekle' : 'Add')}
+            sub={activePet.vetVisitsSub || (isTr ? 'Ziyaret ekle' : 'Log a visit')}
+            accentColor="#8a6a3a"
+            onPress={() => onOpenVetVisits?.(activePet.id)}
+          />
+          <SecondaryHealthChip
+            label={isTr ? '+ KİLO' : '+ WEIGHT'}
+            value={isTr ? 'Kilo gir' : 'Log weight'}
+            sub={isTr ? 'Trendi takip et' : 'Track trend'}
+            accentColor="#4a6a8a"
+            onPress={() => onOpenPetProfile?.(activePet.id)}
+          />
+          <SecondaryHealthChip
+            label={isTr ? '+ HATIRLATMA' : '+ REMINDER'}
+            value={isTr ? 'Hatırlatma' : 'Add reminder'}
+            sub={isTr ? 'Yeni ekle' : 'New alert'}
+            accentColor="#6a5a8a"
+            onPress={onOpenAddReminder}
+          />
+        </ScrollView>
+
+        {/* ── HEALTH JOURNEY ── */}
+        <View style={styles.journeyHeader}>
+          <Text style={styles.journeyTitle}>{isTr ? 'Sağlık Yolculuğu' : 'Health Journey'}</Text>
+          {journeyEvents.length > 0 && (
+            <View style={styles.journeyBadge}>
+              <Text style={styles.journeyBadgeText}>
+                {journeyEvents.length} {isTr ? 'Olay' : 'Events'}
               </Text>
-              <Pressable style={styles.emptyInlineCta} onPress={onOpenAddReminder}>
-                <Text style={styles.emptyInlineCtaText}>{isTr ? 'Hatirlatma Ekle' : 'Add Reminder'}</Text>
-              </Pressable>
             </View>
           )}
         </View>
-        <View style={styles.quickReminderRow}>
-          <QuickReminderChip label={isTr ? '+ Kilo' : '+ Weight'} onPress={() => onOpenPetProfile?.(activePet.id)} />
-          <QuickReminderChip label={isTr ? '+ Ziyaret' : '+ Visit'} onPress={() => onOpenVetVisits?.(activePet.id)} />
-          <QuickReminderChip label={isTr ? '+ Hatirlatma' : '+ Reminder'} onPress={onOpenAddReminder} />
-        </View>
-        {topInsights.length > 0 ? (
-          <View style={styles.upcomingCard}>
-            <View style={styles.insightPreviewRow}>
-              <Text style={styles.insightPreviewMeta}>{`${topInsights[0].type.toUpperCase()} • ${topInsights[0].priority.toUpperCase()}`}</Text>
-              <Text style={styles.insightPreviewText}>{topInsights[0].message}</Text>
-              {topInsights[0].actionType && topInsights[0].actionLabel ? (
-                <Pressable style={styles.insightPreviewCta} onPress={() => onInsightAction?.(topInsights[0])}>
-                  <Text style={styles.insightPreviewCtaText}>{topInsights[0].actionLabel}</Text>
-                </Pressable>
-              ) : null}
-            </View>
+
+        {journeyEvents.length > 0 ? (
+          <View style={styles.journeyList}>
+            <View style={styles.journeyConnector} />
+            {journeyEvents.map((evt, i) => (
+              <JourneyCard
+                key={evt.id}
+                eventType={evt.eventType}
+                title={evt.title}
+                subtitle={evt.subtitle}
+                date={evt.date}
+                urgent={evt.urgent}
+                delay={i * 110}
+                pulseAnim={pulseAnim}
+                actionLabel={evt.actionLabel}
+                onAction={evt.onAction}
+                isTr={isTr}
+              />
+            ))}
           </View>
-        ) : null}
+        ) : (
+          <View style={styles.journeyEmpty}>
+            <Text style={styles.journeyEmptyTitle}>
+              {isTr ? 'Henüz sağlık kaydı yok' : 'No health events yet'}
+            </Text>
+            <Text style={styles.journeyEmptySub}>
+              {isTr
+                ? 'Veteriner ziyareti, aşı veya hatırlatma ekleyerek başla.'
+                : 'Add a vet visit, vaccine, or reminder to get started.'}
+            </Text>
+            <Pressable style={styles.journeyEmptyCta} onPress={onOpenAddReminder}>
+              <Text style={styles.journeyEmptyCtaText}>{isTr ? '+ Ekle' : '+ Add'}</Text>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
     </Animated.View>
   );
@@ -577,6 +680,98 @@ function QuickReminderChip({ label, onPress }: { label: string; onPress?: () => 
     <Pressable style={styles.quickReminderChip} onPress={onPress}>
       <Text style={styles.quickReminderChipText}>{label}</Text>
     </Pressable>
+  );
+}
+
+function SecondaryHealthChip({
+  label,
+  value,
+  sub,
+  accentColor,
+  onPress,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  accentColor: string;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable style={styles.stripChip} onPress={onPress}>
+      <Text style={[styles.stripChipLabel, { color: accentColor }]}>{label}</Text>
+      <Text style={styles.stripChipValue}>{value}</Text>
+      <Text style={styles.stripChipSub}>{sub}</Text>
+    </Pressable>
+  );
+}
+
+function JourneyCard({
+  eventType,
+  title,
+  subtitle,
+  date,
+  urgent,
+  delay,
+  pulseAnim,
+  actionLabel,
+  onAction,
+  isTr,
+}: Omit<JourneyEventItem, 'id'> & {
+  delay: number;
+  pulseAnim: Animated.Value;
+  isTr: boolean;
+}) {
+  const pulseStyle = {
+    transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.26] }) }],
+    opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0.35] }),
+  };
+
+  const nodeColor =
+    eventType === 'vaccine'
+      ? '#5a7a5a'
+      : eventType === 'vet'
+        ? '#8a6a3a'
+        : eventType === 'reminder'
+          ? '#4a6a8a'
+          : '#7a7a7a';
+
+  const metaLabel =
+    eventType === 'vaccine'
+      ? (isTr ? 'AŞI' : 'VACCINE')
+      : eventType === 'vet'
+        ? (isTr ? 'VET ZİYARETİ' : 'VET VISIT')
+        : eventType === 'reminder'
+          ? (isTr ? 'HATIRLATMA' : 'REMINDER')
+          : (isTr ? 'SAĞLIK NOTU' : 'HEALTH NOTE');
+
+  return (
+    <View style={styles.journeyRow}>
+      <View style={styles.journeyNodeWrap}>
+        {urgent ? (
+          <Animated.View
+            style={[styles.journeyNodePulseRing, { borderColor: nodeColor }, pulseStyle]}
+          />
+        ) : null}
+        <View style={[styles.journeyNode, { backgroundColor: nodeColor }]} />
+      </View>
+      <View style={[styles.journeyCard, urgent && styles.journeyCardUrgent, urgent && { borderLeftColor: '#b44d34' }]}>
+        <Text style={[styles.journeyCardMeta, urgent && { color: '#b44d34' }]}>
+          {metaLabel}{date ? ` · ${date}` : ''}
+        </Text>
+        <Text style={styles.journeyCardTitle} numberOfLines={2}>{title}</Text>
+        {subtitle ? <Text style={styles.journeyCardSub}>{subtitle}</Text> : null}
+        {urgent ? (
+          <View style={styles.urgentTag}>
+            <Text style={styles.urgentTagText}>{isTr ? 'ACİL' : 'URGENT'}</Text>
+          </View>
+        ) : null}
+        {onAction && actionLabel ? (
+          <Pressable style={styles.journeyCardAction} onPress={onAction}>
+            <Text style={styles.journeyCardActionText}>{actionLabel}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
   );
 }
 
@@ -1189,6 +1384,229 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '700',
+  },
+
+  // ── Weight card (updated) ──
+  weightLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#8d8d8d',
+    letterSpacing: 0.8,
+  },
+  weightDeltaBadge: {
+    backgroundColor: '#e6f3e8',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  weightDeltaBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#4a8b56',
+  },
+  weightStatusText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#4e4e4e',
+    marginTop: 2,
+  },
+  weightDateText: {
+    fontSize: 12,
+    color: '#8f8f8f',
+    marginTop: 6,
+  },
+
+  // ── Secondary health strip ──
+  stripContent: {
+    gap: 10,
+    paddingRight: 4,
+  },
+  stripChip: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minWidth: 122,
+    gap: 1,
+  },
+  stripChipLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  stripChipValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2d2d2d',
+  },
+  stripChipSub: {
+    fontSize: 11,
+    color: '#9a9a9a',
+    marginTop: 1,
+  },
+
+  // ── Health Journey ──
+  journeyHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  journeyTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#2d2d2d',
+    letterSpacing: -0.2,
+  },
+  journeyBadge: {
+    backgroundColor: '#eef3ee',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  journeyBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#5a7a5a',
+  },
+  journeyList: {
+    position: 'relative',
+    paddingLeft: 8,
+    gap: 10,
+  },
+  journeyConnector: {
+    position: 'absolute',
+    left: 19,
+    top: 22,
+    bottom: 22,
+    width: 2,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 1,
+  },
+  journeyRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  journeyNodeWrap: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 15,
+    position: 'relative',
+  },
+  journeyNodePulseRing: {
+    position: 'absolute',
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    borderWidth: 2,
+  },
+  journeyNode: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2.5,
+    borderColor: '#f8f7f4',
+  },
+  journeyCard: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    gap: 3,
+  },
+  journeyCardUrgent: {
+    borderLeftWidth: 3,
+    shadowColor: '#b44d34',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  journeyCardMeta: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#9a9a9a',
+    letterSpacing: 0.5,
+  },
+  journeyCardTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2d2d2d',
+    lineHeight: 19,
+  },
+  journeyCardSub: {
+    fontSize: 12,
+    color: '#8a8a8a',
+    marginTop: 1,
+  },
+  urgentTag: {
+    alignSelf: 'flex-start',
+    marginTop: 5,
+    backgroundColor: '#fbe8e3',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  urgentTagText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#b44d34',
+    letterSpacing: 0.5,
+  },
+  journeyCardAction: {
+    marginTop: 7,
+    alignSelf: 'flex-start',
+    backgroundColor: '#f2f5f2',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  journeyCardActionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4f6b43',
+  },
+
+  // ── Journey empty state ──
+  journeyEmpty: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    padding: 20,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+  },
+  journeyEmptyTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2d2d2d',
+  },
+  journeyEmptySub: {
+    fontSize: 12,
+    color: '#8a8a8a',
+    lineHeight: 18,
+  },
+  journeyEmptyCta: {
+    alignSelf: 'flex-start',
+    marginTop: 4,
+    backgroundColor: '#f2f5f2',
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+  },
+  journeyEmptyCtaText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#4f6b43',
   },
 });
 
