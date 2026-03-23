@@ -66,6 +66,8 @@ export type VetVisit = {
   vetName?: string;
   followUpDate?: string;
   notes?: string;
+  amount?: number;
+  currency?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -203,6 +205,8 @@ export function normalizeVetVisitsByPet(raw: unknown): ByPet<VetVisit> {
         vetName: typeof i.vetName === 'string' ? i.vetName : undefined,
         followUpDate: typeof i.followUpDate === 'string' ? i.followUpDate : undefined,
         notes: typeof i.notes === 'string' ? i.notes : undefined,
+        amount: typeof i.amount === 'number' && i.amount > 0 ? i.amount : undefined,
+        currency: typeof i.currency === 'string' && i.currency.trim().length > 0 ? i.currency.trim() : undefined,
         createdAt: asIso(i.createdAt, nowIso),
         updatedAt: asIso(i.updatedAt, nowIso),
       };

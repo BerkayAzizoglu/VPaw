@@ -175,7 +175,7 @@ function formatPetAge(birthDate: string, locale: 'en' | 'tr') {
   }
   years = Math.max(0, years);
   months = Math.max(0, months);
-  if (locale === 'tr') return `${years} yï¿½l ${months} ay`;
+  if (locale === 'tr') return `${years} yıl ${months} ay`;
   return `${years} years ${months} months`;
 }
 function parseWeightKg(value: string) {
@@ -567,6 +567,9 @@ export default function HomeScreen({
             ) : (
               <Text style={styles.avatarInitials}>{userInitials}</Text>
             )}
+            {reminderBadgeCount > 0 ? (
+              <View style={styles.avatarBadge} />
+            ) : null}
           </Pressable>
         </View>
 
@@ -660,17 +663,26 @@ export default function HomeScreen({
         </Animated.View>
 
         {/* ── NEXT IMPORTANT EVENT ── */}
-        <Text style={styles.nextSectionTitle}>{isTr ? 'Sonraki Önemli Olay' : 'Next Important Event'}</Text>
-        <View style={styles.nextCard}>
+        <View style={styles.sectionHeaderRow}>
+          <Text style={styles.nextSectionTitle}>{isTr ? 'Sonraki Önemli Olay' : 'Next Important Event'}</Text>
+          {reminderBadgeCount > 0 ? (
+            <View style={styles.sectionBadge}>
+              <Text style={styles.sectionBadgeText}>{reminderBadgeCount}</Text>
+            </View>
+          ) : null}
+        </View>
+        <View style={[styles.nextCard, resolvedNextImportantEvent?.urgent && styles.nextCardUrgent]}>
+          {resolvedNextImportantEvent?.urgent ? <View style={styles.nextCardAccentBar} /> : <View style={styles.nextCardAccentBarGreen} />}
           {resolvedNextImportantEvent ? (
             <View style={styles.nextCardRow}>
-              <View style={[styles.nextDot, { backgroundColor: resolvedNextImportantEvent.urgent ? '#b55f53' : '#6e8f66' }]} />
               <View style={styles.nextTextWrap}>
-                <Text style={styles.nextCardTitle}>{resolvedNextImportantEvent.title}</Text>
-                <Text style={styles.nextCardSub}>{resolvedNextImportantEvent.subtitle ?? resolvedNextImportantEvent.date}</Text>
+                <Text style={styles.nextCardTitle} numberOfLines={2}>{resolvedNextImportantEvent.title}</Text>
+                {(resolvedNextImportantEvent.subtitle ?? resolvedNextImportantEvent.date) ? (
+                  <Text style={styles.nextCardSub}>{resolvedNextImportantEvent.subtitle ?? resolvedNextImportantEvent.date}</Text>
+                ) : null}
               </View>
               <Pressable
-                style={styles.nextCardCta}
+                style={[styles.nextCardCta, resolvedNextImportantEvent.urgent && styles.nextCardCtaUrgent]}
                 onPress={() => {
                   if (resolvedNextImportantEvent.kind === 'weight') {
                     openQuickWeight();
@@ -679,7 +691,9 @@ export default function HomeScreen({
                   resolvedNextImportantEvent.onPress?.();
                 }}
               >
-                <Text style={styles.nextCardCtaText}>{resolvedNextImportantEvent.ctaLabel ?? (isTr ? 'Aç' : 'Open')}</Text>
+                <Text style={[styles.nextCardCtaText, resolvedNextImportantEvent.urgent && styles.nextCardCtaTextUrgent]}>
+                  {resolvedNextImportantEvent.ctaLabel ?? (isTr ? 'Aç' : 'Open')}
+                </Text>
               </Pressable>
             </View>
           ) : (
@@ -710,13 +724,11 @@ export default function HomeScreen({
         {/* ── HEALTH JOURNEY ── */}
         <View style={styles.journeyHeader}>
           <Text style={styles.journeyTitle}>{isTr ? 'Sağlık Yolculuğu' : 'Health Journey'}</Text>
-          {journeyEvents.length > 0 && (
-            <View style={styles.journeyBadge}>
-              <Text style={styles.journeyBadgeText}>
-                {journeyEvents.length} {isTr ? 'Olay' : 'Events'}
-              </Text>
+          {journeyEvents.length > 0 ? (
+            <View style={styles.journeyCountPill}>
+              <Text style={styles.journeyCountPillText}>{journeyEvents.length} {isTr ? 'Olay' : 'Events'}</Text>
             </View>
-          )}
+          ) : null}
         </View>
 
         {journeyEvents.length > 0 ? (
@@ -823,46 +835,30 @@ function JourneyCard({
   pulseAnim: Animated.Value;
   isTr: boolean;
 }) {
+  const config = (() => {
+    if (eventType === 'vaccine') return { iconBg: '#cbebc8', iconFg: '#3a6a3a', label: isTr ? 'AŞI' : 'VACCINE' };
+    if (eventType === 'vet') return { iconBg: '#edffe3', iconFg: '#3a6e45', label: isTr ? 'VET ZİYARETİ' : 'VET VISIT' };
+    if (eventType === 'record') return { iconBg: '#ede8f5', iconFg: '#5a4a7a', label: isTr ? 'SAĞLIK KAYDI' : 'HEALTH RECORD' };
+    if (eventType === 'reminder') return { iconBg: '#e3eef8', iconFg: '#3a4e7a', label: isTr ? 'HATIRLATMA' : 'REMINDER' };
+    return { iconBg: '#eeeee8', iconFg: '#5d605a', label: isTr ? 'SAĞLIK NOTU' : 'HEALTH NOTE' };
+  })();
+
   const pulseStyle = {
-    transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.26] }) }],
-    opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.9, 0.35] }),
+    transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.3] }) }],
+    opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 0.0] }),
   };
-
-  const nodeColor =
-    eventType === 'vaccine'
-      ? '#5a7a5a'
-      : eventType === 'vet'
-        ? '#8a6a3a'
-        : eventType === 'record'
-          ? '#7b6b8d'
-        : eventType === 'reminder'
-          ? '#4a6a8a'
-          : '#7a7a7a';
-
-  const metaLabel =
-    eventType === 'vaccine'
-      ? (isTr ? 'AŞI' : 'VACCINE')
-      : eventType === 'vet'
-        ? (isTr ? 'VET ZİYARETİ' : 'VET VISIT')
-        : eventType === 'record'
-          ? (isTr ? 'SAĞLIK KAYDI' : 'HEALTH RECORD')
-        : eventType === 'reminder'
-          ? (isTr ? 'HATIRLATMA' : 'REMINDER')
-          : (isTr ? 'SAĞLIK NOTU' : 'HEALTH NOTE');
 
   return (
     <View style={styles.journeyRow}>
-      <View style={styles.journeyNodeWrap}>
+      <View style={[styles.journeyIconBox, { backgroundColor: config.iconBg }]}>
         {urgent ? (
-          <Animated.View
-            style={[styles.journeyNodePulseRing, { borderColor: nodeColor }, pulseStyle]}
-          />
+          <Animated.View style={[styles.journeyIconPulse, { borderColor: config.iconFg }, pulseStyle]} />
         ) : null}
-        <View style={[styles.journeyNode, { backgroundColor: nodeColor }]} />
+        <View style={[styles.journeyIconDot, { backgroundColor: config.iconFg }]} />
       </View>
-      <View style={[styles.journeyCard, urgent && styles.journeyCardUrgent, urgent && { borderLeftColor: '#b44d34' }]}>
-        <Text style={[styles.journeyCardMeta, urgent && { color: '#b44d34' }]}>
-          {metaLabel}{date ? ` · ${date}` : ''}
+      <View style={[styles.journeyCard, urgent && styles.journeyCardUrgent]}>
+        <Text style={[styles.journeyCardMeta, { color: config.iconFg }]}>
+          {config.label}{date ? ` · ${date}` : ''}
         </Text>
         <Text style={styles.journeyCardTitle} numberOfLines={2}>{title}</Text>
         {subtitle ? <Text style={styles.journeyCardSub}>{subtitle}</Text> : null}
@@ -899,11 +895,11 @@ function EventRow({ title, date, onPress }: { title: string; date: string; onPre
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f8f7f4',
+    backgroundColor: '#f6f4f0',
   },
   content: {
     paddingHorizontal: 22,
-    paddingTop: 60,
+    paddingTop: 56,
     paddingBottom: 24,
     gap: 16,
   },
@@ -940,10 +936,23 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#f1f1ef',
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.07)',
+  },
+  avatarBadge: {
+    position: 'absolute',
+    top: 1,
+    right: 1,
+    width: 9,
+    height: 9,
+    borderRadius: 999,
+    backgroundColor: '#47664a',
+    borderWidth: 1.5,
+    borderColor: '#f6f4f0',
   },
   avatarImage: {
     width: '100%',
@@ -1127,22 +1136,68 @@ const styles = StyleSheet.create({
     color: '#2d2d2d',
     marginTop: 4,
   },
-  nextSectionTitle: {
-    fontSize: 22,
-    lineHeight: 26,
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionBadge: {
+    height: 22,
+    minWidth: 22,
+    borderRadius: 11,
+    backgroundColor: '#47664a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  sectionBadgeText: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#fff',
     fontWeight: '700',
-    color: '#2d2d2d',
-    marginTop: 2,
+  },
+  nextSectionTitle: {
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '700',
+    color: '#30332e',
+    letterSpacing: -0.3,
   },
   nextCard: {
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: 'rgba(0,0,0,0.06)',
     backgroundColor: '#fff',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  nextCardUrgent: {
+    borderColor: 'rgba(180,80,60,0.15)',
+    backgroundColor: '#fff',
+  },
+  nextCardAccentBar: {
+    width: 3,
+    borderRadius: 999,
+    backgroundColor: '#c96a6a',
+    marginRight: 12,
+    alignSelf: 'stretch',
+  },
+  nextCardAccentBarGreen: {
+    width: 3,
+    borderRadius: 999,
+    backgroundColor: '#47664a',
+    marginRight: 12,
+    alignSelf: 'stretch',
   },
   nextCardRow: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -1154,33 +1209,38 @@ const styles = StyleSheet.create({
   },
   nextTextWrap: {
     flex: 1,
+    gap: 3,
   },
   nextCardTitle: {
     fontSize: 15,
     lineHeight: 20,
-    color: '#2d2d2d',
+    color: '#30332e',
     fontWeight: '700',
   },
   nextCardSub: {
-    marginTop: 2,
     fontSize: 12,
     lineHeight: 16,
-    color: '#848484',
+    color: '#7a7a72',
     fontWeight: '500',
   },
   nextCardCta: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#eef6ef',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    flexShrink: 0,
+  },
+  nextCardCtaUrgent: {
+    backgroundColor: '#fde8e3',
   },
   nextCardCtaText: {
-    color: '#4f6b43',
+    color: '#47664a',
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '700',
+  },
+  nextCardCtaTextUrgent: {
+    color: '#a73b21',
   },
   nextEmptyWrap: {
     gap: 6,
@@ -1610,49 +1670,50 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   summaryCard: {
-    marginTop: 4,
     borderRadius: 18,
+    backgroundColor: '#eef6ef',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    backgroundColor: '#fff',
+    borderColor: 'rgba(71,102,74,0.14)',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 14,
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    alignItems: 'flex-start',
+    gap: 12,
   },
   summaryIconCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: '#eef3ee',
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    backgroundColor: '#47664a',
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 1,
   },
   summaryIconDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#6e8f66',
+    backgroundColor: '#fff',
   },
   summaryIconDotUrgent: {
-    backgroundColor: '#c26c6c',
+    backgroundColor: '#f4a896',
   },
   summaryTextWrap: {
     flex: 1,
+    gap: 3,
   },
   summaryTitle: {
-    color: '#2d2d2d',
     fontSize: 14,
-    lineHeight: 18,
+    lineHeight: 19,
+    color: '#2e4230',
     fontWeight: '700',
   },
   summaryBody: {
-    marginTop: 2,
-    color: '#818181',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '500',
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#3d5a40',
+    fontWeight: '400',
   },
   quickWeightOverlay: {
     flex: 1,
@@ -1661,25 +1722,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   quickWeightCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
     backgroundColor: '#fff',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 8,
+    borderRadius: 24,
+    paddingHorizontal: 22,
+    paddingVertical: 22,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
   quickWeightTitle: {
-    color: '#2d2d2d',
-    fontSize: 16,
-    lineHeight: 20,
+    fontSize: 18,
+    lineHeight: 24,
+    color: '#30332e',
     fontWeight: '700',
   },
   quickWeightSub: {
-    color: '#7f7f7f',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '500',
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#5d605a',
+    fontWeight: '400',
   },
   quickWeightInput: {
     minHeight: 44,
@@ -1714,15 +1778,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   quickWeightSave: {
+    flex: 1,
+    height: 44,
     borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    backgroundColor: '#2d2d2d',
+    backgroundColor: '#47664a',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickWeightSaveText: {
     color: '#fff',
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 14,
+    lineHeight: 18,
     fontWeight: '700',
   },
 
@@ -1793,44 +1859,36 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 4,
-    marginBottom: 2,
   },
   journeyTitle: {
-    fontSize: 22,
+    fontSize: 20,
+    lineHeight: 24,
     fontWeight: '700',
-    color: '#2d2d2d',
-    letterSpacing: -0.2,
+    color: '#30332e',
+    letterSpacing: -0.3,
   },
-  journeyBadge: {
-    backgroundColor: '#eef3ee',
+  journeyCountPill: {
     borderRadius: 999,
+    backgroundColor: '#eeeee8',
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  journeyBadgeText: {
+  journeyCountPillText: {
     fontSize: 11,
+    lineHeight: 14,
+    color: '#5d605a',
     fontWeight: '700',
-    color: '#5a7a5a',
   },
   journeyList: {
-    position: 'relative',
-    paddingLeft: 8,
     gap: 10,
   },
   journeyConnector: {
-    position: 'absolute',
-    left: 19,
-    top: 22,
-    bottom: 22,
-    width: 2,
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 1,
+    display: 'none',
   },
   journeyRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 14,
+    gap: 10,
   },
   journeyNodeWrap: {
     width: 24,
@@ -1852,101 +1910,133 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 6,
     borderWidth: 2.5,
-    borderColor: '#f8f7f4',
+    borderColor: '#f6f4f0',
+  },
+  journeyIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    marginTop: 2,
+    position: 'relative',
+  },
+  journeyIconDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  journeyIconPulse: {
+    position: 'absolute',
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    borderWidth: 2,
   },
   journeyCard: {
     flex: 1,
+    borderRadius: 16,
     backgroundColor: '#fff',
-    borderRadius: 18,
-    padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: 'rgba(0,0,0,0.06)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
     gap: 3,
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   journeyCardUrgent: {
-    borderLeftWidth: 3,
-    shadowColor: '#b44d34',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    borderColor: 'rgba(180,77,52,0.2)',
+    backgroundColor: '#fff9f8',
   },
   journeyCardMeta: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#9a9a9a',
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '800',
     letterSpacing: 0.5,
   },
   journeyCardTitle: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#2d2d2d',
     lineHeight: 19,
+    color: '#30332e',
+    fontWeight: '600',
   },
   journeyCardSub: {
     fontSize: 12,
-    color: '#8a8a8a',
-    marginTop: 1,
+    lineHeight: 16,
+    color: '#7a7a72',
+    fontWeight: '400',
   },
   urgentTag: {
     alignSelf: 'flex-start',
-    marginTop: 5,
-    backgroundColor: '#fbe8e3',
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    backgroundColor: '#fde8e3',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
   },
   urgentTagText: {
     fontSize: 9,
-    fontWeight: '700',
-    color: '#b44d34',
+    lineHeight: 12,
+    color: '#a73b21',
+    fontWeight: '800',
     letterSpacing: 0.5,
   },
   journeyCardAction: {
-    marginTop: 7,
     alignSelf: 'flex-start',
-    backgroundColor: '#f2f5f2',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    marginTop: 4,
+    borderRadius: 10,
+    backgroundColor: '#eef6ef',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   journeyCardActionText: {
-    fontSize: 11,
+    color: '#47664a',
+    fontSize: 12,
+    lineHeight: 15,
     fontWeight: '700',
-    color: '#4f6b43',
   },
 
   // ── Journey empty state ──
   journeyEmpty: {
-    backgroundColor: '#fff',
     borderRadius: 18,
-    padding: 20,
-    gap: 6,
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: 'rgba(0,0,0,0.06)',
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+    alignItems: 'center',
+    gap: 8,
   },
   journeyEmptyTitle: {
-    fontSize: 14,
+    fontSize: 16,
+    lineHeight: 22,
+    color: '#30332e',
     fontWeight: '700',
-    color: '#2d2d2d',
+    textAlign: 'center',
   },
   journeyEmptySub: {
-    fontSize: 12,
-    color: '#8a8a8a',
+    fontSize: 13,
     lineHeight: 18,
+    color: '#5d605a',
+    fontWeight: '400',
+    textAlign: 'center',
   },
   journeyEmptyCta: {
-    alignSelf: 'flex-start',
     marginTop: 4,
-    backgroundColor: '#f2f5f2',
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+    backgroundColor: '#47664a',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   journeyEmptyCtaText: {
-    fontSize: 12,
+    color: '#fff',
+    fontSize: 13,
+    lineHeight: 16,
     fontWeight: '700',
-    color: '#4f6b43',
   },
 });
 

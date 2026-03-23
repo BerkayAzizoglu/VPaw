@@ -1,7 +1,7 @@
 ﻿import React, { useMemo, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Check, ChevronLeft, ChevronRight, Save } from 'lucide-react-native';
+import { ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { useAppSettings } from '../hooks/useAppSettings';
@@ -37,8 +37,8 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       t(locale, 'chooseLanguageDesc'),
       [
         { text: t(locale, 'cancel'), style: 'cancel' },
-        { text: t(locale, 'english'), onPress: () => setDraftLocale('en') },
-        { text: t(locale, 'turkish'), onPress: () => setDraftLocale('tr') },
+        { text: t(locale, 'english'), onPress: () => { setDraftLocale('en'); void setLocale('en'); } },
+        { text: t(locale, 'turkish'), onPress: () => { setDraftLocale('tr'); void setLocale('tr'); } },
       ],
     );
   };
@@ -97,12 +97,10 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
 
           <Text style={styles.title}>{t(locale, 'settings')}</Text>
 
-          <Pressable style={[styles.saveBtn, (!hasChanges || saving) && styles.saveBtnDisabled]} onPress={saveAndExit} disabled={!hasChanges || saving}>
-            {saving ? (
-              <Check size={16} color="#9a9a9a" strokeWidth={2.4} />
-            ) : (
-              <Save size={16} color={hasChanges ? '#2d2d2d' : '#9a9a9a'} strokeWidth={2.2} />
-            )}
+          <Pressable style={[styles.saveBtn, hasChanges && !saving && styles.saveBtnActive, (!hasChanges || saving) && styles.saveBtnDisabled]} onPress={saveAndExit} disabled={!hasChanges || saving}>
+            <Text style={[styles.saveBtnText, hasChanges && !saving && styles.saveBtnTextActive]}>
+              {saving ? (locale === 'tr' ? 'Kaydediliyor…' : 'Saving…') : (locale === 'tr' ? 'Kaydet' : 'Save')}
+            </Text>
           </Pressable>
         </View>
 
@@ -124,8 +122,8 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
       <Modal transparent visible={confirmVisible} animationType="fade" onRequestClose={() => setConfirmVisible(false)}>
         <View style={styles.confirmOverlay}>
           <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>{locale === 'tr' ? 'Degisiklikleri onayliyor musunuz?' : 'Confirm saved changes?'}</Text>
-            <Text style={styles.confirmBody}>{locale === 'tr' ? 'Ayarlar kaydedilecek ve bu ekrandan cikilacak.' : 'Your preferences will be saved and you will exit this screen.'}</Text>
+            <Text style={styles.confirmTitle}>{locale === 'tr' ? 'Değişiklikleri onaylıyor musunuz?' : 'Confirm changes?'}</Text>
+            <Text style={styles.confirmBody}>{locale === 'tr' ? 'Ayarlar kaydedilecek ve bu ekrandan çıkılacak.' : 'Your preferences will be saved and you will exit this screen.'}</Text>
             <View style={styles.confirmActions}>
               <Pressable style={styles.confirmSecondaryBtn} onPress={() => setConfirmVisible(false)}>
                 <Text style={styles.confirmSecondaryText}>{t(locale, 'cancel')}</Text>
@@ -138,7 +136,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
                   await performSaveAndExit();
                 }}
               >
-                <Text style={styles.confirmPrimaryText}>{saving ? t(locale, 'saving') : (locale === 'tr' ? 'Kaydet ve Cik' : 'Save & Exit')}</Text>
+                <Text style={styles.confirmPrimaryText}>{saving ? t(locale, 'saving') : (locale === 'tr' ? 'Kaydet ve Çık' : 'Save & Exit')}</Text>
               </Pressable>
             </View>
           </View>
@@ -185,17 +183,26 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(0,0,0,0.05)',
   },
   saveBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    height: 34,
+    paddingHorizontal: 14,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: '#eeeee8',
+  },
+  saveBtnActive: {
+    backgroundColor: '#47664a',
   },
   saveBtnDisabled: {
-    opacity: 0.7,
+    opacity: 0.5,
+  },
+  saveBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#9a9c95',
+  },
+  saveBtnTextActive: {
+    color: '#fff',
   },
   title: {
     fontSize: 22,

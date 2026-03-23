@@ -1,7 +1,11 @@
-﻿import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
+  Alert,
   Animated,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -14,6 +18,8 @@ import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from 'react
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
+
+// ─── Exported types ──────────────────────────────────────────────────────────
 
 export type WeightPoint = {
   label: string;
@@ -34,6 +40,9 @@ type WeightTrackingScreenProps = {
   microchip?: string;
   entries: WeightPoint[];
   onAddEntry: (value: number, options?: { date?: string; note?: string }) => void;
+  weightGoal?: number;
+  onSetWeightGoal?: (goal: number) => void;
+  totalExpenses?: { total: number; currency: string };
 };
 
 type WeightReference = {
@@ -42,9 +51,13 @@ type WeightReference = {
   note: string;
 };
 
+// ─── Chart constants ──────────────────────────────────────────────────────────
+
 const CHART_HEIGHT = 160;
 const CHART_INSET = 10;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+// ─── Pure helpers ─────────────────────────────────────────────────────────────
 
 function getWeightReference(
   petType: 'Dog' | 'Cat' | undefined,
@@ -72,6 +85,48 @@ function getWeightReference(
 
   return { min: 3, max: 12, note: refs.default };
 }
+
+function buildSmoothPath(points: Array<{ x: number; y: number }>) {
+  if (points.length === 0) return '';
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+
+  let path = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i += 1) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const cpx = (prev.x + curr.x) / 2;
+    path += ` Q ${cpx} ${prev.y}, ${curr.x} ${curr.y}`;
+  }
+  return path;
+}
+
+function computePolylineLength(points: Array<{ x: number; y: number }>) {
+  let len = 0;
+  for (let i = 1; i < points.length; i += 1) {
+    const dx = points[i].x - points[i - 1].x;
+    const dy = points[i].y - points[i - 1].y;
+    len += Math.sqrt(dx * dx + dy * dy);
+  }
+  return Math.max(len, 1);
+}
+
+function parseEntryDate(raw: string) {
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function toYmd(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatTemplate(template: string, params: Record<string, string>) {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => params[key] ?? '');
+}
+
+// ─── Icon component ───────────────────────────────────────────────────────────
 
 function Icon({ kind, size = 20, color = '#787878' }: { kind: 'back' | 'plus' | 'up' | 'check' | 'left' | 'calendar' | 'spark' | 'close'; size?: number; color?: string }) {
   if (kind === 'back') {
@@ -137,50 +192,29 @@ function Icon({ kind, size = 20, color = '#787878' }: { kind: 'back' | 'plus' | 
   );
 }
 
-function buildSmoothPath(points: Array<{ x: number; y: number }>) {
-  if (points.length === 0) return '';
-  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+// ─── Main screen ──────────────────────────────────────────────────────────────
 
-  let path = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length; i += 1) {
-    const prev = points[i - 1];
-    const curr = points[i];
-    const cpx = (prev.x + curr.x) / 2;
-    path += ` Q ${cpx} ${prev.y}, ${curr.x} ${curr.y}`;
-  }
-  return path;
-}
-
-function computePolylineLength(points: Array<{ x: number; y: number }>) {
-  let len = 0;
-  for (let i = 1; i < points.length; i += 1) {
-    const dx = points[i].x - points[i - 1].x;
-    const dy = points[i].y - points[i - 1].y;
-    len += Math.sqrt(dx * dx + dy * dy);
-  }
-  return Math.max(len, 1);
-}
-
-function parseEntryDate(raw: string) {
-  const d = new Date(raw);
-  return Number.isNaN(d.getTime()) ? null : d;
-}
-
-function toYmd(date: Date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function formatTemplate(template: string, params: Record<string, string>) {
-  return template.replace(/\{(\w+)\}/g, (_, key: string) => params[key] ?? '');
-}
-
-export default function WeightTrackingScreen({ onBack, backPreview, previewMode = false, onOpenHealthRecords, onOpenVetVisits, petName, petType, petBreed, microchip, entries, onAddEntry }: WeightTrackingScreenProps) {
+export default function WeightTrackingScreen({
+  onBack,
+  backPreview,
+  previewMode = false,
+  onOpenHealthRecords,
+  onOpenVetVisits,
+  petName,
+  petType,
+  petBreed,
+  microchip,
+  entries,
+  onAddEntry,
+  weightGoal,
+  onSetWeightGoal,
+  totalExpenses,
+}: WeightTrackingScreenProps) {
   const { locale } = useLocale();
+  const isTr = locale === 'tr';
   const copy = getWording(locale).weightTracking;
 
+  // ─── State ──────────────────────────────────────────────────────────────────
   const [selectedIndex, setSelectedIndex] = useState(Math.max(entries.length - 1, 0));
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubX, setScrubX] = useState<number | null>(null);
@@ -188,13 +222,18 @@ export default function WeightTrackingScreen({ onBack, backPreview, previewMode 
   const [newWeight, setNewWeight] = useState('');
   const [entryDate, setEntryDate] = useState(toYmd(new Date()));
   const [entryNote, setEntryNote] = useState('');
-  const [focusedField, setFocusedField] = useState<'weight' | 'date' | 'note' | null>(null);
+  const [focusedField, setFocusedField] = useState<'weight' | 'date' | 'note' | 'goal' | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [goalInput, setGoalInput] = useState('');
+  const [goalError, setGoalError] = useState<string | null>(null);
+
   const lineAnim = useRef(new Animated.Value(0)).current;
   const savePressScale = useRef(new Animated.Value(1)).current;
   const { width } = useWindowDimensions();
   const chartWidth = Math.max(240, width - 96);
   const chartHeight = CHART_HEIGHT;
+
   const edgeSwipeResponder = useEdgeSwipeBack({
     onBack,
     enabled: !previewMode && !isScrubbing && !focusedField,
@@ -203,10 +242,11 @@ export default function WeightTrackingScreen({ onBack, backPreview, previewMode 
     maxDy: 30,
   });
 
+  // ─── Derived / memoized ─────────────────────────────────────────────────────
   const reference = useMemo(() => getWeightReference(petType, petBreed, copy.refs), [petType, petBreed, copy.refs]);
   const microchipDisplay = microchip && microchip.trim().length > 0
     ? microchip
-    : (locale === 'tr' ? 'Tanımlı değil' : 'Not set');
+    : (isTr ? 'Tanımlı değil' : 'Not set');
 
   useEffect(() => {
     setSelectedIndex(Math.max(entries.length - 1, 0));
@@ -299,7 +339,7 @@ export default function WeightTrackingScreen({ onBack, backPreview, previewMode 
     let date = leftEntry.date;
     if (leftDate && rightDate) {
       const ms = leftDate.getTime() + (rightDate.getTime() - leftDate.getTime()) * t;
-      date = new Date(ms).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-US', {
+      date = new Date(ms).toLocaleDateString(isTr ? 'tr-TR' : 'en-US', {
         month: 'long',
         day: 'numeric',
         year: 'numeric',
@@ -307,7 +347,7 @@ export default function WeightTrackingScreen({ onBack, backPreview, previewMode 
     }
 
     return { value, date, x: scrubX };
-  }, [safeEntries, isScrubbing, scrubX, chartWidth, locale]);
+  }, [safeEntries, isScrubbing, scrubX, chartWidth, isTr]);
 
   const selectedWeight = safeEntries[Math.min(selectedIndex, Math.max(safeEntries.length - 1, 0))];
   const displayedValue = interpolatedSample?.value ?? selectedWeight?.value ?? 0;
@@ -343,6 +383,13 @@ export default function WeightTrackingScreen({ onBack, backPreview, previewMode 
       ? formatTemplate(copy.trendBelow, { name: petName, target: targetName })
       : formatTemplate(copy.trendAbove, { name: petName, target: targetName });
 
+  // ─── Goal progress ──────────────────────────────────────────────────────────
+  const currentWeightForGoal = latestWeight?.value ?? 0;
+  const goalProgress = weightGoal && weightGoal > 0
+    ? Math.min(1, Math.max(0, currentWeightForGoal / weightGoal))
+    : null;
+
+  // ─── Save entry ─────────────────────────────────────────────────────────────
   const saveEntry = () => {
     const parsed = Number(newWeight.replace(',', '.'));
     if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -351,7 +398,7 @@ export default function WeightTrackingScreen({ onBack, backPreview, previewMode 
     }
     const parsedDate = new Date(`${entryDate.trim()}T12:00:00.000Z`);
     if (!Number.isFinite(parsedDate.getTime())) {
-      setFormError(locale === 'tr' ? 'Lütfen tarihi YYYY-AA-GG formatında girin.' : 'Please enter date as YYYY-MM-DD.');
+      setFormError(isTr ? 'Lütfen tarihi YYYY-AA-GG formatında girin.' : 'Please enter date as YYYY-MM-DD.');
       return;
     }
 
@@ -366,6 +413,27 @@ export default function WeightTrackingScreen({ onBack, backPreview, previewMode 
     setShowAdd(false);
   };
 
+  // ─── Save goal ──────────────────────────────────────────────────────────────
+  const saveGoal = () => {
+    const parsed = Number(goalInput.replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setGoalError(isTr ? 'Geçerli bir hedef kilo girin.' : 'Please enter a valid goal weight.');
+      return;
+    }
+    if (onSetWeightGoal) {
+      onSetWeightGoal(parsed);
+    }
+    setGoalInput('');
+    setGoalError(null);
+    setShowGoalModal(false);
+  };
+
+  // ─── Expense display ─────────────────────────────────────────────────────────
+  const expenseLabel = isTr ? 'Harcama' : 'Expenses';
+  const expenseValue = totalExpenses
+    ? `${totalExpenses.total.toLocaleString(isTr ? 'tr-TR' : 'en-US')} ${totalExpenses.currency}`
+    : null;
+
   return (
     <View style={styles.screen}>
       {backPreview ? (
@@ -374,155 +442,298 @@ export default function WeightTrackingScreen({ onBack, backPreview, previewMode 
         </Animated.View>
       ) : null}
       <Animated.View style={[styles.frontLayer, edgeSwipeResponder.frontLayerStyle]} {...edgeSwipeResponder.panHandlers}>
-      <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={!previewMode && !isScrubbing && !edgeSwipeResponder.isSwiping}>
-        <View style={styles.headerRow}>
-          <Pressable style={styles.topIconBtn} onPress={onBack}>
-            <Icon kind="back" size={22} color="#808080" />
+        <StatusBar style="dark" />
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!previewMode && !isScrubbing && !edgeSwipeResponder.isSwiping}
+        >
+          {/* ── Header ─────────────────────────────────────────────────────── */}
+          <View style={styles.headerRow}>
+            <Pressable style={styles.backCircle} onPress={onBack}>
+              <Icon kind="back" size={22} color="#5d605a" />
+            </Pressable>
+
+            <Text style={styles.headerPetName}>{petName}</Text>
+
+            {expenseValue ? (
+              <View style={styles.expenseBadge}>
+                <Text style={styles.expenseBadgeLabel}>{expenseLabel.toUpperCase()}</Text>
+                <Text style={styles.expenseBadgeValue}>{expenseValue}</Text>
+              </View>
+            ) : (
+              <View style={styles.headerPlaceholder} />
+            )}
+          </View>
+
+          {/* ── Current weight card ─────────────────────────────────────────── */}
+          <View style={styles.currentCard}>
+            <Text style={styles.currentCardLabel}>
+              {isTr ? 'GÜNCEL KİLO' : 'CURRENT WEIGHT'}
+            </Text>
+
+            <View style={styles.currentValueRow}>
+              <Text style={styles.currentValue}>
+                {displayedValue.toFixed(1)}{' '}
+                <Text style={styles.currentUnit}>kg</Text>
+              </Text>
+              <View style={styles.changePill}>
+                <Icon kind="spark" size={10} color="#47664a" />
+                <Text style={styles.changePillText}>{comparisonText}</Text>
+              </View>
+            </View>
+
+            <Text style={styles.currentSub}>{displayedDate}</Text>
+
+            {/* ── Goal section ── */}
+            {weightGoal != null && goalProgress != null ? (
+              /* Goal set — show progress */
+              <Pressable
+                style={styles.goalSection}
+                onPress={() => {
+                  setGoalInput(String(weightGoal));
+                  setGoalError(null);
+                  setShowGoalModal(true);
+                }}
+              >
+                <View style={styles.goalSectionTop}>
+                  <View style={styles.goalSectionLeft}>
+                    <Text style={styles.goalSectionLabel}>{isTr ? 'HEDEF KİLO' : 'WEIGHT GOAL'}</Text>
+                    <Text style={styles.goalSectionValue}>{weightGoal.toFixed(1)} <Text style={styles.goalSectionUnit}>kg</Text></Text>
+                  </View>
+                  <View style={styles.goalSectionRight}>
+                    <Text style={styles.goalDiffLabel}>{isTr ? 'Fark' : 'Gap'}</Text>
+                    <Text style={[
+                      styles.goalDiffValue,
+                      { color: currentWeightForGoal <= weightGoal ? '#47664a' : '#c96a6a' },
+                    ]}>
+                      {currentWeightForGoal <= weightGoal ? '' : '+'}{(currentWeightForGoal - weightGoal).toFixed(1)} kg
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.goalBarTrack}>
+                  <View style={[styles.goalBarFill, { width: `${Math.round(goalProgress * 100)}%` as any }]} />
+                </View>
+                <Text style={styles.goalEditHint}>{isTr ? 'Hedefi düzenle →' : 'Edit goal →'}</Text>
+              </Pressable>
+            ) : (
+              /* No goal — show SET GOAL card */
+              <Pressable
+                style={styles.setGoalCard}
+                onPress={() => {
+                  setGoalInput('');
+                  setGoalError(null);
+                  setShowGoalModal(true);
+                }}
+              >
+                <View style={styles.setGoalLeft}>
+                  <Icon kind="up" size={16} color="#47664a" />
+                  <Text style={styles.setGoalTitle}>{isTr ? 'Hedef Kilo Belirle' : 'Set Weight Goal'}</Text>
+                </View>
+                <Text style={styles.setGoalArrow}>→</Text>
+              </Pressable>
+            )}
+
+            <Text style={styles.referenceLine}>
+              {copy.healthyReferencePrefix} ({petBreed ?? petType ?? 'Pet'}): {rangeText}
+            </Text>
+            <Text style={styles.microchipLine}>
+              {isTr ? 'Mikroçip: ' : 'Microchip: '}{microchipDisplay}
+            </Text>
+            <Text style={styles.referenceNote}>{reference.note}</Text>
+          </View>
+
+          {/* ── Section title ────────────────────────────────────────────────── */}
+          <Text style={styles.sectionTitle}>{copy.last90Days}</Text>
+
+          {/* ── Chart card ──────────────────────────────────────────────────── */}
+          <View style={styles.chartCard}>
+            <View style={styles.chartWrap}>
+              <View
+                style={[styles.chartTouchLayer, { width: chartWidth, height: chartHeight }]}
+                onStartShouldSetResponder={() => !previewMode}
+                onMoveShouldSetResponder={() => !previewMode}
+                onResponderGrant={(e) => {
+                  setIsScrubbing(true);
+                  updateSelectionFromX(e.nativeEvent.locationX);
+                }}
+                onResponderMove={(e) => updateSelectionFromX(e.nativeEvent.locationX)}
+                onResponderRelease={() => {
+                  setIsScrubbing(false);
+                  setScrubX(null);
+                }}
+                onResponderTerminate={() => {
+                  setIsScrubbing(false);
+                  setScrubX(null);
+                }}
+              >
+                <Svg width={chartWidth} height={chartHeight}>
+                  <Defs>
+                    <LinearGradient id="areaFade" x1="0" y1="0" x2="0" y2="1">
+                      <Stop offset="0" stopColor="#47664a" stopOpacity="0.22" />
+                      <Stop offset="1" stopColor="#47664a" stopOpacity="0" />
+                    </LinearGradient>
+                  </Defs>
+
+                  <Rect
+                    x={CHART_INSET}
+                    y={refBandY}
+                    width={chartWidth - CHART_INSET * 2}
+                    height={Math.max(2, refBandH)}
+                    fill="rgba(71,102,74,0.10)"
+                    rx={6}
+                  />
+
+                  {[0.2, 0.4, 0.6, 0.8].map((n) => (
+                    <Line
+                      key={n}
+                      x1={CHART_INSET}
+                      y1={CHART_INSET + (chartHeight - CHART_INSET * 2) * n}
+                      x2={chartWidth - CHART_INSET}
+                      y2={CHART_INSET + (chartHeight - CHART_INSET * 2) * n}
+                      stroke="rgba(0,0,0,0.05)"
+                      strokeDasharray="2 6"
+                    />
+                  ))}
+
+                  <Path d={chart.areaPath} fill="url(#areaFade)" />
+                  <AnimatedPath
+                    d={chart.linePath}
+                    fill="none"
+                    stroke="#47664a"
+                    strokeWidth={4}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeDasharray={`${chart.lineLength} ${chart.lineLength}`}
+                    strokeDashoffset={lineDashOffset as unknown as number}
+                  />
+
+                  <Line
+                    x1={displayedX}
+                    y1={displayedY}
+                    x2={displayedX}
+                    y2={chartHeight - CHART_INSET}
+                    stroke="rgba(71,102,74,0.24)"
+                    strokeWidth={1}
+                    strokeDasharray="4 4"
+                  />
+
+                  <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 8.5 : 7.2} fill="#ffffff" stroke="#47664a" strokeWidth={2} />
+                  <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 3.6 : 3} fill="#47664a" />
+                </Svg>
+              </View>
+            </View>
+
+            <View style={styles.xLabelsRow}>
+              {safeEntries.map((point, idx) => (
+                <Pressable key={`${point.label}-${idx}`} onPress={() => setSelectedIndex(idx)} style={styles.xLabelBtn}>
+                  <Text style={[styles.xLabel, selectedIndex === idx && styles.xLabelActive]}>{point.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            {/* Add weight entry pill inside chart card */}
+            <Pressable
+              style={styles.addEntryPill}
+              onPress={() => { setShowAdd(true); setFormError(null); }}
+            >
+              <Icon kind="plus" size={15} color="#fff" />
+              <Text style={styles.addEntryPillText}>
+                {isTr ? 'Kilo Girişi Ekle' : 'Add Weight Entry'}
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* ── Smart insights ──────────────────────────────────────────────── */}
+          <Text style={styles.sectionTitle}>{copy.smartInsights}</Text>
+          <Pressable
+            style={styles.insightCard}
+            onPress={onOpenHealthRecords}
+          >
+            <View style={[styles.insightIconBox, rangeStatus === 'within' ? styles.insightIconGood : styles.insightIconWarn]}>
+              <Icon
+                kind={rangeStatus === 'within' ? 'check' : 'left'}
+                size={20}
+                color={rangeStatus === 'within' ? '#47664a' : '#c48d42'}
+              />
+            </View>
+            <View style={styles.insightBody}>
+              <Text style={styles.insightTitle}>{primaryInsightTitle}</Text>
+              <Text style={styles.insightText}>{primaryInsightText}</Text>
+            </View>
           </Pressable>
 
-          <View style={styles.headerTitles}>
-            <Text style={styles.petName}>{petName}</Text>
-            <Text style={styles.petSub}>{copy.subtitle}</Text>
-          </View>
-
-          <View style={styles.topIconBtnPlaceholder} />
-        </View>
-
-        <View style={styles.currentCard}>
-          <View style={styles.currentHeader}>
-            <View style={styles.currentIconWrap}>
-              <Icon kind="up" size={16} color="#7f8f88" />
+          <Pressable style={styles.insightCard} onPress={onOpenVetVisits}>
+            <View style={styles.insightIconBox}>
+              <Icon kind="left" size={20} color="#5d605a" />
             </View>
-            <Text style={styles.currentHeaderText}>{copy.currentWeight}</Text>
-          </View>
-
-          <View style={styles.currentValueRow}>
-            <Text style={styles.currentValue}>{displayedValue.toFixed(1)} <Text style={styles.currentUnit}>kg</Text></Text>
-            <View style={styles.changePill}>
-              <Icon kind="spark" size={10} color="#2e7d32" />
-              <Text style={styles.changePillText}>{comparisonText}</Text>
+            <View style={styles.insightBody}>
+              <Text style={styles.insightTitle}>{copy.referenceAwareTitle}</Text>
+              <Text style={styles.insightText}>{copy.referenceAwareBody}</Text>
             </View>
-          </View>
+          </Pressable>
 
-          <Text style={styles.currentSub}>{displayedDate}</Text>
-          <Text style={styles.referenceLine}>{copy.healthyReferencePrefix} ({petBreed ?? petType ?? 'Pet'}): {rangeText}</Text>
-          <Text style={styles.microchipLine}>{locale === 'tr' ? 'Mikroçip: ' : 'Microchip: '}{microchipDisplay}</Text>
-          <Text style={styles.referenceNote}>{reference.note}</Text>
-        </View>
-
-        <Text style={styles.sectionTitle}>{copy.last90Days}</Text>
-        <View style={styles.chartCard}>
-          <View style={styles.chartWrap}>
-            <View
-              style={[styles.chartTouchLayer, { width: chartWidth, height: chartHeight }]}
-              onStartShouldSetResponder={() => !previewMode}
-              onMoveShouldSetResponder={() => !previewMode}
-              onResponderGrant={(e) => {
-                setIsScrubbing(true);
-                updateSelectionFromX(e.nativeEvent.locationX);
-              }}
-              onResponderMove={(e) => updateSelectionFromX(e.nativeEvent.locationX)}
-              onResponderRelease={() => {
-                setIsScrubbing(false);
-                setScrubX(null);
-              }}
-              onResponderTerminate={() => {
-                setIsScrubbing(false);
-                setScrubX(null);
-              }}
-            >
-              <Svg width={chartWidth} height={chartHeight}>
-                <Defs>
-                  <LinearGradient id="areaFade" x1="0" y1="0" x2="0" y2="1">
-                    <Stop offset="0" stopColor="#2d2d2d" stopOpacity="0.22" />
-                    <Stop offset="1" stopColor="#2d2d2d" stopOpacity="0" />
-                  </LinearGradient>
-                </Defs>
-
-                <Rect
-                  x={CHART_INSET}
-                  y={refBandY}
-                  width={chartWidth - CHART_INSET * 2}
-                  height={Math.max(2, refBandH)}
-                  fill="rgba(76, 175, 80, 0.10)"
-                  rx={6}
-                />
-
-                {[0.2, 0.4, 0.6, 0.8].map((n) => (
-                  <Line
-                    key={n}
-                    x1={CHART_INSET}
-                    y1={CHART_INSET + (chartHeight - CHART_INSET * 2) * n}
-                    x2={chartWidth - CHART_INSET}
-                    y2={CHART_INSET + (chartHeight - CHART_INSET * 2) * n}
-                    stroke="rgba(0,0,0,0.05)"
-                    strokeDasharray="2 6"
-                  />
-                ))}
-
-                <Path d={chart.areaPath} fill="url(#areaFade)" />
-                <AnimatedPath
-                  d={chart.linePath}
-                  fill="none"
-                  stroke="#a8c5b5"
-                  strokeWidth={4}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeDasharray={`${chart.lineLength} ${chart.lineLength}`}
-                  strokeDashoffset={lineDashOffset as unknown as number}
-                />
-
-                <Line
-                  x1={displayedX}
-                  y1={displayedY}
-                  x2={displayedX}
-                  y2={chartHeight - CHART_INSET}
-                  stroke="rgba(168,197,181,0.24)"
-                  strokeWidth={1}
-                  strokeDasharray="4 4"
-                />
-
-                <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 8.5 : 7.2} fill="#ffffff" stroke="#a8c5b5" strokeWidth={2} />
-                <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 3.6 : 3} fill="#a8c5b5" />
-              </Svg>
-            </View>
-          </View>
-
-          <View style={styles.xLabelsRow}>
-            {safeEntries.map((point, idx) => (
-              <Pressable key={`${point.label}-${idx}`} onPress={() => setSelectedIndex(idx)} style={styles.xLabelBtn}>
-                <Text style={[styles.xLabel, selectedIndex === idx && styles.xLabelActive]}>{point.label}</Text>
-              </Pressable>
+          {/* ── History ─────────────────────────────────────────────────────── */}
+          <Text style={styles.sectionTitle}>{copy.history}</Text>
+          <View style={styles.historyCard}>
+            {safeEntries.slice().reverse().map((item, idx) => (
+              <View
+                key={`${item.date}-${idx}`}
+                style={[styles.historyRow, idx !== safeEntries.length - 1 && styles.historyDivider]}
+              >
+                <View style={styles.historyLeft}>
+                  <View style={styles.historyDateIconBox}>
+                    <Icon kind="calendar" size={16} color="#5d605a" />
+                  </View>
+                  <Text style={styles.historyDate}>{item.date}</Text>
+                </View>
+                <View style={styles.historyRight}>
+                  <Text style={styles.historyWeight}>{item.value.toFixed(1)} kg</Text>
+                  <View style={styles.historyDeltaPill}>
+                    <Text style={styles.historyDeltaText}>{item.change}</Text>
+                  </View>
+                </View>
+              </View>
             ))}
           </View>
-          <Pressable style={styles.inlineToggle} onPress={() => { setShowAdd((prev) => !prev); setFormError(null); }}>
-            <Icon kind={showAdd ? 'close' : 'plus'} size={16} color="#faf8f5" />
-            <Text style={styles.inlineToggleText}>{showAdd ? (locale === 'tr' ? 'Girişi Kapat' : 'Close Entry') : (locale === 'tr' ? 'Kilo Girişi Ekle' : 'Add Weight Entry')}</Text>
-          </Pressable>
-        </View>
+        </ScrollView>
 
-        {showAdd ? (
-          <View style={styles.inlineEntryCard}>
-            <Text style={styles.inlineEntryTitle}>{copy.addWeightEntry}</Text>
-            <Text style={styles.addSheetHint}>{locale === 'tr' ? 'Grafik ile bağlantılı, tarihli bir kayıt ekleyin.' : 'Add a dated entry linked to this chart.'}</Text>
+        {/* ── Bottom-sheet: Add weight entry ─────────────────────────────────── */}
+        <Modal
+          visible={showAdd}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowAdd(false)}
+        >
+          <Pressable style={styles.sheetBackdrop} onPress={() => setShowAdd(false)} />
+          <View style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>{copy.addWeightEntry}</Text>
+              <Pressable onPress={() => setShowAdd(false)} style={styles.sheetCloseBtn}>
+                <Icon kind="close" size={18} color="#5d605a" />
+              </Pressable>
+            </View>
+            <Text style={styles.sheetHint}>
+              {isTr ? 'Grafik ile bağlantılı, tarihli bir kayıt ekleyin.' : 'Add a dated entry linked to this chart.'}
+            </Text>
 
-            <Text style={styles.addFieldLabel}>{locale === 'tr' ? 'Ağırlık (kg)' : 'Weight (kg)'}</Text>
+            <Text style={styles.fieldLabel}>{isTr ? 'Ağırlık (kg)' : 'Weight (kg)'}</Text>
             <TextInput
               value={newWeight}
               onChangeText={setNewWeight}
               keyboardType="decimal-pad"
               placeholder={copy.weightPlaceholder}
-              placeholderTextColor="#9b9b9b"
+              placeholderTextColor="#b1b3ab"
               onFocus={() => setFocusedField('weight')}
               onBlur={() => setFocusedField(null)}
-              style={[styles.addInput, focusedField === 'weight' && styles.addInputFocused]}
+              style={[styles.fieldInput, focusedField === 'weight' && styles.fieldInputFocused]}
             />
 
-            <Text style={styles.addFieldLabel}>{locale === 'tr' ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
+            <Text style={styles.fieldLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
             <View style={styles.quickDateRow}>
               <Pressable style={styles.quickDateChip} onPress={() => setEntryDate(toYmd(new Date()))}>
-                <Text style={styles.quickDateChipText}>{locale === 'tr' ? 'Bugün' : 'Today'}</Text>
+                <Text style={styles.quickDateChipText}>{isTr ? 'Bugün' : 'Today'}</Text>
               </Pressable>
               <Pressable
                 style={styles.quickDateChip}
@@ -532,94 +743,104 @@ export default function WeightTrackingScreen({ onBack, backPreview, previewMode 
                   setEntryDate(toYmd(yesterday));
                 }}
               >
-                <Text style={styles.quickDateChipText}>{locale === 'tr' ? 'Dün' : 'Yesterday'}</Text>
+                <Text style={styles.quickDateChipText}>{isTr ? 'Dün' : 'Yesterday'}</Text>
               </Pressable>
             </View>
             <TextInput
               value={entryDate}
               onChangeText={setEntryDate}
               placeholder="2026-03-22"
-              placeholderTextColor="#9b9b9b"
+              placeholderTextColor="#b1b3ab"
               onFocus={() => setFocusedField('date')}
               onBlur={() => setFocusedField(null)}
-              style={[styles.addInput, focusedField === 'date' && styles.addInputFocused]}
+              style={[styles.fieldInput, focusedField === 'date' && styles.fieldInputFocused]}
             />
 
-            <Text style={styles.addFieldLabel}>{locale === 'tr' ? 'Not (opsiyonel)' : 'Note (optional)'}</Text>
+            <Text style={styles.fieldLabel}>{isTr ? 'Not (opsiyonel)' : 'Note (optional)'}</Text>
             <TextInput
               value={entryNote}
               onChangeText={setEntryNote}
-              placeholder={locale === 'tr' ? 'Örn. yemek değişti, aktivite arttı...' : 'e.g. diet changed, activity increased...'}
-              placeholderTextColor="#9b9b9b"
+              placeholder={isTr ? 'Örn. yemek değişti, aktivite arttı...' : 'e.g. diet changed, activity increased...'}
+              placeholderTextColor="#b1b3ab"
               onFocus={() => setFocusedField('note')}
               onBlur={() => setFocusedField(null)}
               multiline
-              style={[styles.addInput, styles.addInputNote, focusedField === 'note' && styles.addInputFocused]}
+              style={[styles.fieldInput, styles.fieldInputNote, focusedField === 'note' && styles.fieldInputFocused]}
             />
 
             {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+
             <Animated.View style={{ transform: [{ scale: savePressScale }] }}>
               <Pressable
-                style={styles.addSaveBtn}
+                style={styles.sheetSaveBtn}
                 onPress={saveEntry}
                 onPressIn={() => Animated.timing(savePressScale, { toValue: 0.98, duration: 90, useNativeDriver: true }).start()}
                 onPressOut={() => Animated.timing(savePressScale, { toValue: 1, duration: 110, useNativeDriver: true }).start()}
               >
-                <Text style={styles.addSaveText}>{locale === 'tr' ? 'Kaydı Kaydet' : 'Save Entry'}</Text>
+                <Text style={styles.sheetSaveBtnText}>{isTr ? 'Kaydı Kaydet' : 'Save Entry'}</Text>
               </Pressable>
             </Animated.View>
           </View>
-        ) : null}
+        </Modal>
 
-        <Text style={styles.sectionTitle}>{copy.smartInsights}</Text>
-        <Pressable style={styles.insightCard} onPress={onOpenHealthRecords}>
-          <View style={[styles.insightIconWrap, rangeStatus === 'within' ? styles.insightIconGood : styles.insightIconWarn]}>
-            <Icon kind={rangeStatus === 'within' ? 'check' : 'left'} size={20} color={rangeStatus === 'within' ? '#2e7d32' : '#9a6a2f'} />
-          </View>
-          <View style={styles.insightBody}>
-            <Text style={styles.insightTitle}>{primaryInsightTitle}</Text>
-            <Text style={styles.insightText}>{primaryInsightText}</Text>
-          </View>
-        </Pressable>
-
-        <Pressable style={styles.insightCard} onPress={onOpenVetVisits}>
-          <View style={styles.insightIconWrap}>
-            <Icon kind="left" size={20} color="#6f6f6f" />
-          </View>
-          <View style={styles.insightBody}>
-            <Text style={styles.insightTitle}>{copy.referenceAwareTitle}</Text>
-            <Text style={styles.insightText}>{copy.referenceAwareBody}</Text>
-          </View>
-        </Pressable>
-
-        <Text style={styles.sectionTitle}>{copy.history}</Text>
-        <View style={styles.historyCard}>
-          {safeEntries.slice().reverse().map((item, idx) => (
-            <View key={`${item.date}-${idx}`} style={[styles.historyRow, idx !== safeEntries.length - 1 && styles.historyDivider]}>
-              <View style={styles.historyLeft}>
-                <View style={styles.historyDateIcon}>
-                  <Icon kind="calendar" size={18} color="#8c8c8c" />
-                </View>
-                <Text style={styles.historyDate}>{item.date}</Text>
-              </View>
-              <View style={styles.historyRight}>
-                <Text style={styles.historyWeight}>{item.value.toFixed(1)} kg</Text>
-                <Text style={styles.historyDelta}>{item.change}</Text>
-              </View>
+        {/* ── Bottom-sheet: Weight goal ───────────────────────────────────────── */}
+        <Modal
+          visible={showGoalModal}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShowGoalModal(false)}
+        >
+          <KeyboardAvoidingView
+            style={{ flex: 1 }}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          >
+          <Pressable style={styles.sheetBackdrop} onPress={() => setShowGoalModal(false)} />
+          <View style={styles.sheet}>
+            <View style={styles.sheetHandle} />
+            <View style={styles.sheetHeader}>
+              <Text style={styles.sheetTitle}>{isTr ? 'Hedef Kilo Belirle' : 'Set Weight Goal'}</Text>
+              <Pressable onPress={() => setShowGoalModal(false)} style={styles.sheetCloseBtn}>
+                <Icon kind="close" size={18} color="#5d605a" />
+              </Pressable>
             </View>
-          ))}
-        </View>
-      </ScrollView>
+            <Text style={styles.sheetHint}>
+              {isTr ? 'Hedefe ulaşma ilerlemenizi kilo kartında görebilirsiniz.' : 'You can track progress toward this goal in the weight card.'}
+            </Text>
 
+            <Text style={styles.fieldLabel}>{isTr ? 'Hedef Ağırlık (kg)' : 'Goal Weight (kg)'}</Text>
+            <TextInput
+              value={goalInput}
+              onChangeText={setGoalInput}
+              keyboardType="decimal-pad"
+              placeholder={isTr ? 'Örn. 7.5' : 'e.g. 7.5'}
+              placeholderTextColor="#b1b3ab"
+              onFocus={() => setFocusedField('goal')}
+              onBlur={() => setFocusedField(null)}
+              style={[styles.fieldInput, focusedField === 'goal' && styles.fieldInputFocused]}
+            />
+
+            {goalError ? <Text style={styles.formError}>{goalError}</Text> : null}
+
+            <Pressable
+              style={styles.sheetSaveBtn}
+              onPress={saveGoal}
+            >
+              <Text style={styles.sheetSaveBtnText}>{isTr ? 'Hedefi Kaydet' : 'Save Goal'}</Text>
+            </Pressable>
+          </View>
+          </KeyboardAvoidingView>
+        </Modal>
       </Animated.View>
     </View>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#faf8f5',
+    backgroundColor: '#f6f4f0',
   },
   backLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -628,82 +849,101 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: 'hidden',
   },
+
+  // Content
   content: {
     paddingTop: 44,
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingBottom: 44,
     gap: 20,
   },
+
+  // Header
   headerRow: {
-    height: 56,
+    height: 52,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  topIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f1f1ef',
+  backCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  topIconBtnPlaceholder: {
-    width: 40,
-    height: 40,
-  },
-  headerTitles: {
-    flex: 1,
-    paddingHorizontal: 12,
-  },
-  petName: {
-    fontSize: 35,
-    lineHeight: 38,
-    fontWeight: '700',
-    color: '#2d2d2d',
-    letterSpacing: -0.6,
-  },
-  petSub: {
-    marginTop: 1,
-    fontSize: 22,
-    lineHeight: 26,
-    color: '#787878',
-    fontWeight: '500',
-  },
-  currentCard: {
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 20,
     shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    elevation: 3,
   },
-  currentHeader: {
+  headerPetName: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
+    color: '#30332e',
+    letterSpacing: -0.2,
+    marginHorizontal: 8,
+  },
+  expenseBadge: {
+    alignItems: 'flex-end',
+    minWidth: 80,
+  },
+  expenseBadgeLabel: {
+    fontSize: 9,
+    lineHeight: 12,
+    color: '#5d605a',
+    fontWeight: '700',
+    letterSpacing: 0.8,
+  },
+  expenseBadgeValue: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#47664a',
+    fontWeight: '800',
+  },
+  goalPill: {
+    height: 32,
+    borderRadius: 999,
+    backgroundColor: '#47664a',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    paddingHorizontal: 12,
+    gap: 4,
   },
-  currentIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(168,197,181,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  currentHeaderText: {
+  goalPillText: {
     fontSize: 13,
-    lineHeight: 20,
-    fontWeight: '600',
-    letterSpacing: 0.65,
-    color: 'rgba(120,120,120,0.8)',
+    lineHeight: 18,
+    color: '#fff',
+    fontWeight: '700',
+  },
+
+  // Current weight card
+  currentCard: {
+    borderRadius: 24,
+    backgroundColor: '#fff',
+    paddingHorizontal: 22,
+    paddingTop: 20,
+    paddingBottom: 18,
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  currentCardLabel: {
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+    color: '#5d605a',
+    textTransform: 'uppercase',
   },
   currentValueRow: {
-    marginTop: 18,
+    marginTop: 10,
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: 12,
@@ -712,75 +952,113 @@ const styles = StyleSheet.create({
     fontSize: 52,
     lineHeight: 56,
     fontWeight: '700',
-    color: '#2d2d2d',
+    color: '#30332e',
     letterSpacing: -1,
   },
   currentUnit: {
-    fontSize: 33,
-    lineHeight: 36,
+    fontSize: 30,
+    lineHeight: 34,
     fontWeight: '500',
-    color: '#8a8a8a',
+    color: '#5d605a',
   },
   changePill: {
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(129, 199, 132, 0.28)',
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#eef6ef',
+    borderWidth: 1,
+    borderColor: '#d4e8d6',
     paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   changePillText: {
     fontSize: 12,
     lineHeight: 14,
-    color: '#2e7d32',
+    color: '#47664a',
     fontWeight: '700',
   },
   currentSub: {
-    marginTop: 8,
-    fontSize: 24,
-    lineHeight: 28,
-    color: '#4e4e4e',
+    marginTop: 6,
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#5d605a',
     fontWeight: '500',
   },
+
+  // Goal progress
+  goalRow: {
+    marginTop: 14,
+    gap: 6,
+  },
+  goalCompareRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  goalCompareText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#5d605a',
+    fontWeight: '500',
+  },
+  goalCompareValue: {
+    fontWeight: '700',
+    color: '#30332e',
+  },
+  goalBarTrack: {
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#eeeee8',
+    overflow: 'hidden',
+  },
+  goalBarFill: {
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: '#47664a',
+  },
+
   referenceLine: {
-    marginTop: 8,
+    marginTop: 10,
     fontSize: 13,
     lineHeight: 18,
-    color: '#627362',
+    color: '#5d605a',
     fontWeight: '700',
   },
   microchipLine: {
-    marginTop: 4,
-    fontSize: 12,
-    lineHeight: 17,
-    color: '#6c6c6c',
-    fontWeight: '600',
-  },
-  referenceNote: {
     marginTop: 3,
     fontSize: 12,
     lineHeight: 17,
-    color: '#7b7b7b',
+    color: '#5d605a',
     fontWeight: '500',
   },
-  sectionTitle: {
-    fontSize: 34,
-    lineHeight: 38,
-    color: '#2d2d2d',
-    fontWeight: '700',
-    letterSpacing: -0.7,
+  referenceNote: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#5d605a',
+    fontWeight: '400',
   },
+
+  // Section title
+  sectionTitle: {
+    fontSize: 22,
+    lineHeight: 28,
+    color: '#30332e',
+    fontWeight: '700',
+    letterSpacing: -0.4,
+  },
+
+  // Chart card
   chartCard: {
-    borderRadius: 20,
+    borderRadius: 24,
     backgroundColor: '#fff',
     paddingVertical: 14,
     paddingHorizontal: 10,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
   chartWrap: {
@@ -804,14 +1082,33 @@ const styles = StyleSheet.create({
   xLabel: {
     fontSize: 12,
     lineHeight: 16,
-    color: '#9b9b9b',
+    color: '#b1b3ab',
     fontWeight: '600',
   },
   xLabelActive: {
-    color: '#5f6f67',
+    color: '#47664a',
   },
+  addEntryPill: {
+    marginTop: 12,
+    marginHorizontal: 4,
+    height: 38,
+    borderRadius: 999,
+    backgroundColor: '#47664a',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  addEntryPillText: {
+    color: '#fff',
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+
+  // Insight cards
   insightCard: {
-    borderRadius: 18,
+    borderRadius: 20,
     backgroundColor: '#fff',
     paddingVertical: 16,
     paddingHorizontal: 16,
@@ -819,23 +1116,23 @@ const styles = StyleSheet.create({
     gap: 12,
     shadowColor: '#000',
     shadowOpacity: 0.04,
-    shadowRadius: 8,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  insightIconWrap: {
+  insightIconBox: {
     width: 42,
     height: 42,
-    borderRadius: 21,
-    backgroundColor: 'rgba(0,0,0,0.04)',
+    borderRadius: 12,
+    backgroundColor: '#eeeee8',
     alignItems: 'center',
     justifyContent: 'center',
   },
   insightIconGood: {
-    backgroundColor: 'rgba(129, 199, 132, 0.22)',
+    backgroundColor: '#eef6ef',
   },
   insightIconWarn: {
-    backgroundColor: 'rgba(255, 193, 7, 0.18)',
+    backgroundColor: '#fef6ea',
   },
   insightBody: {
     flex: 1,
@@ -843,29 +1140,31 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   insightTitle: {
-    fontSize: 20,
-    lineHeight: 24,
-    color: '#2d2d2d',
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#30332e',
     fontWeight: '700',
   },
   insightText: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#777',
-    fontWeight: '500',
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#5d605a',
+    fontWeight: '400',
   },
+
+  // History card
   historyCard: {
-    borderRadius: 18,
+    borderRadius: 20,
     backgroundColor: '#fff',
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.04,
-    shadowRadius: 8,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
   historyRow: {
-    minHeight: 70,
+    minHeight: 64,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -874,7 +1173,7 @@ const styles = StyleSheet.create({
   },
   historyDivider: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.06)',
+    borderBottomColor: 'rgba(177,179,171,0.2)',
   },
   historyLeft: {
     flexDirection: 'row',
@@ -882,110 +1181,121 @@ const styles = StyleSheet.create({
     gap: 10,
     flex: 1,
   },
-  historyDateIcon: {
+  historyDateIconBox: {
     width: 34,
     height: 34,
-    borderRadius: 17,
-    backgroundColor: '#f3f3f1',
+    borderRadius: 10,
+    backgroundColor: '#eeeee8',
     alignItems: 'center',
     justifyContent: 'center',
   },
   historyDate: {
-    fontSize: 22,
-    lineHeight: 25,
-    color: '#3f3f3f',
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#30332e',
     fontWeight: '500',
   },
   historyRight: {
     alignItems: 'flex-end',
-    gap: 2,
+    gap: 4,
   },
   historyWeight: {
-    fontSize: 22,
-    lineHeight: 24,
-    color: '#2d2d2d',
-    fontWeight: '700',
-  },
-  historyDelta: {
-    fontSize: 16,
-    lineHeight: 18,
-    color: '#8a8a8a',
-    fontWeight: '500',
-  },
-  inlineToggle: {
-    marginTop: 10,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#2d2d2d',
-    paddingHorizontal: 14,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  inlineToggleText: {
-    color: '#faf8f5',
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '700',
-  },
-  inlineEntryCard: {
-    marginTop: -4,
-    borderRadius: 18,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    padding: 14,
-    gap: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  inlineEntryTitle: {
     fontSize: 16,
     lineHeight: 20,
-    color: '#2d2d2d',
+    color: '#30332e',
     fontWeight: '700',
   },
-  addSheetHint: {
+  historyDeltaPill: {
+    borderRadius: 999,
+    backgroundColor: '#eeeee8',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  historyDeltaText: {
+    fontSize: 11,
+    lineHeight: 16,
+    color: '#5d605a',
+    fontWeight: '600',
+  },
+
+  // Bottom-sheet modal
+  sheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
+  sheet: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 14,
+    paddingBottom: 40,
+    gap: 12,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 40,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#b1b3ab',
+    marginBottom: 6,
+  },
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sheetTitle: {
+    fontSize: 18,
+    lineHeight: 24,
+    color: '#30332e',
+    fontWeight: '700',
+  },
+  sheetCloseBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#eeeee8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetHint: {
     fontSize: 13,
     lineHeight: 18,
-    color: '#7a7a7a',
-    fontWeight: '500',
+    color: '#5d605a',
+    fontWeight: '400',
   },
-  addFieldLabel: {
-    marginTop: 2,
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#747474',
+  fieldLabel: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: '#5d605a',
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
   },
-  addInput: {
-    height: 44,
+  fieldInput: {
+    height: 46,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    paddingHorizontal: 12,
+    borderColor: '#b1b3ab',
+    paddingHorizontal: 14,
     fontSize: 15,
-    color: '#2d2d2d',
-    backgroundColor: '#fafafa',
+    color: '#30332e',
+    backgroundColor: '#f6f4f0',
   },
-  addInputFocused: {
-    borderColor: 'rgba(168,197,181,0.95)',
+  fieldInputFocused: {
+    borderColor: '#47664a',
     backgroundColor: '#fff',
-    shadowColor: '#9bb7a7',
-    shadowOpacity: 0.22,
-    shadowRadius: 7,
+    shadowColor: '#47664a',
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  addInputNote: {
-    height: 72,
+  fieldInputNote: {
+    height: 76,
     textAlignVertical: 'top',
-    paddingTop: 11,
+    paddingTop: 12,
   },
   quickDateRow: {
     flexDirection: 'row',
@@ -993,42 +1303,134 @@ const styles = StyleSheet.create({
   },
   quickDateChip: {
     height: 30,
-    borderRadius: 15,
-    paddingHorizontal: 12,
+    borderRadius: 999,
+    paddingHorizontal: 14,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    backgroundColor: '#f8f8f6',
+    borderColor: '#b1b3ab',
+    backgroundColor: '#f6f4f0',
     alignItems: 'center',
     justifyContent: 'center',
   },
   quickDateChipText: {
     fontSize: 12,
     lineHeight: 14,
-    color: '#5f5f5f',
+    color: '#30332e',
     fontWeight: '700',
   },
   formError: {
     fontSize: 12,
     lineHeight: 16,
-    color: '#c15a5a',
+    color: '#c96a6a',
     fontWeight: '600',
   },
-  addSaveBtn: {
-    height: 42,
-    borderRadius: 12,
-    backgroundColor: '#2d2d2d',
+  sheetSaveBtn: {
+    height: 48,
+    borderRadius: 14,
+    backgroundColor: '#47664a',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 4,
   },
-  addSaveText: {
-    fontSize: 14,
-    lineHeight: 18,
+  sheetSaveBtnText: {
+    fontSize: 15,
+    lineHeight: 20,
     color: '#fff',
     fontWeight: '700',
   },
+
+  // Header placeholder (fills space when no expense badge)
+  headerPlaceholder: {
+    width: 80,
+  },
+
+  // SET GOAL card (no goal set)
+  setGoalCard: {
+    marginTop: 14,
+    borderRadius: 14,
+    backgroundColor: '#eef6ef',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.15)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  setGoalLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  setGoalTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#47664a',
+    fontWeight: '700',
+  },
+  setGoalArrow: {
+    fontSize: 16,
+    color: '#47664a',
+    fontWeight: '700',
+  },
+
+  // Goal section (goal is set)
+  goalSection: {
+    marginTop: 14,
+    borderRadius: 14,
+    backgroundColor: '#eef6ef',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.15)',
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  goalSectionTop: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  goalSectionLeft: {
+    gap: 2,
+  },
+  goalSectionRight: {
+    alignItems: 'flex-end',
+    gap: 2,
+  },
+  goalSectionLabel: {
+    fontSize: 10,
+    lineHeight: 14,
+    color: '#47664a',
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  goalSectionValue: {
+    fontSize: 20,
+    lineHeight: 24,
+    color: '#30332e',
+    fontWeight: '700',
+  },
+  goalSectionUnit: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#5d605a',
+  },
+  goalDiffLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#5d605a',
+    fontWeight: '600',
+  },
+  goalDiffValue: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  goalEditHint: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#47664a',
+    fontWeight: '600',
+    textAlign: 'right',
+  },
 });
-
-
-
-
-

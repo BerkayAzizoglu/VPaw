@@ -306,6 +306,25 @@ export default function HealthHubScreen({
             <Text style={s.headerLabel}>{isTr ? 'SAĞLIK KAYITLARI' : 'CARE RECORDS'}</Text>
             <Text style={s.headerTitle}>{isTr ? 'Sağlık Merkezi' : 'Health Hub'}</Text>
           </View>
+          {summary.totalExpenses ? (
+            <View style={s.headerExpensesBadge}>
+              <Text style={s.headerExpensesLabel}>{isTr ? 'TOPLAM HARCAMA' : 'TOTAL SPEND'}</Text>
+              <Text style={s.headerExpensesAmount}>
+                {summary.totalExpenses.total.toLocaleString('tr-TR')}
+                <Text style={s.headerExpensesCurrency}> {summary.totalExpenses.currency}</Text>
+              </Text>
+              {summary.totalExpenses.breakdown.length > 0 ? (
+                <View style={s.headerExpensesBreakRow}>
+                  {summary.totalExpenses.breakdown.map((item) => (
+                    <View key={item.label} style={s.headerExpensesBreakItem}>
+                      <View style={[s.headerExpensesDot, { backgroundColor: item.color }]} />
+                      <Text style={s.headerExpensesBreakText}>{item.label}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
         </Animated.View>
 
         {/* ── QUICK STATS STRIP ── */}
@@ -326,30 +345,36 @@ export default function HealthHubScreen({
           </View>
         </Animated.View>
 
-        {/* ── TOTAL EXPENSES DARK CARD ── */}
+        {/* ── TOTAL EXPENSES CARD ── */}
         {summary.totalExpenses ? (
           <Animated.View style={[s.expensesCard, { opacity: fadeAnim }]}>
-            <View style={s.expensesTopRow}>
-              <Text style={s.expensesLabel}>{isTr ? 'TOPLAM HARCAMA' : 'TOTAL EXPENSES'}</Text>
-              <View style={s.expensesYearPill}>
-                <Text style={s.expensesYearText}>{new Date().getFullYear()}</Text>
+            {/* accent bar */}
+            <View style={s.expensesAccentBar} />
+            <View style={s.expensesInner}>
+              <View style={s.expensesTopRow}>
+                <Text style={s.expensesLabel}>{isTr ? 'TOPLAM HARCAMA' : 'TOTAL EXPENSES'}</Text>
+                <View style={s.expensesYearPill}>
+                  <Text style={s.expensesYearText}>{new Date().getFullYear()}</Text>
+                </View>
               </View>
+              <View style={s.expensesTotalRow}>
+                <Text style={s.expensesTotal}>
+                  {summary.totalExpenses.total.toLocaleString('tr-TR')}
+                </Text>
+                <Text style={s.expensesCurrency}>{summary.totalExpenses.currency}</Text>
+              </View>
+              {summary.totalExpenses.breakdown.length > 0 ? (
+                <View style={s.expensesBreakRow}>
+                  {summary.totalExpenses.breakdown.map((item) => (
+                    <View key={item.label} style={s.expensesBreakItem}>
+                      <View style={[s.expensesDot, { backgroundColor: item.color }]} />
+                      <Text style={s.expensesBreakLabel}>{item.label}</Text>
+                      <Text style={s.expensesBreakAmt}>{item.amount.toLocaleString('tr-TR')}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
             </View>
-            <Text style={s.expensesTotal}>
-              {summary.totalExpenses.total.toLocaleString('tr-TR')}
-              <Text style={s.expensesCurrency}> {summary.totalExpenses.currency}</Text>
-            </Text>
-            {summary.totalExpenses.breakdown.length > 0 ? (
-              <View style={s.expensesBreakRow}>
-                {summary.totalExpenses.breakdown.map((item) => (
-                  <View key={item.label} style={s.expensesBreakItem}>
-                    <View style={[s.expensesDot, { backgroundColor: item.color }]} />
-                    <Text style={s.expensesBreakLabel}>{item.label}</Text>
-                    <Text style={s.expensesBreakAmt}>{item.amount.toLocaleString('tr-TR')}</Text>
-                  </View>
-                ))}
-              </View>
-            ) : null}
           </Animated.View>
         ) : null}
 
@@ -398,6 +423,60 @@ export default function HealthHubScreen({
             </Pressable>
           ))}
         </Animated.View>
+
+        {/* ── EXPENSE CHART ── */}
+        {summary.totalExpenses && summary.totalExpenses.breakdown.length > 0 ? (() => {
+          const { total, currency, breakdown } = summary.totalExpenses;
+          return (
+            <Animated.View style={[s.expenseChartCard, { opacity: fadeAnim }]}>
+              <View style={s.expenseChartHeader}>
+                <Text style={s.expenseChartTitle}>{isTr ? 'Harcama Analizi' : 'Expense Breakdown'}</Text>
+                <View style={s.expenseChartYearPill}>
+                  <Text style={s.expenseChartYearText}>{new Date().getFullYear()}</Text>
+                </View>
+              </View>
+
+              {/* Stacked proportional bar */}
+              <View style={s.expenseStackBar}>
+                {breakdown.map((item, i) => (
+                  <View
+                    key={item.label}
+                    style={[
+                      s.expenseStackSegment,
+                      { flex: item.amount / total, backgroundColor: item.color },
+                      i === 0 && s.expenseStackFirst,
+                      i === breakdown.length - 1 && s.expenseStackLast,
+                    ]}
+                  />
+                ))}
+              </View>
+
+              {/* Per-category rows */}
+              <View style={s.expenseChartRows}>
+                {breakdown.map((item) => {
+                  const pct = Math.round((item.amount / total) * 100);
+                  return (
+                    <View key={item.label} style={s.expenseChartRow}>
+                      <View style={[s.expenseChartDot, { backgroundColor: item.color }]} />
+                      <Text style={s.expenseChartLabel}>{item.label}</Text>
+                      <View style={s.expenseChartBarWrap}>
+                        <View style={[s.expenseChartBarFill, { flex: item.amount / total, backgroundColor: item.color + '40' }]} />
+                        <View style={{ flex: 1 - item.amount / total }} />
+                      </View>
+                      <Text style={s.expenseChartPct}>{pct}%</Text>
+                      <Text style={s.expenseChartAmt}>{item.amount.toLocaleString('tr-TR')} {currency}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <View style={s.expenseChartFooter}>
+                <Text style={s.expenseChartFooterLabel}>{isTr ? 'Toplam' : 'Total'}</Text>
+                <Text style={s.expenseChartFooterValue}>{total.toLocaleString('tr-TR')} {currency}</Text>
+              </View>
+            </Animated.View>
+          );
+        })() : null}
 
       </ScrollView>
 
@@ -655,55 +734,107 @@ const s = StyleSheet.create({
     opacity: 0.35,
   },
 
-  // Expenses dark card
+  // Header expense badge
+  headerExpensesBadge: {
+    backgroundColor: '#eef6ef',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: 'flex-end',
+    borderWidth: 1,
+    borderColor: '#d4e8d6',
+  },
+  headerExpensesLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: '#5d7c60',
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  headerExpensesAmount: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#2e4230',
+    letterSpacing: -0.5,
+  },
+  headerExpensesCurrency: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#47664a',
+  },
+
+  // Expenses pastel premium card
   expensesCard: {
     borderRadius: 22,
-    backgroundColor: '#243028',
-    paddingHorizontal: 22,
-    paddingVertical: 20,
+    backgroundColor: '#eef6ef',
     marginBottom: 22,
-    shadowColor: '#1a2420',
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
+    borderWidth: 1,
+    borderColor: '#d4e8d6',
+    overflow: 'hidden',
+    shadowColor: '#47664a',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  expensesAccentBar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+    backgroundColor: '#47664a',
+    borderTopLeftRadius: 22,
+    borderBottomLeftRadius: 22,
+  },
+  expensesInner: {
+    paddingLeft: 22,
+    paddingRight: 20,
+    paddingVertical: 18,
   },
   expensesTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   expensesLabel: {
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 1.4,
-    color: 'rgba(255,255,255,0.55)',
+    color: '#5d7c60',
     textTransform: 'uppercase',
   },
   expensesYearPill: {
     borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: '#d4e8d6',
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   expensesYearText: {
     fontSize: 11,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.7)',
+    color: '#2e4230',
   },
-  expensesTotal: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: '#ffffff',
-    letterSpacing: -1,
-    lineHeight: 42,
+  expensesTotalRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 6,
     marginBottom: 14,
   },
+  expensesTotal: {
+    fontSize: 38,
+    fontWeight: '800',
+    color: '#2e4230',
+    letterSpacing: -1.5,
+    lineHeight: 44,
+  },
   expensesCurrency: {
-    fontSize: 20,
-    fontWeight: '600',
-    color: 'rgba(255,255,255,0.7)',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#47664a',
+    marginBottom: 6,
   },
   expensesBreakRow: {
     flexDirection: 'row',
@@ -723,12 +854,158 @@ const s = StyleSheet.create({
   expensesBreakLabel: {
     fontSize: 12,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.55)',
+    color: '#5d7c60',
   },
   expensesBreakAmt: {
     fontSize: 12,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.85)',
+    color: '#2e4230',
+  },
+
+  // Header expense badge extras
+  headerExpensesBreakRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 5,
+    flexWrap: 'wrap',
+  },
+  headerExpensesBreakItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  headerExpensesDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+  },
+  headerExpensesBreakText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#3d5a40',
+  },
+
+  // Expense chart card
+  expenseChartCard: {
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    padding: 18,
+    gap: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  expenseChartHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  expenseChartTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#30332e',
+    letterSpacing: 0.2,
+  },
+  expenseChartYearPill: {
+    borderRadius: 8,
+    backgroundColor: '#eef6ef',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  expenseChartYearText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#47664a',
+  },
+  expenseStackBar: {
+    flexDirection: 'row',
+    height: 10,
+    borderRadius: 6,
+    overflow: 'hidden',
+    backgroundColor: '#eeeee8',
+    gap: 2,
+  },
+  expenseStackSegment: {
+    height: '100%',
+  },
+  expenseStackFirst: {
+    borderTopLeftRadius: 6,
+    borderBottomLeftRadius: 6,
+  },
+  expenseStackLast: {
+    borderTopRightRadius: 6,
+    borderBottomRightRadius: 6,
+  },
+  expenseChartRows: {
+    gap: 10,
+  },
+  expenseChartRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  expenseChartDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
+  },
+  expenseChartLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5d605a',
+    width: 60,
+    flexShrink: 0,
+  },
+  expenseChartBarWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    height: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+    backgroundColor: '#f0f0ea',
+  },
+  expenseChartBarFill: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  expenseChartPct: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#9a9c95',
+    width: 32,
+    textAlign: 'right',
+    flexShrink: 0,
+  },
+  expenseChartAmt: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#30332e',
+    width: 80,
+    textAlign: 'right',
+    flexShrink: 0,
+  },
+  expenseChartFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
+    paddingTop: 10,
+  },
+  expenseChartFooterLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5d605a',
+  },
+  expenseChartFooterValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#30332e',
   },
 
   // Section headers

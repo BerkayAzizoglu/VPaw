@@ -1,5 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import Svg, { Circle, Path } from 'react-native-svg';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 type ReminderSubtype = 'vet_visit' | 'vaccine' | 'medication' | 'food' | 'litter' | 'walk' | 'custom';
 type ReminderGroup = 'medical' | 'care';
@@ -34,7 +46,11 @@ type RemindersScreenProps = {
   }) => void;
 };
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const BASE_SUBTYPES: ReminderSubtype[] = ['vaccine', 'vet_visit', 'medication', 'food', 'litter', 'walk', 'custom'];
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function subtypeLabel(subtype: ReminderSubtype, isTr: boolean) {
   if (subtype === 'vaccine') return isTr ? 'Aşı' : 'Vaccine';
@@ -46,19 +62,18 @@ function subtypeLabel(subtype: ReminderSubtype, isTr: boolean) {
   return isTr ? 'Özel' : 'Custom';
 }
 
-function subtypeColor(subtype: ReminderSubtype | undefined) {
-  if (subtype === 'vaccine') return '#5a7a9e';
-  if (subtype === 'vet_visit') return '#8a6a3a';
-  if (subtype === 'medication') return '#7a6a9a';
-  if (subtype === 'food') return '#5f7f59';
-  if (subtype === 'litter') return '#4a8a7a';
-  if (subtype === 'walk') return '#9a7a3a';
-  return '#8a8a8a';
+function subtypeAccent(subtype: ReminderSubtype | undefined): { bg: string; fg: string } {
+  if (subtype === 'vaccine') return { bg: '#ddeaf5', fg: '#3a6080' };
+  if (subtype === 'vet_visit') return { bg: '#edffe3', fg: '#3a6e45' };
+  if (subtype === 'medication') return { bg: '#ede8f5', fg: '#5a4a7a' };
+  if (subtype === 'food') return { bg: '#eef4eb', fg: '#4a6c44' };
+  if (subtype === 'litter') return { bg: '#e3f5f2', fg: '#3a6a62' };
+  if (subtype === 'walk') return { bg: '#f5ede3', fg: '#7a5a3a' };
+  return { bg: '#eeeee8', fg: '#5d605a' };
 }
 
 function isValidDate(value: string) {
-  const ms = new Date(`${value}T12:00:00.000Z`).getTime();
-  return Number.isFinite(ms);
+  return Number.isFinite(new Date(`${value}T12:00:00.000Z`).getTime());
 }
 
 function isMedicalSubtype(subtype: ReminderSubtype | undefined) {
@@ -68,90 +83,186 @@ function isMedicalSubtype(subtype: ReminderSubtype | undefined) {
 function buildRowSub(item: ReminderItem, isTr: boolean) {
   const parts: string[] = [];
   if (item.petName) parts.push(item.petName);
-  parts.push(item.date);
   if (item.subtype) parts.push(subtypeLabel(item.subtype, isTr));
-  return parts.join(' • ');
+  return parts.join(' · ');
 }
 
-function ReminderSection({
-  title,
-  items,
-  empty,
+// ─── Icons ────────────────────────────────────────────────────────────────────
+
+function Icon({ kind, size = 18, color = '#5d605a' }: { kind: 'check' | 'clock' | 'add' | 'close' | 'chevronDown' | 'chevronRight'; size?: number; color?: string }) {
+  if (kind === 'check') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M6.5 12.2L10.2 15.6L17.5 8.5" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
+  if (kind === 'clock') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="12" cy="12" r="8" stroke={color} strokeWidth={1.8} />
+        <Path d="M12 8V12L14.8 13.5" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
+  if (kind === 'add') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M12 6V18M6 12H18" stroke={color} strokeWidth={2.1} strokeLinecap="round" />
+      </Svg>
+    );
+  }
+  if (kind === 'close') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M7 7L17 17M17 7L7 17" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+      </Svg>
+    );
+  }
+  if (kind === 'chevronDown') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M6 9L12 15L18 9" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
+  // chevronRight
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M9 6L15 12L9 18" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+// ─── Reminder Row ─────────────────────────────────────────────────────────────
+
+function ReminderRow({
+  item,
+  isLast,
+  isOverdue,
+  isHistory,
   isTr,
   onComplete,
   onDelete,
-  actionLabel,
 }: {
-  title: string;
-  items: ReminderItem[];
-  empty: string;
+  item: ReminderItem;
+  isLast: boolean;
+  isOverdue: boolean;
+  isHistory: boolean;
   isTr: boolean;
   onComplete?: (id: string) => void;
   onDelete?: (id: string) => void;
-  actionLabel?: 'done' | 'overdue' | 'history';
 }) {
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const accent = subtypeAccent(item.subtype);
+  const sub = buildRowSub(item, isTr);
 
   return (
-    <>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.card}>
-        {items.length === 0 ? (
-          <Text style={styles.emptyText}>{empty}</Text>
-        ) : (
-          items.map((item, index) => (
-            <View key={item.id} style={[styles.rowWrap, index !== items.length - 1 && styles.rowDivider]}>
-              {item.subtype ? (
-                <View style={[styles.subtypeDot, { backgroundColor: subtypeColor(item.subtype) }]} />
-              ) : null}
-              <View style={styles.rowBody}>
-                <Pressable
-                  style={styles.rowPressable}
-                  onPress={() => {
-                    if (confirmDeleteId === item.id) {
-                      setConfirmDeleteId(null);
-                    } else if (actionLabel !== 'history') {
-                      onComplete?.(item.id);
-                    }
-                  }}
-                >
-                  <View style={styles.rowTextWrap}>
-                    <Text style={[styles.rowTitle, actionLabel === 'history' && styles.rowTitleHistory]}>{item.title}</Text>
-                    <Text style={styles.rowSub}>{buildRowSub(item, isTr)}</Text>
-                  </View>
-                  {actionLabel === 'overdue' ? (
-                    <Text style={styles.overdueTag}>{isTr ? 'Gecikmiş' : 'Overdue'}</Text>
-                  ) : actionLabel === 'history' ? (
-                    <Text style={styles.historyTag}>{isTr ? 'Tamam' : 'Done'}</Text>
-                  ) : (
-                    <Text style={styles.rowAction}>{isTr ? 'Tamam' : 'Done'}</Text>
-                  )}
-                </Pressable>
-
-                {onDelete ? (
-                  confirmDeleteId === item.id ? (
-                    <View style={styles.deleteConfirmRow}>
-                      <Pressable style={styles.deleteConfirmBtn} onPress={() => { onDelete(item.id); setConfirmDeleteId(null); }}>
-                        <Text style={styles.deleteConfirmText}>{isTr ? 'Sil — emin misin?' : 'Confirm Delete'}</Text>
-                      </Pressable>
-                      <Pressable onPress={() => setConfirmDeleteId(null)}>
-                        <Text style={styles.deleteCancelText}>{isTr ? 'Vazgeç' : 'Cancel'}</Text>
-                      </Pressable>
-                    </View>
-                  ) : (
-                    <Pressable style={styles.deleteBtn} onPress={() => setConfirmDeleteId(item.id)}>
-                      <Text style={styles.deleteBtnText}>✕</Text>
-                    </Pressable>
-                  )
-                ) : null}
-              </View>
-            </View>
-          ))
-        )}
+    <View style={[styles.row, !isLast && styles.rowBorder]}>
+      {/* subtype icon box */}
+      <View style={[styles.rowIconBox, { backgroundColor: accent.bg }]}>
+        <Icon kind={isOverdue ? 'clock' : 'check'} size={16} color={accent.fg} />
       </View>
-    </>
+
+      {/* body */}
+      <View style={styles.rowBody}>
+        <Text style={[styles.rowTitle, isHistory && styles.rowTitleHistory]} numberOfLines={1}>
+          {item.title}
+        </Text>
+        <View style={styles.rowMetaRow}>
+          <Text style={styles.rowDate}>{item.date}</Text>
+          {sub ? (
+            <>
+              <View style={styles.rowMetaDot} />
+              <Text style={styles.rowSub}>{sub}</Text>
+            </>
+          ) : null}
+        </View>
+      </View>
+
+      {/* right action */}
+      {isHistory ? (
+        <View style={styles.historyBadge}>
+          <Text style={styles.historyBadgeText}>{isTr ? 'Tamam' : 'Done'}</Text>
+        </View>
+      ) : confirmDelete ? (
+        <View style={styles.deleteConfirmRow}>
+          <Pressable style={styles.deleteConfirmBtn} onPress={() => { onDelete?.(item.id); setConfirmDelete(false); }}>
+            <Text style={styles.deleteConfirmText}>{isTr ? 'Sil' : 'Delete'}</Text>
+          </Pressable>
+          <Pressable onPress={() => setConfirmDelete(false)}>
+            <Icon kind="close" size={16} color="#b1b3ab" />
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.rowActions}>
+          {isOverdue ? (
+            <View style={styles.overduePill}>
+              <Text style={styles.overduePillText}>{isTr ? 'Gecikmiş' : 'Overdue'}</Text>
+            </View>
+          ) : (
+            <Pressable
+              style={styles.doneBtn}
+              onPress={() => onComplete?.(item.id)}
+              hitSlop={8}
+            >
+              <Icon kind="check" size={15} color="#47664a" />
+            </Pressable>
+          )}
+          {onDelete ? (
+            <Pressable onPress={() => setConfirmDelete(true)} hitSlop={10} style={styles.deleteTrigger}>
+              <Icon kind="close" size={13} color="#b1b3ab" />
+            </Pressable>
+          ) : null}
+        </View>
+      )}
+    </View>
   );
 }
+
+// ─── Reminder Section ─────────────────────────────────────────────────────────
+
+function ReminderSection({
+  label,
+  items,
+  isOverdue = false,
+  isHistory = false,
+  isTr,
+  onComplete,
+  onDelete,
+}: {
+  label: string;
+  items: ReminderItem[];
+  isOverdue?: boolean;
+  isHistory?: boolean;
+  isTr: boolean;
+  onComplete?: (id: string) => void;
+  onDelete?: (id: string) => void;
+}) {
+  if (items.length === 0) return null;
+
+  return (
+    <View style={styles.section}>
+      <Text style={styles.sectionLabel}>{label}</Text>
+      <View style={styles.card}>
+        {items.map((item, idx) => (
+          <ReminderRow
+            key={item.id}
+            item={item}
+            isLast={idx === items.length - 1}
+            isOverdue={isOverdue}
+            isHistory={isHistory}
+            isTr={isTr}
+            onComplete={onComplete}
+            onDelete={onDelete}
+          />
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function RemindersScreen({
   today,
@@ -168,6 +279,8 @@ export default function RemindersScreen({
   onCreate,
 }: RemindersScreenProps) {
   const isTr = locale === 'tr';
+
+  // ── state ──
   const [createOpen, setCreateOpen] = useState(false);
   const [subtype, setSubtype] = useState<ReminderSubtype>(activePetType === 'Dog' ? 'walk' : 'food');
   const [entryTitle, setEntryTitle] = useState('');
@@ -177,36 +290,23 @@ export default function RemindersScreen({
   const [showCompleted, setShowCompleted] = useState(false);
   const [group, setGroup] = useState<ReminderGroup>('medical');
   const saveScale = useMemo(() => new Animated.Value(1), []);
-  const isFullyEmpty = today.length === 0 && upcoming.length === 0 && overdue.length === 0;
 
-  const subtypeOptions = useMemo(() => {
-    if (activePetType === 'Cat') {
-      return BASE_SUBTYPES.filter((item) => item !== 'walk');
-    }
-    return BASE_SUBTYPES;
-  }, [activePetType]);
-
-  const openCreate = () => {
-    const preferred = subtypePreset ?? (activePetType === 'Dog' ? 'walk' : 'food');
-    const safePreferred = subtypeOptions.includes(preferred) ? preferred : subtypeOptions[0];
-    setSubtype(safePreferred);
-    setEntryTitle('');
-    setEntryDate(new Date().toISOString().slice(0, 10));
-    setError('');
-    setCreateOpen(true);
-  };
-
+  // ── entrance animation ──
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(16)).current;
   useEffect(() => {
-    if (!openCreateNonce) return;
-    openCreate();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [openCreateNonce]);
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 360, useNativeDriver: true }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
 
-  const isFormValid = entryTitle.trim().length > 0
-    && entryDate.trim().length > 0
-    && isValidDate(entryDate)
-    && subtypeOptions.includes(subtype)
-    && !(activePetType === 'Cat' && subtype === 'walk');
+  const subtypeOptions = useMemo(
+    () => (activePetType === 'Cat' ? BASE_SUBTYPES.filter((s) => s !== 'walk') : BASE_SUBTYPES),
+    [activePetType],
+  );
+
+  const isFullyEmpty = today.length === 0 && upcoming.length === 0 && overdue.length === 0;
 
   const filteredToday = useMemo(
     () => today.filter((item) => (group === 'medical' ? isMedicalSubtype(item.subtype) : !isMedicalSubtype(item.subtype))),
@@ -225,193 +325,249 @@ export default function RemindersScreen({
     [completed, group],
   );
 
-  const submitCreate = () => {
-    const cleanedTitle = entryTitle.trim();
-    if (!cleanedTitle) {
-      setError(isTr ? 'Başlık girin.' : 'Please enter a reminder title.');
-      return;
-    }
-    if (!isValidDate(entryDate)) {
-      setError(isTr ? 'Geçerli tarih girin (YYYY-AA-GG).' : 'Please enter a valid date (YYYY-MM-DD).');
-      return;
-    }
-    if (!subtypeOptions.includes(subtype)) {
-      setError(isTr ? 'Geçerli bir tür seçin.' : 'Please select a valid reminder type.');
-      return;
-    }
+  // ── create ──
+  const openCreate = () => {
+    const preferred = subtypePreset ?? (activePetType === 'Dog' ? 'walk' : 'food');
+    const safePreferred = subtypeOptions.includes(preferred) ? preferred : subtypeOptions[0];
+    setSubtype(safePreferred);
+    setEntryTitle('');
+    setEntryDate(new Date().toISOString().slice(0, 10));
+    setError('');
+    setCreateOpen(true);
+  };
 
-    onCreate?.({
-      petId: activePetId,
-      subtype,
-      title: cleanedTitle,
-      date: entryDate,
-    });
+  useEffect(() => {
+    if (!openCreateNonce) return;
+    openCreate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openCreateNonce]);
+
+  const isFormValid =
+    entryTitle.trim().length > 0 &&
+    isValidDate(entryDate) &&
+    subtypeOptions.includes(subtype) &&
+    !(activePetType === 'Cat' && subtype === 'walk');
+
+  const submitCreate = () => {
+    if (!entryTitle.trim()) { setError(isTr ? 'Başlık girin.' : 'Please enter a title.'); return; }
+    if (!isValidDate(entryDate)) { setError(isTr ? 'Geçerli tarih girin (YYYY-AA-GG).' : 'Enter a valid date (YYYY-MM-DD).'); return; }
+    if (!subtypeOptions.includes(subtype)) { setError(isTr ? 'Geçerli tür seçin.' : 'Select a valid type.'); return; }
+    onCreate?.({ petId: activePetId, subtype, title: entryTitle.trim(), date: entryDate });
     setCreateOpen(false);
   };
+
+  // ── stats ──
+  const totalActive = today.length + upcoming.length + overdue.length;
+  const overdueCount = overdue.length;
 
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>{isTr ? 'Hatırlatmalar' : 'Reminders'}</Text>
-          <Pressable style={styles.addBtn} onPress={openCreate}>
-            <Text style={styles.addBtnText}>{isTr ? '+ Ekle' : '+ Add'}</Text>
-          </Pressable>
-        </View>
 
-        <View style={styles.groupRow}>
-          <Pressable
-            style={[styles.groupChip, group === 'medical' && styles.groupChipActive]}
-            onPress={() => setGroup('medical')}
-          >
-            <Text style={[styles.groupChipText, group === 'medical' && styles.groupChipTextActive]}>
-              {isTr ? 'Tıbbi Takip' : 'Medical Follow-up'}
-            </Text>
-          </Pressable>
-          <Pressable
-            style={[styles.groupChip, group === 'care' && styles.groupChipActive]}
-            onPress={() => setGroup('care')}
-          >
-            <Text style={[styles.groupChipText, group === 'care' && styles.groupChipTextActive]}>
-              {isTr ? 'Günlük Bakım' : 'Daily Care'}
-            </Text>
-          </Pressable>
-        </View>
-
-        {isFullyEmpty ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyTitle}>{isTr ? 'Hatırlatma yok' : 'No reminders set'}</Text>
-            <Text style={styles.emptyBody}>{isTr ? 'İlk hatırlatmanı ekle ve takipte kal.' : 'Create your first reminder to stay on track.'}</Text>
-            <Pressable style={styles.emptyCta} onPress={openCreate}>
-              <Text style={styles.emptyCtaText}>{isTr ? 'Hatırlatma Ekle' : 'Add Reminder'}</Text>
-            </Pressable>
+        {/* ── Header ── */}
+        <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          <View>
+            <Text style={styles.headerLabel}>{isTr ? 'PLANLAMA' : 'PLANNING'}</Text>
+            <Text style={styles.headerTitle}>{isTr ? 'Hatırlatmalar' : 'Reminders'}</Text>
           </View>
-        ) : null}
+          <Pressable style={styles.addPill} onPress={openCreate}>
+            <Icon kind="add" size={15} color="#fff" />
+            <Text style={styles.addPillText}>{isTr ? 'Ekle' : 'Add'}</Text>
+          </Pressable>
+        </Animated.View>
 
-        <ReminderSection
-          title={isTr ? 'Bugün' : 'Today'}
-          items={filteredToday}
-          empty={isTr ? 'Bugün hatırlatma yok.' : 'No reminders for today.'}
-          isTr={isTr}
-          onComplete={onComplete}
-          onDelete={onDeleteReminder}
-          actionLabel="done"
-        />
-        <ReminderSection
-          title={isTr ? 'Yaklaşan' : 'Upcoming'}
-          items={filteredUpcoming}
-          empty={isTr ? 'Yaklaşan hatırlatma yok.' : 'No upcoming reminders.'}
-          isTr={isTr}
-          onComplete={onComplete}
-          onDelete={onDeleteReminder}
-          actionLabel="done"
-        />
-        <ReminderSection
-          title={isTr ? 'Gecikmiş' : 'Overdue'}
-          items={filteredOverdue}
-          empty={isTr ? 'Gecikmiş hatırlatma yok.' : 'No overdue reminders.'}
-          isTr={isTr}
-          onComplete={onComplete}
-          onDelete={onDeleteReminder}
-          actionLabel="overdue"
-        />
+        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
 
-        {filteredCompleted.length > 0 ? (
-          <>
-            <Pressable style={styles.completedToggle} onPress={() => setShowCompleted((v) => !v)}>
-              <Text style={styles.completedToggleText}>
-                {isTr
-                  ? `${showCompleted ? '▾' : '▸'} Geçmiş (${filteredCompleted.length})`
-                  : `${showCompleted ? '▾' : '▸'} History (${filteredCompleted.length})`}
+          {/* ── Stats row ── */}
+          {!isFullyEmpty && (
+            <View style={styles.statsRow}>
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{totalActive}</Text>
+                <Text style={styles.statLabel}>{isTr ? 'AKTİF' : 'ACTIVE'}</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={[styles.statValue, overdueCount > 0 && styles.statValueDanger]}>{overdueCount}</Text>
+                <Text style={styles.statLabel}>{isTr ? 'GECİKMİŞ' : 'OVERDUE'}</Text>
+              </View>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <Text style={styles.statValue}>{completed.length}</Text>
+                <Text style={styles.statLabel}>{isTr ? 'TAMAMLANAN' : 'COMPLETED'}</Text>
+              </View>
+            </View>
+          )}
+
+          {/* ── Group tabs ── */}
+          <View style={styles.groupRow}>
+            <Pressable
+              style={[styles.groupChip, group === 'medical' && styles.groupChipActive]}
+              onPress={() => setGroup('medical')}
+            >
+              <Text style={[styles.groupChipText, group === 'medical' && styles.groupChipTextActive]}>
+                {isTr ? 'Tıbbi Takip' : 'Medical'}
               </Text>
             </Pressable>
-            {showCompleted ? (
-              <ReminderSection
-                title=""
-                items={filteredCompleted}
-                empty=""
-                isTr={isTr}
-                onDelete={onDeleteReminder}
-                actionLabel="history"
-              />
-            ) : null}
-          </>
-        ) : null}
+            <Pressable
+              style={[styles.groupChip, group === 'care' && styles.groupChipActive]}
+              onPress={() => setGroup('care')}
+            >
+              <Text style={[styles.groupChipText, group === 'care' && styles.groupChipTextActive]}>
+                {isTr ? 'Günlük Bakım' : 'Daily Care'}
+              </Text>
+            </Pressable>
+          </View>
+
+          {/* ── Empty state ── */}
+          {isFullyEmpty && (
+            <View style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>{isTr ? 'Hatırlatma yok' : 'No reminders yet'}</Text>
+              <Text style={styles.emptyBody}>
+                {isTr
+                  ? 'İlk hatırlatmanı ekle ve takipte kal.'
+                  : 'Create your first reminder to stay on track.'}
+              </Text>
+              <Pressable style={styles.emptyCta} onPress={openCreate}>
+                <Text style={styles.emptyCtaText}>{isTr ? 'Hatırlatma Ekle' : 'Add Reminder'}</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* ── Overdue ── */}
+          <ReminderSection
+            label={isTr ? 'GECİKMİŞ' : 'OVERDUE'}
+            items={filteredOverdue}
+            isOverdue
+            isTr={isTr}
+            onComplete={onComplete}
+            onDelete={onDeleteReminder}
+          />
+
+          {/* ── Today ── */}
+          <ReminderSection
+            label={isTr ? 'BUGÜN' : 'TODAY'}
+            items={filteredToday}
+            isTr={isTr}
+            onComplete={onComplete}
+            onDelete={onDeleteReminder}
+          />
+
+          {/* ── Upcoming ── */}
+          <ReminderSection
+            label={isTr ? 'YAKLAŞAN' : 'UPCOMING'}
+            items={filteredUpcoming}
+            isTr={isTr}
+            onComplete={onComplete}
+            onDelete={onDeleteReminder}
+          />
+
+          {/* ── Completed toggle ── */}
+          {filteredCompleted.length > 0 && (
+            <Pressable
+              style={styles.completedToggle}
+              onPress={() => setShowCompleted((v) => !v)}
+            >
+              <Text style={styles.completedToggleText}>
+                {isTr ? `Geçmiş (${filteredCompleted.length})` : `History (${filteredCompleted.length})`}
+              </Text>
+              <Icon kind={showCompleted ? 'chevronDown' : 'chevronRight'} size={15} color="#5d605a" />
+            </Pressable>
+          )}
+          {showCompleted && (
+            <ReminderSection
+              label=""
+              items={filteredCompleted}
+              isHistory
+              isTr={isTr}
+              onDelete={onDeleteReminder}
+            />
+          )}
+
+        </Animated.View>
       </ScrollView>
 
+      {/* ── Create Modal ── */}
       <Modal
         visible={createOpen}
-        transparent={false}
+        transparent
         animationType="slide"
-        presentationStyle="fullScreen"
-        statusBarTranslucent={false}
         onRequestClose={() => setCreateOpen(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
+        <View style={styles.modalBackdrop}>
+          <Pressable style={styles.modalDismiss} onPress={() => setCreateOpen(false)} />
+          <View style={styles.modalSheet}>
+            {/* handle */}
+            <View style={styles.modalHandle} />
+
             <Text style={styles.modalTitle}>{isTr ? 'Hatırlatma Ekle' : 'Add Reminder'}</Text>
 
-            <Text style={styles.fieldLabel}>{isTr ? 'Tür' : 'Type'}</Text>
-            <View style={styles.chips}>
-              {subtypeOptions.map((item) => (
-                <Pressable
-                  key={item}
-                  style={({ pressed }) => [
-                    styles.chip,
-                    subtype !== item && styles.chipInactive,
-                    subtype === item && styles.chipActive,
-                    pressed && styles.chipPressed,
-                  ]}
-                  onPress={() => setSubtype(item)}
-                >
-                  <View style={[styles.chipDot, { backgroundColor: subtypeColor(item) }]} />
-                  <Text style={[styles.chipText, subtype === item && styles.chipTextActive]}>{subtypeLabel(item, isTr)}</Text>
-                </Pressable>
-              ))}
-            </View>
+            {/* subtype chips */}
+            <Text style={styles.modalFieldLabel}>{isTr ? 'Tür' : 'Type'}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subtypeScroll}>
+              {subtypeOptions.map((item) => {
+                const accent = subtypeAccent(item);
+                const isActive = subtype === item;
+                return (
+                  <Pressable
+                    key={item}
+                    style={[
+                      styles.subtypeChip,
+                      isActive
+                        ? { backgroundColor: accent.bg, borderColor: accent.fg }
+                        : styles.subtypeChipInactive,
+                    ]}
+                    onPress={() => setSubtype(item)}
+                  >
+                    <View style={[styles.subtypeDot, { backgroundColor: isActive ? accent.fg : '#b1b3ab' }]} />
+                    <Text style={[styles.subtypeChipText, isActive && { color: accent.fg }]}>
+                      {subtypeLabel(item, isTr)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
 
-            <Text style={styles.fieldLabel}>{isTr ? 'Başlık' : 'Title'}</Text>
+            {/* title */}
+            <Text style={styles.modalFieldLabel}>{isTr ? 'Başlık' : 'Title'}</Text>
             <TextInput
-              style={[styles.input, focusedField === 'title' && styles.inputFocused]}
+              style={[styles.modalInput, focusedField === 'title' && styles.modalInputFocused]}
               placeholder={isTr ? 'Hatırlatma başlığı' : 'Reminder title'}
-              placeholderTextColor="#a4a4a4"
+              placeholderTextColor="#b1b3ab"
               value={entryTitle}
-              onChangeText={setEntryTitle}
+              onChangeText={(v) => { setEntryTitle(v); setError(''); }}
               onFocus={() => setFocusedField('title')}
               onBlur={() => setFocusedField(null)}
             />
 
-            <Text style={styles.fieldLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
+            {/* date */}
+            <Text style={styles.modalFieldLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
             <TextInput
-              style={[styles.input, focusedField === 'date' && styles.inputFocused]}
-              placeholder="2026-03-22"
-              placeholderTextColor="#a4a4a4"
+              style={[styles.modalInput, focusedField === 'date' && styles.modalInputFocused]}
+              placeholder="2026-04-15"
+              placeholderTextColor="#b1b3ab"
               value={entryDate}
-              onChangeText={setEntryDate}
+              onChangeText={(v) => { setEntryDate(v); setError(''); }}
               autoCapitalize="none"
+              keyboardType="numbers-and-punctuation"
               onFocus={() => setFocusedField('date')}
               onBlur={() => setFocusedField(null)}
             />
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+            {error ? <Text style={styles.modalError}>{error}</Text> : null}
 
             <View style={styles.modalActions}>
-              <Pressable style={styles.secondaryBtn} onPress={() => setCreateOpen(false)}>
-                <Text style={styles.secondaryBtnText}>{isTr ? 'İptal' : 'Cancel'}</Text>
+              <Pressable style={styles.modalCancelBtn} onPress={() => setCreateOpen(false)}>
+                <Text style={styles.modalCancelText}>{isTr ? 'İptal' : 'Cancel'}</Text>
               </Pressable>
-              <Animated.View style={{ transform: [{ scale: saveScale }] }}>
+              <Animated.View style={[styles.modalSaveWrap, { transform: [{ scale: saveScale }] }]}>
                 <Pressable
-                  style={({ pressed }) => [
-                    styles.primaryBtn,
-                    !isFormValid && styles.primaryBtnDisabled,
-                    pressed && isFormValid && styles.primaryBtnPressed,
-                  ]}
+                  style={[styles.modalSaveBtn, !isFormValid && styles.modalSaveBtnDisabled]}
                   disabled={!isFormValid}
                   onPress={submitCreate}
-                  onPressIn={() => Animated.spring(saveScale, { toValue: 0.98, useNativeDriver: true, speed: 40, bounciness: 6 }).start()}
+                  onPressIn={() => Animated.spring(saveScale, { toValue: 0.97, useNativeDriver: true, speed: 40, bounciness: 6 }).start()}
                   onPressOut={() => Animated.spring(saveScale, { toValue: 1, useNativeDriver: true, speed: 36, bounciness: 5 }).start()}
                 >
-                  <Text style={styles.primaryBtnText}>{isTr ? 'Kaydet' : 'Save'}</Text>
+                  <Text style={styles.modalSaveText}>{isTr ? 'Kaydet' : 'Save'}</Text>
                 </Pressable>
               </Animated.View>
             </View>
@@ -422,369 +578,467 @@ export default function RemindersScreen({
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#faf8f5',
+    backgroundColor: '#f6f4f0',
   },
   content: {
-    paddingTop: 52,
-    paddingHorizontal: 24,
+    paddingTop: 56,
+    paddingHorizontal: 20,
     paddingBottom: 120,
-    gap: 14,
+    gap: 0,
   },
+
+  // ── Header ──
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  headerLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    color: '#5d605a',
+    textTransform: 'uppercase',
+    marginBottom: 4,
   },
   headerTitle: {
     fontSize: 30,
+    fontWeight: '800',
+    color: '#30332e',
+    letterSpacing: -0.8,
     lineHeight: 34,
-    color: '#2d2d2d',
-    fontWeight: '700',
-    letterSpacing: -0.6,
   },
-  addBtn: {
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#2d2d2d',
-    paddingHorizontal: 12,
+  addPill: {
+    height: 38,
+    paddingHorizontal: 16,
+    borderRadius: 999,
+    backgroundColor: '#47664a',
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 6,
+    shadowColor: '#47664a',
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
   },
-  addBtnText: {
-    color: '#faf8f5',
-    fontSize: 12,
+  addPillText: {
+    fontSize: 14,
     fontWeight: '700',
+    color: '#fff',
   },
+
+  // ── Stats row ──
+  statsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+  },
+  statValue: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#30332e',
+    letterSpacing: -0.5,
+  },
+  statValueDanger: {
+    color: '#c96a6a',
+  },
+  statLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#5d605a',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  statDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: '#eeeee8',
+    alignSelf: 'center',
+  },
+
+  // ── Group tabs ──
   groupRow: {
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 20,
   },
   groupChip: {
     flex: 1,
-    minHeight: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
+    height: 40,
+    borderRadius: 12,
     backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e4e4dc',
     alignItems: 'center',
     justifyContent: 'center',
   },
   groupChipActive: {
-    borderColor: '#7f9a70',
-    backgroundColor: '#eef5ea',
+    backgroundColor: '#47664a',
+    borderColor: '#47664a',
   },
   groupChipText: {
-    color: '#6f6f6f',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#5d605a',
   },
   groupChipTextActive: {
-    color: '#4f6b43',
+    color: '#fff',
+    fontWeight: '700',
   },
+
+  // ── Empty state ──
   emptyCard: {
-    borderRadius: 16,
     backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 6,
+    borderRadius: 24,
+    padding: 28,
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   emptyTitle: {
-    color: '#2d2d2d',
-    fontSize: 15,
-    lineHeight: 19,
+    fontSize: 18,
     fontWeight: '700',
+    color: '#30332e',
   },
   emptyBody: {
-    color: '#888',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
+    fontSize: 14,
+    color: '#5d605a',
+    textAlign: 'center',
+    lineHeight: 20,
   },
   emptyCta: {
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    marginTop: 6,
+    height: 40,
+    paddingHorizontal: 24,
+    borderRadius: 999,
+    backgroundColor: '#47664a',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   emptyCtaText: {
-    color: '#4f6b43',
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 14,
     fontWeight: '700',
+    color: '#fff',
   },
-  sectionTitle: {
-    marginTop: 4,
-    fontSize: 18,
-    lineHeight: 22,
-    color: '#2d2d2d',
+
+  // ── Section ──
+  section: {
+    marginBottom: 18,
+  },
+  sectionLabel: {
+    fontSize: 10,
     fontWeight: '700',
+    letterSpacing: 1.5,
+    color: '#5d605a',
+    textTransform: 'uppercase',
+    marginBottom: 10,
+    marginLeft: 2,
   },
   card: {
-    borderRadius: 16,
     backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 20,
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
-  rowWrap: {
+
+  // ── Row ──
+  row: {
     flexDirection: 'row',
-    alignItems: 'stretch',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    gap: 12,
   },
-  rowDivider: {
+  rowBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.06)',
+    borderBottomColor: '#f0f0ea',
   },
-  subtypeDot: {
-    width: 3,
-    borderRadius: 2,
-    marginVertical: 10,
-    marginLeft: 8,
+  rowIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
   rowBody: {
     flex: 1,
-  },
-  rowPressable: {
-    minHeight: 62,
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  rowTextWrap: {
-    flex: 1,
+    gap: 2,
   },
   rowTitle: {
-    color: '#2d2d2d',
     fontSize: 15,
+    fontWeight: '600',
+    color: '#30332e',
     lineHeight: 20,
-    fontWeight: '700',
   },
   rowTitleHistory: {
-    color: '#9a9a9a',
+    color: '#9a9c95',
+    textDecorationLine: 'line-through',
+  },
+  rowMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  rowDate: {
+    fontSize: 12,
     fontWeight: '500',
+    color: '#5d605a',
+  },
+  rowMetaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#b1b3ab',
   },
   rowSub: {
-    marginTop: 2,
-    color: '#7a7a7a',
     fontSize: 12,
-    lineHeight: 16,
     fontWeight: '500',
+    color: '#5d605a',
   },
-  rowAction: {
-    color: '#5f7f59',
-    fontSize: 12,
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  doneBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#eef6ef',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#d4e8d6',
+  },
+  deleteTrigger: {
+    padding: 4,
+  },
+  overduePill: {
+    height: 26,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: '#fdf0f0',
+    borderWidth: 1,
+    borderColor: '#f5dede',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  overduePillText: {
+    fontSize: 10,
     fontWeight: '700',
+    color: '#c96a6a',
   },
-  overdueTag: {
-    color: '#c26c6c',
-    fontSize: 12,
+  historyBadge: {
+    height: 26,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: '#eeeee8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyBadgeText: {
+    fontSize: 10,
     fontWeight: '700',
-  },
-  historyTag: {
-    color: '#b0b0b0',
-    fontSize: 12,
-    fontWeight: '600',
+    color: '#5d605a',
   },
   deleteConfirmRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 14,
-    paddingBottom: 10,
+    flexShrink: 0,
   },
   deleteConfirmBtn: {
-    borderRadius: 12,
-    backgroundColor: '#c26c6c',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    height: 28,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: '#fdf0f0',
+    borderWidth: 1,
+    borderColor: '#f5dede',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   deleteConfirmText: {
-    color: '#fff',
     fontSize: 12,
     fontWeight: '700',
+    color: '#c96a6a',
   },
-  deleteCancelText: {
-    color: '#8a8a8a',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  deleteBtn: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 20,
-    height: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deleteBtnText: {
-    color: '#c0c0c0',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  emptyText: {
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-    color: '#888',
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
+
+  // ── Completed toggle ──
   completedToggle: {
-    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 2,
+    marginBottom: 6,
   },
   completedToggleText: {
-    color: '#8a8a8a',
     fontSize: 13,
     fontWeight: '600',
+    color: '#5d605a',
   },
-  modalOverlay: {
+
+  // ── Modal ──
+  modalBackdrop: {
     flex: 1,
-    backgroundColor: '#faf8f5',
-    paddingHorizontal: 18,
-    paddingTop: 52,
-    paddingBottom: 24,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
   },
-  modalCard: {
+  modalDismiss: {
     flex: 1,
-    borderRadius: 20,
+  },
+  modalSheet: {
     backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    paddingHorizontal: 14,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
     paddingTop: 14,
-    paddingBottom: 12,
+    paddingBottom: 40,
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#e4e4dc',
+    alignSelf: 'center',
+    marginBottom: 20,
   },
   modalTitle: {
-    fontSize: 18,
-    lineHeight: 22,
-    color: '#2d2d2d',
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#30332e',
+    letterSpacing: -0.4,
+    marginBottom: 20,
+  },
+  modalFieldLabel: {
+    fontSize: 11,
     fontWeight: '700',
+    color: '#5d605a',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
     marginBottom: 8,
   },
-  fieldLabel: {
-    marginTop: 8,
-    marginBottom: 6,
-    color: '#7f7f7f',
-    fontSize: 12,
-    lineHeight: 14,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  chips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  subtypeScroll: {
     gap: 8,
+    paddingBottom: 18,
   },
-  chip: {
-    minHeight: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    backgroundColor: '#fff',
+  subtypeChip: {
+    height: 34,
     paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    gap: 7,
   },
-  chipActive: {
-    borderColor: '#7f9a70',
-    backgroundColor: '#eef5ea',
+  subtypeChipInactive: {
+    backgroundColor: '#f6f4f0',
+    borderColor: '#e4e4dc',
   },
-  chipInactive: {
-    opacity: 0.82,
+  subtypeDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
-  chipPressed: {
-    transform: [{ scale: 0.98 }],
-  },
-  chipDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  chipText: {
-    color: '#5f5f5f',
-    fontSize: 12,
-    lineHeight: 16,
+  subtypeChipText: {
+    fontSize: 13,
     fontWeight: '600',
+    color: '#5d605a',
   },
-  chipTextActive: {
-    color: '#4f6b43',
+  modalInput: {
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#e4e4dc',
+    backgroundColor: '#f9f8f6',
+    paddingHorizontal: 16,
+    fontSize: 15,
+    color: '#30332e',
+    marginBottom: 14,
   },
-  input: {
-    minHeight: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
+  modalInputFocused: {
+    borderColor: '#47664a',
     backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    color: '#2d2d2d',
-    fontSize: 14,
   },
-  inputFocused: {
-    borderColor: '#9ab395',
-    shadowColor: '#8ca486',
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  errorText: {
-    marginTop: 8,
-    color: '#c26c6c',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
+  modalError: {
+    fontSize: 13,
+    color: '#c96a6a',
+    fontWeight: '500',
+    marginBottom: 10,
   },
   modalActions: {
-    marginTop: 14,
     flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
+    gap: 12,
+    marginTop: 6,
   },
-  secondaryBtn: {
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
+  modalCancelBtn: {
+    flex: 1,
+    height: 50,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: '#e4e4dc',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  secondaryBtnText: {
-    color: '#5f5f5f',
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  primaryBtn: {
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#2d2d2d',
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryBtnDisabled: {
-    opacity: 0.55,
-  },
-  primaryBtnPressed: {
-    opacity: 0.92,
-  },
-  primaryBtnText: {
-    color: '#faf8f5',
-    fontSize: 13,
+  modalCancelText: {
+    fontSize: 15,
     fontWeight: '700',
+    color: '#5d605a',
+  },
+  modalSaveWrap: {
+    flex: 2,
+  },
+  modalSaveBtn: {
+    height: 50,
+    borderRadius: 14,
+    backgroundColor: '#47664a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#47664a',
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  modalSaveBtnDisabled: {
+    backgroundColor: '#b1b3ab',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  modalSaveText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

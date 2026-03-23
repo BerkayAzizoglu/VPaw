@@ -4,6 +4,7 @@ import {
   Animated,
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -36,6 +37,8 @@ export type CreateVetVisitPayload = {
   date: string;
   clinic?: string;
   reason: VetVisitReasonCategory;
+  amount?: number;
+  currency?: string;
   note?: string;
   reminderEnabled: boolean;
   reminderDate?: string;
@@ -64,7 +67,8 @@ export type VisitItem = {
   title: string;
   clinic: string;
   doctor: string;
-  amount?: string;
+  amount?: number;
+  currency?: string;
   paymentText?: string;
   attachments: string[];
   attachPlaceholder?: boolean;
@@ -138,11 +142,15 @@ function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethosc
 const MONTHS_EN = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 const MONTHS_TR = ['OCA','ŞUB','MAR','NİS','MAY','HAZ','TEM','AĞU','EYL','EKİ','KAS','ARA'];
 
-function FeaturedCard({ item, isTr }: { item: VisitItem; isTr: boolean }) {
+function FeaturedCard({ item, isTr, clinicName }: { item: VisitItem; isTr: boolean; clinicName?: string }) {
   const parts = item.date.split('-');
   const monthIdx = parseInt(parts[1] ?? '1', 10) - 1;
   const day = parts[2] ?? '—';
   const mon = (isTr ? MONTHS_TR : MONTHS_EN)[monthIdx] ?? '—';
+  const handleDirections = () => {
+    const query = clinicName ?? item.clinic ?? item.title ?? 'veterinary clinic';
+    Linking.openURL('https://maps.google.com/?q=' + encodeURIComponent(query));
+  };
   return (
     <View style={styles.featuredCard}>
       <View style={styles.featuredInner}>
@@ -159,9 +167,17 @@ function FeaturedCard({ item, isTr }: { item: VisitItem; isTr: boolean }) {
         </View>
       </View>
       <View style={styles.featuredDivider} />
-      <View style={styles.featuredMeta}>
-        <Icon kind="stethoscope" size={14} color="rgba(255,255,255,0.6)" />
-        <Text style={styles.featuredMetaText}>{item.title}</Text>
+      <View style={styles.featuredBottomRow}>
+        <View style={styles.featuredMeta}>
+          <Icon kind="stethoscope" size={14} color="rgba(255,255,255,0.6)" />
+          <Text style={styles.featuredMetaText}>{item.title}</Text>
+        </View>
+        <Pressable style={styles.featuredDirectionsBtn} onPress={handleDirections}>
+          <Svg width={14} height={14} viewBox="0 0 24 24" fill="white">
+            <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="white" />
+          </Svg>
+          <Text style={styles.featuredDirectionsBtnText}>{isTr ? 'Yol Tarifi' : 'Directions'}</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -169,6 +185,7 @@ function FeaturedCard({ item, isTr }: { item: VisitItem; isTr: boolean }) {
 
 function VisitCard({ item, isTr, today }: { item: VisitItem; isTr: boolean; today: string }) {
   const isPlanned = item.date > today;
+  const firstRecord = item.attachments[0];
   return (
     <View style={styles.visitCard}>
       {/* Top row */}
@@ -180,11 +197,20 @@ function VisitCard({ item, isTr, today }: { item: VisitItem; isTr: boolean; toda
           <Text style={styles.visitCardTitle}>{item.title}</Text>
           <View style={styles.visitCardMeta}>
             {item.clinic ? <Text style={styles.visitMetaText}>{item.clinic}</Text> : null}
-            {item.clinic && item.doctor ? <Text style={styles.visitMetaDot}>{'  ·  '}</Text> : null}
-            {item.doctor ? <Text style={styles.visitMetaText}>{item.doctor}</Text> : null}
+            {item.clinic && item.date ? <Text style={styles.visitMetaDot}>{'  ·  '}</Text> : null}
+            <Text style={styles.visitMetaText}>{item.date.slice(2).replace(/-/g, '.')}</Text>
           </View>
         </View>
-        <Text style={styles.visitCardDate}>{item.date.slice(2).replace(/-/g, '.')}</Text>
+        {item.amount != null ? (
+          <View style={styles.visitCardRight}>
+            <Text style={styles.visitCardAmount}>{item.amount.toLocaleString('tr-TR')} {item.currency ?? 'TL'}</Text>
+            {firstRecord ? (
+              <Text style={styles.visitCardCategory}>{firstRecord.toUpperCase()}</Text>
+            ) : null}
+          </View>
+        ) : (
+          <Text style={styles.visitCardDate}>{item.date.slice(2).replace(/-/g, '.')}</Text>
+        )}
       </View>
 
       {/* Status + amount */}
@@ -199,7 +225,6 @@ function VisitCard({ item, isTr, today }: { item: VisitItem; isTr: boolean; toda
             <Text style={styles.visitAutoReminderText}>{isTr ? 'Otomatik hatırlatma' : 'Auto-reminder'}</Text>
           </View>
         ) : null}
-        {item.amount ? <Text style={styles.visitAmount}>{item.amount}</Text> : null}
       </View>
 
       {/* Records / attachments */}
@@ -229,6 +254,8 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
   const [visitClinic, setVisitClinic] = useState('');
   const [visitReason, setVisitReason] = useState<VetVisitReasonCategory>('checkup');
   const [visitNote, setVisitNote] = useState('');
+  const [visitAmount, setVisitAmount] = useState('');
+  const [visitCurrency, setVisitCurrency] = useState('TL');
   const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderPreset, setReminderPreset] = useState<ReminderPreset>('same_day');
   const [reminderDate, setReminderDate] = useState(today);
@@ -392,6 +419,8 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
     setVisitClinic('');
     setVisitReason('checkup');
     setVisitNote('');
+    setVisitAmount('');
+    setVisitCurrency('TL');
     setReminderEnabled(false);
     setReminderPreset('same_day');
     setReminderDate(today);
@@ -486,7 +515,8 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
       title: copy.visits.v1Title,
       clinic: copy.visits.v1Clinic,
       doctor: copy.visits.v1Doctor,
-      amount: '$145.00',
+      amount: 145,
+      currency: 'USD',
       attachments: ['Checkup_Results...', 'Invoice.pdf'],
     },
     {
@@ -506,7 +536,8 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
       title: copy.visits.v3Title,
       clinic: copy.visits.v3Clinic,
       doctor: copy.visits.v3Doctor,
-      amount: '$120.00',
+      amount: 120,
+      currency: 'USD',
       attachments: [],
       attachPlaceholder: true,
     },
@@ -603,11 +634,14 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
       return;
     }
 
+    const parsedAmount = Number(visitAmount.replace(',', '.').replace(/[^0-9.]/g, ''));
     const payload: CreateVetVisitPayload = {
       date: visitDateIso,
       clinic: visitClinic.trim() || undefined,
       reason: visitReason,
       note: visitNote.trim() || undefined,
+      amount: Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : undefined,
+      currency: visitAmount.trim() ? visitCurrency : undefined,
       reminderEnabled,
       reminderDate: reminderDateIso ?? undefined,
       actions,
@@ -638,12 +672,10 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
   const plannedVisits = useMemo(() => visitsData.filter((v) => v.date > today), [visitsData, today]);
   const nextVisit = plannedVisits[0] ?? null;
 
-  const totalAmount = visitsData.reduce((sum, item) => {
-    const raw = item.amount ? Number(item.amount.replace(/[^0-9.-]/g, '')) : 0;
-    return sum + (Number.isFinite(raw) ? raw : 0);
-  }, 0);
+  const totalAmount = visitsData.reduce((sum, item) => sum + (item.amount ?? 0), 0);
+  const totalCurrency = visitsData.find((v) => v.currency)?.currency ?? 'TL';
   const visitsCountText = isTr ? `${visitsData.length} Ziyaret` : `${visitsData.length} Visits`;
-  const totalCostText = totalAmount > 0 ? `$${totalAmount.toFixed(0)} ${isTr ? 'Toplam' : 'Total'}` : copy.totalCost;
+  const totalCostText = totalAmount > 0 ? `${totalAmount.toLocaleString('tr-TR')} ${totalCurrency}` : copy.totalCost;
 
   const screenState = status;
   const showMainContent = screenState === 'ready';
@@ -698,7 +730,7 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
             {nextVisit ? (
               <>
                 <Text style={styles.sectionLabel}>{isTr ? 'SONRAKI RANDEVU' : 'NEXT APPOINTMENT'}</Text>
-                <FeaturedCard item={nextVisit} isTr={isTr} />
+                <FeaturedCard item={nextVisit} isTr={isTr} clinicName={nextVisit.clinic || nextVisit.title} />
               </>
             ) : null}
 
@@ -729,18 +761,25 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
               </>
             ) : null}
 
+            {/* ── View All History button ── */}
+            {pastVisits.length > 0 ? (
+              <Pressable style={styles.viewAllHistoryBtn}>
+                <Text style={styles.viewAllHistoryText}>{isTr ? 'Tüm Geçmiş' : 'View All History'}</Text>
+              </Pressable>
+            ) : null}
+
             {/* ── Stats grid ── */}
             {visitsData.length > 0 ? (
               <View style={styles.statsGrid}>
                 <View style={styles.statGridCard}>
                   <Text style={styles.statGridLabel}>{isTr ? 'YILLIK HARCAMA' : 'ANNUAL SPEND'}</Text>
-                  <Text style={styles.statGridValue}>{totalCostText}</Text>
-                  <Text style={styles.statGridSub}>{isTr ? 'BU YIL' : 'THIS YEAR'}</Text>
+                  <Text style={styles.statGridValue}>{totalAmount > 0 ? `${totalAmount.toLocaleString('tr-TR')} ${totalCurrency}` : copy.totalCost}</Text>
+                  <Text style={[styles.statGridSub, styles.statGridSubGreen]}>{isTr ? '↑ %12 GEÇEN YILA GÖRE' : '↑ 12% VS LAST YEAR'}</Text>
                 </View>
                 <View style={styles.statGridCard}>
                   <Text style={styles.statGridLabel}>{isTr ? 'TOPLAM ZİYARET' : 'TOTAL VISITS'}</Text>
                   <Text style={styles.statGridValue}>{String(visitsData.length)}</Text>
-                  <Text style={styles.statGridSub}>{isTr ? 'TOPLAM' : 'SINCE JOINING'}</Text>
+                  <Text style={styles.statGridSub}>{isTr ? 'KATILIMDAN BERİ' : 'SINCE JOINING'}</Text>
                 </View>
               </View>
             ) : null}
@@ -797,6 +836,26 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
                     onFocus={() => setFocusedField('visitClinic')}
                     onBlur={() => setFocusedField(null)}
                   />
+
+                  <Text style={styles.modalLabel}>{isTr ? 'Ücret (opsiyonel)' : 'Cost (optional)'}</Text>
+                  <View style={styles.amountRow}>
+                    <TextInput
+                      style={[styles.modalInput, styles.amountInput, focusedField === 'visitAmount' ? styles.modalInputFocused : null]}
+                      value={visitAmount}
+                      onChangeText={setVisitAmount}
+                      keyboardType="decimal-pad"
+                      placeholder={isTr ? 'Örn: 1200' : 'e.g. 1200'}
+                      placeholderTextColor="#a4a4a4"
+                      onFocus={() => setFocusedField('visitAmount')}
+                      onBlur={() => setFocusedField(null)}
+                    />
+                    <Pressable
+                      style={styles.currencyToggle}
+                      onPress={() => setVisitCurrency((c) => c === 'TL' ? 'USD' : c === 'USD' ? 'EUR' : 'TL')}
+                    >
+                      <Text style={styles.currencyToggleText}>{visitCurrency}</Text>
+                    </Pressable>
+                  </View>
 
                   <Text style={styles.modalLabel}>{isTr ? 'Ziyaret Nedeni' : 'Visit reason'}</Text>
                   <Text style={styles.modalLabelHint}>
@@ -1152,15 +1211,36 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.12)',
     marginBottom: 14,
   },
+  featuredBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   featuredMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    flex: 1,
   },
   featuredMetaText: {
     fontSize: 14,
     fontWeight: '500',
     color: 'rgba(255,255,255,0.65)',
+  },
+  featuredDirectionsBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  featuredDirectionsBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#ffffff',
   },
 
   // ── visit card (history item) ──────────────────────────────────────────────
@@ -1222,6 +1302,23 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#5d605a',
     flexShrink: 0,
+  },
+  visitCardRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+    flexShrink: 0,
+  },
+  visitCardAmount: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#30332e',
+  },
+  visitCardCategory: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#9a9c95',
+    letterSpacing: 0.8,
+    textAlign: 'right',
   },
   visitStatusRow: {
     flexDirection: 'row',
@@ -1301,6 +1398,18 @@ const styles = StyleSheet.create({
     color: '#30332e',
   },
 
+  // ── view all history button ────────────────────────────────────────────────
+  viewAllHistoryBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  viewAllHistoryText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#47664a',
+  },
+
   // ── stats bento grid ───────────────────────────────────────────────────────
   statsGrid: {
     flexDirection: 'row',
@@ -1309,9 +1418,9 @@ const styles = StyleSheet.create({
   },
   statGridCard: {
     flex: 1,
-    borderRadius: 22,
+    borderRadius: 24,
     backgroundColor: '#eeeee8',
-    paddingHorizontal: 18,
+    paddingHorizontal: 20,
     paddingVertical: 20,
     gap: 4,
   },
@@ -1335,6 +1444,9 @@ const styles = StyleSheet.create({
     color: '#797c75',
     letterSpacing: 0.8,
     textTransform: 'uppercase',
+  },
+  statGridSubGreen: {
+    color: '#47664a',
   },
 
   modalOverlay: {
@@ -1426,6 +1538,31 @@ const styles = StyleSheet.create({
   },
   modalInputTall: {
     minHeight: 56,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  amountInput: {
+    flex: 1,
+  },
+  currencyToggle: {
+    height: 42,
+    minWidth: 52,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: '#f6f4f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  currencyToggleText: {
+    fontSize: 13,
+    lineHeight: 16,
+    color: '#47664a',
+    fontWeight: '700',
   },
   chipsRow: {
     flexDirection: 'row',

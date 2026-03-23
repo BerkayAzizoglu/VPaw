@@ -174,12 +174,8 @@ export function getVetVisitsFromEvents(
   const events = sortByDateDesc((healthEventsByPet[petId] ?? []).filter((e) => e.type === 'vet_visit'));
   const eventVisits: VisitItem[] = events.map((event, index) => {
     const metadata = event.metadata ?? {};
-    const amountValue = typeof metadata.amount === 'number' ? metadata.amount : null;
-    const amountText = typeof metadata.amountText === 'string'
-      ? metadata.amountText
-      : amountValue != null
-        ? `$${amountValue.toFixed(2)}`
-        : undefined;
+    const amountValue = typeof metadata.amount === 'number' && metadata.amount > 0 ? metadata.amount : null;
+    const currencyValue = typeof metadata.currency === 'string' && metadata.currency.trim().length > 0 ? metadata.currency.trim() : undefined;
 
     return {
       id: event.id || `vet-${petId}-${index}`,
@@ -188,7 +184,8 @@ export function getVetVisitsFromEvents(
       title: ensureString(event.title, 'Vet Visit'),
       clinic: ensureString(metadata.clinic, 'Downtown Vet Clinic'),
       doctor: ensureString(metadata.doctor, 'Dr. Sarah Jenkins'),
-      amount: amountText,
+      amount: amountValue ?? undefined,
+      currency: currencyValue,
       paymentText: typeof metadata.paymentText === 'string' ? metadata.paymentText : undefined,
       attachments: Array.isArray(metadata.attachments) ? metadata.attachments.filter((x): x is string => typeof x === 'string') : [],
       attachPlaceholder: Boolean(metadata.attachPlaceholder),
@@ -260,6 +257,8 @@ export function getVetVisitsForUI(
         paymentText: visit.status === 'planned' ? 'Planned' : 'Recorded',
         attachments,
         attachPlaceholder: attachments.length === 0,
+        amount: visit.amount,
+        currency: visit.currency,
       },
       createdAt: visit.createdAt,
       updatedAt: visit.updatedAt,

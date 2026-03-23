@@ -14,13 +14,18 @@ type InsightsScreenProps = {
   insights?: AiInsight[];
   onInsightAction?: (insight: AiInsight) => void;
   onEmptyCta?: () => void;
+  locale?: 'en' | 'tr';
 };
 
-export default function InsightsScreen({ title = 'Summary & Insights', items, insights = [], onInsightAction, onEmptyCta }: InsightsScreenProps) {
+export default function InsightsScreen({ title, items, insights = [], onInsightAction, onEmptyCta, locale = 'en' }: InsightsScreenProps) {
+  const isTr = locale === 'tr';
+  const screenTitle = title ?? (isTr ? 'Özet & İçgörüler' : 'Summary & Insights');
+  const sectionLabel = isTr ? 'Yapay Zeka İçgörüleri' : 'AI Insights';
+
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.headerTitle}>{title}</Text>
+        <Text style={styles.headerTitle}>{screenTitle}</Text>
         <View style={styles.grid}>
           {items.map((item) => (
             <View key={item.label} style={styles.card}>
@@ -32,7 +37,7 @@ export default function InsightsScreen({ title = 'Summary & Insights', items, in
         </View>
         {insights.length > 0 ? (
           <>
-            <Text style={styles.sectionTitle}>AI Insights</Text>
+            <Text style={styles.sectionTitle}>{sectionLabel}</Text>
             <View style={styles.grid}>
               {insights.map((insight) => (
                 <View key={insight.id} style={styles.card}>
@@ -49,12 +54,12 @@ export default function InsightsScreen({ title = 'Summary & Insights', items, in
           </>
         ) : (
           <>
-            <Text style={styles.sectionTitle}>AI Insights</Text>
+            <Text style={styles.sectionTitle}>{sectionLabel}</Text>
             <View style={styles.card}>
-              <Text style={styles.emptyTitle}>No insights yet</Text>
-              <Text style={styles.cardSub}>Add some data and we'll start analyzing your pet's health.</Text>
+              <Text style={styles.emptyTitle}>{isTr ? 'Henüz içgörü yok' : 'No insights yet'}</Text>
+              <Text style={styles.cardSub}>{isTr ? 'Veri ekledikçe hayvanının sağlık analizini göstermeye başlarız.' : "Add some data and we'll start analyzing your pet's health."}</Text>
               <Pressable style={styles.cardActionBtn} onPress={onEmptyCta}>
-                <Text style={styles.cardAction}>Log Weight</Text>
+                <Text style={styles.cardAction}>{isTr ? 'Kilo Ekle' : 'Log Weight'}</Text>
               </Pressable>
             </View>
           </>

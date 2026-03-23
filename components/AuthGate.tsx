@@ -17,6 +17,7 @@ import PetHealthPassportScreen from '../screens/PetHealthPassportScreen';
 import PetProfilesScreen from '../screens/PetProfilesScreen';
 import RemindersScreen from '../screens/RemindersScreen';
 import InsightsScreen from '../screens/InsightsScreen';
+import DocumentsScreen from '../screens/DocumentsScreen';
 import HealthHubScreen, {
   type AddHealthRecordPayload,
   type AddHealthRecordType,
@@ -76,7 +77,8 @@ type AppRoute =
   | 'addPet'
   | 'settings'
   | 'passport'
-  | 'petProfiles';
+  | 'petProfiles'
+  | 'documents';
 
 type PrimaryTab = 'home' | 'healthHub' | 'reminders' | 'insights';
 export type VaccinationRecord = {
@@ -146,6 +148,7 @@ const HEALTH_EVENTS_STORAGE_KEY = 'vpaw_health_events_by_pet';
 const VET_VISITS_BY_PET_STORAGE_KEY = 'vpaw_vet_visits_by_pet';
 const MEDICAL_EVENTS_BY_PET_STORAGE_KEY = 'vpaw_medical_events_by_pet';
 const REMINDERS_BY_PET_STORAGE_KEY = 'vpaw_reminders_by_pet';
+const WEIGHT_GOALS_BY_PET_STORAGE_KEY = 'vpaw_weight_goals_by_pet';
 const MEDICATION_COURSES_BY_PET_STORAGE_KEY = 'vpaw_medication_courses_by_pet';
 const RUNTIME_STATE_STORAGE_KEY = 'vpaw_runtime_state';
 const ACTIVE_PET_STORAGE_KEY = 'vpaw_active_pet_id';
@@ -433,6 +436,7 @@ export default function AuthGate() {
   const [subBackRoute, setSubBackRoute] = useState<AppRoute>('home');
   const [petProfileBackRoute, setPetProfileBackRoute] = useState<AppRoute>('home');
   const [passportBackRoute, setPassportBackRoute] = useState<AppRoute>('home');
+  const [documentsBackRoute, setDocumentsBackRoute] = useState<AppRoute>('healthHub');
   const [vetVisitCreatePreset, setVetVisitCreatePreset] = useState<VetVisitCreatePreset | null>(null);
   const [petList, setPetList] = useState<string[]>([]);
   const [newPetTemplate, setNewPetTemplate] = useState<PetProfile | null>(null);
@@ -444,6 +448,7 @@ export default function AuthGate() {
   const [medicalEventsByPet, setMedicalEventsByPet] = useState<ByPet<MvpMedicalEvent>>(EMPTY_MEDICAL_EVENTS_BY_PET);
   const [remindersByPet, setRemindersByPet] = useState<ByPet<Reminder>>(EMPTY_REMINDERS_BY_PET);
   const [medicationCoursesByPet, setMedicationCoursesByPet] = useState<ByPet<MedicationCourse>>(EMPTY_MEDICATION_COURSES_BY_PET);
+  const [weightGoalsByPet, setWeightGoalsByPet] = useState<Record<string, number>>({});
   const [petProfiles, setPetProfiles] = useState<Record<string, PetProfile>>({});
   const [petProfilesUpdatedAt, setPetProfilesUpdatedAt] = useState<PerPetUpdatedAt>({});
   const [cloudPetProfilesUpdatedAt, setCloudPetProfilesUpdatedAt] = useState<PerPetUpdatedAt>({});
@@ -640,6 +645,7 @@ export default function AuthGate() {
           activeRaw,
           petLockRaw,
           dataResetVersionRaw,
+          weightGoalsRaw,
         ] = await Promise.all([
           getLocalItem(PET_PROFILES_STORAGE_KEY),
           getLocalItem(PET_PROFILES_UPDATED_AT_STORAGE_KEY),
@@ -655,7 +661,12 @@ export default function AuthGate() {
           getLocalItem(ACTIVE_PET_STORAGE_KEY),
           getLocalItem(PET_LOCK_STORAGE_KEY),
           getLocalItem(DATA_RESET_VERSION_STORAGE_KEY),
+          getLocalItem(WEIGHT_GOALS_BY_PET_STORAGE_KEY),
         ]);
+
+        if (weightGoalsRaw) {
+          try { setWeightGoalsByPet(JSON.parse(weightGoalsRaw) as Record<string, number>); } catch { /* ignore */ }
+        }
 
         const shouldApplyCleanReset = dataResetVersionRaw !== DATA_RESET_TARGET_VERSION;
         if (shouldApplyCleanReset) {
@@ -897,6 +908,11 @@ export default function AuthGate() {
     if (!petHydrated) return;
     setLocalItem(WEIGHTS_UPDATED_AT_STORAGE_KEY, JSON.stringify(weightsUpdatedAt)).catch(() => {});
   }, [petHydrated, weightsUpdatedAt]);
+
+  useEffect(() => {
+    if (!petHydrated) return;
+    setLocalItem(WEIGHT_GOALS_BY_PET_STORAGE_KEY, JSON.stringify(weightGoalsByPet)).catch(() => {});
+  }, [petHydrated, weightGoalsByPet]);
 
   useEffect(() => {
     if (!petHydrated) return;
@@ -1170,6 +1186,11 @@ export default function AuthGate() {
     setRoute('passport');
   };
 
+  const openDocuments = (from: AppRoute = 'healthHub') => {
+    setDocumentsBackRoute(from);
+    setRoute('documents');
+  };
+
   type DualWriteOutcome = {
     type: MedicalEventType;
     title: string;
@@ -1212,6 +1233,8 @@ export default function AuthGate() {
     vetName?: string;
     followUpDate?: string;
     notes?: string;
+    amount?: number;
+    currency?: string;
     outcomes?: DualWriteOutcome[];
   };
 
@@ -1227,6 +1250,8 @@ export default function AuthGate() {
         vetName: input.vetName,
         followUpDate: input.followUpDate,
         notes: input.notes,
+        amount: input.amount,
+        currency: input.currency,
       });
       createdVisit = created.item;
       return created.next;
@@ -1643,17 +1668,17 @@ export default function AuthGate() {
     const vaccineStatus = summary.latestVaccine?.title || (locale === 'tr' ? 'Kayıt yok' : 'No data');
     const lastVetVisit = summary.latestVet?.date ? formatReminderDateLabel(summary.latestVet.date, locale) : (locale === 'tr' ? 'Kayıt yok' : 'No data');
 
-    // Expense totals from vet visits bridge data
-    const visitItems = vetVisitsBridge ?? [];
+    // Expense totals from vet visits — uses VetVisit.amount (number) directly
+    const activeVisits = vetVisitsByPet[activePetId] ?? [];
     const expenseByCategory: Record<string, number> = {};
     let totalExpenseNum = 0;
-    for (const v of visitItems) {
-      if (!v.amount) continue;
-      const raw = Number(v.amount.replace(/[^0-9.]/g, ''));
-      if (!Number.isFinite(raw) || raw <= 0) continue;
-      totalExpenseNum += raw;
-      const cat = v.icon === 'pulse' ? 'vaccine' : 'vet';
-      expenseByCategory[cat] = (expenseByCategory[cat] ?? 0) + raw;
+    let primaryCurrency = 'TL';
+    for (const v of activeVisits) {
+      if (v.amount == null || v.amount <= 0) continue;
+      totalExpenseNum += v.amount;
+      if (v.currency) primaryCurrency = v.currency;
+      const cat = v.reasonCategory === 'vaccine' ? 'vaccine' : 'vet';
+      expenseByCategory[cat] = (expenseByCategory[cat] ?? 0) + v.amount;
     }
     const medEvents = medicalEventsByPet[activePetId] ?? [];
     const medTotal = medEvents.filter((e) => e.type === 'prescription').length * 0; // placeholder until med costs tracked
@@ -1661,7 +1686,7 @@ export default function AuthGate() {
     const totalExpenses = totalExpenseNum > 0
       ? {
           total: totalExpenseNum,
-          currency: 'TL',
+          currency: primaryCurrency,
           breakdown: [
             ...(expenseByCategory['vaccine'] ? [{ label: locale === 'tr' ? 'Aşı' : 'Vaccine', amount: expenseByCategory['vaccine'], color: '#4a8a5a' }] : []),
             ...(expenseByCategory['vet'] ? [{ label: 'Vet', amount: expenseByCategory['vet'], color: '#7a9a6a' }] : []),
@@ -2184,7 +2209,7 @@ export default function AuthGate() {
     const note = options?.note?.trim();
     addHealthEvent(activePetId, {
       type: 'weight',
-      title: 'Weight Entry',
+      title: locale === 'tr' ? 'Kilo Kaydı' : 'Weight Entry',
       description: note || nextChange,
       date,
       metadata: { value: rounded, unit: 'kg', label, note },
@@ -2310,20 +2335,24 @@ export default function AuthGate() {
 
       <View style={styles.tabBar}>
         <Pressable style={styles.tabItem} onPress={() => { setPrimaryTab('home'); setRoute('home'); }}>
-          <Home size={16} color={primaryTab === 'home' ? '#2d2d2d' : '#9a9a9a'} strokeWidth={2.3} />
+          <Home size={22} color={primaryTab === 'home' ? '#47664a' : '#9a9c95'} strokeWidth={primaryTab === 'home' ? 2.5 : 2} />
           <Text style={[styles.tabText, primaryTab === 'home' && styles.tabTextActive]}>{locale === 'tr' ? 'Ana Sayfa' : 'Home'}</Text>
+          {primaryTab === 'home' ? <View style={styles.tabDot} /> : <View style={styles.tabDotHidden} />}
         </Pressable>
         <Pressable style={styles.tabItem} onPress={() => { setPrimaryTab('healthHub'); setRoute('healthHub'); }}>
-          <HeartPulse size={16} color={primaryTab === 'healthHub' ? '#2d2d2d' : '#9a9a9a'} strokeWidth={2.3} />
+          <HeartPulse size={22} color={primaryTab === 'healthHub' ? '#47664a' : '#9a9c95'} strokeWidth={primaryTab === 'healthHub' ? 2.5 : 2} />
           <Text style={[styles.tabText, primaryTab === 'healthHub' && styles.tabTextActive]}>{locale === 'tr' ? 'Sağlık' : 'Health'}</Text>
+          {primaryTab === 'healthHub' ? <View style={styles.tabDot} /> : <View style={styles.tabDotHidden} />}
         </Pressable>
         <Pressable style={styles.tabItem} onPress={() => { setPrimaryTab('reminders'); setRoute('reminders'); }}>
-          <Bell size={16} color={primaryTab === 'reminders' ? '#2d2d2d' : '#9a9a9a'} strokeWidth={2.3} />
-          <Text style={[styles.tabText, primaryTab === 'reminders' && styles.tabTextActive]}>{locale === 'tr' ? 'Hatırlatıcılar' : 'Reminders'}</Text>
+          <Bell size={22} color={primaryTab === 'reminders' ? '#47664a' : '#9a9c95'} strokeWidth={primaryTab === 'reminders' ? 2.5 : 2} />
+          <Text style={[styles.tabText, primaryTab === 'reminders' && styles.tabTextActive]}>{locale === 'tr' ? 'Takip' : 'Reminders'}</Text>
+          {primaryTab === 'reminders' ? <View style={styles.tabDot} /> : <View style={styles.tabDotHidden} />}
         </Pressable>
         <Pressable style={styles.tabItem} onPress={() => { setPrimaryTab('insights'); setRoute('insights'); }}>
-          <ChartSpline size={16} color={primaryTab === 'insights' ? '#2d2d2d' : '#9a9a9a'} strokeWidth={2.3} />
-          <Text style={[styles.tabText, primaryTab === 'insights' && styles.tabTextActive]}>{locale === 'tr' ? 'İçgörüler' : 'Insights'}</Text>
+          <ChartSpline size={22} color={primaryTab === 'insights' ? '#47664a' : '#9a9c95'} strokeWidth={primaryTab === 'insights' ? 2.5 : 2} />
+          <Text style={[styles.tabText, primaryTab === 'insights' && styles.tabTextActive]}>{locale === 'tr' ? 'Analiz' : 'Insights'}</Text>
+          {primaryTab === 'insights' ? <View style={styles.tabDot} /> : <View style={styles.tabDotHidden} />}
         </Pressable>
       </View>
     </View>
@@ -2437,6 +2466,8 @@ export default function AuthGate() {
             status: 'completed',
             clinicName: payload.clinic,
             notes: payload.note,
+            amount: payload.amount,
+            currency: payload.currency,
             outcomes,
           });
 
@@ -2449,6 +2480,8 @@ export default function AuthGate() {
               clinic: payload.clinic || 'Veterinary Clinic',
               doctor: 'Veterinarian',
               attachments: [],
+              amount: payload.amount,
+              currency: payload.currency,
             },
           });
 
@@ -2501,6 +2534,30 @@ export default function AuthGate() {
         microchip={activePet.microchip}
         entries={weightsByPet[activePetId]}
         onAddEntry={addWeightEntryForActivePet}
+        weightGoal={weightGoalsByPet[activePetId]}
+        onSetWeightGoal={(goal) => {
+          setWeightGoalsByPet((prev) => ({ ...prev, [activePetId]: goal }));
+          // create a reminder so the user gets notified to check progress
+          const dueDate = new Date();
+          dueDate.setDate(dueDate.getDate() + 30);
+          setRemindersWithNotificationSync((prev) =>
+            createReminder(prev, {
+              petId: activePetId,
+              type: 'care',
+              subtype: 'custom',
+              title: locale === 'tr'
+                ? `${activePet.name} için ${goal} kg hedef kilo kontrolü`
+                : `${activePet.name} weight goal check — ${goal} kg`,
+              scheduledAt: dueDate.toISOString(),
+              frequency: 'once',
+              isActive: true,
+              kind: 'care_routine',
+              dueAt: dueDate.toISOString(),
+              status: 'pending',
+              sourceType: 'manual',
+            }).next,
+          );
+        }}
       />
     );
   }
@@ -2649,6 +2706,17 @@ export default function AuthGate() {
     );
   }
 
+  if (route === 'documents') {
+    return (
+      <DocumentsScreen
+        onBack={() => setRoute(documentsBackRoute)}
+        petName={petProfiles[activePetId]?.name ?? ''}
+        medicalEvents={medicalEventsByPet[activePetId] ?? []}
+        locale={locale}
+      />
+    );
+  }
+
   if (route === 'healthHub') {
     return renderPrimaryChrome(
       <HealthHubScreen
@@ -2667,7 +2735,7 @@ export default function AuthGate() {
         onOpenVaccines={() => openSubRoute('vaccinations', 'healthHub')}
         onOpenReminders={() => { setPrimaryTab('reminders'); setRoute('reminders'); }}
         onOpenWeightTracking={() => openPetProfile(activePetId, 'healthHub')}
-        onOpenDocuments={() => openPassport(activePetId, 'healthHub')}
+        onOpenDocuments={() => openDocuments('healthHub')}
       />,
     );
   }
@@ -2719,11 +2787,28 @@ export default function AuthGate() {
   if (route === 'insights') {
     return renderPrimaryChrome(
       <InsightsScreen
+        locale={locale}
         items={[
-          { label: 'Last Visit', value: healthCardSummary.lastVisit?.title ?? 'No recent visit', sub: healthCardSummary.lastVisit?.date ?? '' },
-          { label: 'Vaccines', value: String(healthCardSummary.vaccinesSummary.total), sub: healthCardSummary.vaccinesSummary.latest ?? 'No vaccine log yet' },
-          { label: 'Active Meds', value: String(healthCardSummary.activeMedications.length), sub: healthCardSummary.activeMedications[0]?.name ?? 'None' },
-          { label: 'Alerts', value: String(healthCardSummary.alerts.length), sub: healthCardSummary.alerts[0] ?? 'All clear' },
+          {
+            label: locale === 'tr' ? 'Son Ziyaret' : 'Last Visit',
+            value: healthCardSummary.lastVisit?.title ?? (locale === 'tr' ? 'Son ziyaret yok' : 'No recent visit'),
+            sub: healthCardSummary.lastVisit?.date ?? '',
+          },
+          {
+            label: locale === 'tr' ? 'Aşılar' : 'Vaccines',
+            value: String(healthCardSummary.vaccinesSummary.total),
+            sub: healthCardSummary.vaccinesSummary.latest ?? (locale === 'tr' ? 'Aşı kaydı yok' : 'No vaccine log yet'),
+          },
+          {
+            label: locale === 'tr' ? 'Aktif İlaçlar' : 'Active Meds',
+            value: String(healthCardSummary.activeMedications.length),
+            sub: healthCardSummary.activeMedications[0]?.name ?? (locale === 'tr' ? 'Yok' : 'None'),
+          },
+          {
+            label: locale === 'tr' ? 'Uyarılar' : 'Alerts',
+            value: String(healthCardSummary.alerts.length),
+            sub: healthCardSummary.alerts[0] ?? (locale === 'tr' ? 'Her şey yolunda' : 'All clear'),
+          },
         ]}
         insights={aiInsights}
         onInsightAction={handleInsightAction}
@@ -2944,36 +3029,50 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     position: 'absolute',
-    left: 12,
-    right: 88,
-    bottom: 16,
-    height: 62,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.76)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.72)',
+    left: 16,
+    right: 16,
+    bottom: 20,
+    height: 66,
+    borderRadius: 24,
+    backgroundColor: '#ffffff',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 6,
+    shadowColor: '#30332e',
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
   },
   tabItem: {
-    minWidth: 72,
+    flex: 1,
     alignItems: 'center',
-    gap: 2,
+    justifyContent: 'center',
+    gap: 3,
+    paddingTop: 6,
   },
   tabText: {
-    color: '#9a9a9a',
-    fontSize: 11,
-    lineHeight: 14,
+    color: '#9a9c95',
+    fontSize: 10,
+    lineHeight: 12,
     fontWeight: '600',
+    letterSpacing: 0.2,
   },
   tabTextActive: {
-    color: '#2d2d2d',
+    color: '#47664a',
+    fontWeight: '700',
+  },
+  tabDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#47664a',
+    marginTop: 1,
+  },
+  tabDotHidden: {
+    width: 5,
+    height: 5,
+    marginTop: 1,
   },
 });
 

@@ -57,22 +57,24 @@ type IconName =
 const fallbackAvatar = 'https://www.figma.com/api/mcp/asset/7f9b54a3-43e6-4459-a7f9-0ae7b68618e2';
 const petProfilesIconUri = Image.resolveAssetSource(require('../assets/vpaw-login-illustrator.svg')).uri;
 
-const navRows: Record<'pets' | 'health' | 'preferences', Array<{ key: string; label: string; icon: IconName }>> = {
-  pets: [
-    { key: 'pet_profiles', label: 'Pet Profiles', icon: 'user' },
-    { key: 'pet_passport', label: 'Pet Health Passport', icon: 'passport' },
-  ],
-  health: [
-    { key: 'health_records', label: 'Health Records', icon: 'health' },
-    { key: 'vet_visits', label: 'Vet Visits', icon: 'pulse' },
-    { key: 'vaccinations', label: 'Vaccinations', icon: 'syringe' },
-  ],
-  preferences: [
-    { key: 'notifications', label: 'Notifications', icon: 'bell' },
-    { key: 'settings', label: 'Settings', icon: 'settings' },
-    { key: 'support', label: 'Help & Support', icon: 'help' },
-  ],
-};
+function getNavRows(isTr: boolean): Record<'pets' | 'health' | 'preferences', Array<{ key: string; label: string; icon: IconName }>> {
+  return {
+    pets: [
+      { key: 'pet_profiles', label: isTr ? 'Hayvan Profilleri' : 'Pet Profiles', icon: 'user' },
+      { key: 'pet_passport', label: isTr ? 'Hayvan Sağlık Pasaportu' : 'Pet Health Passport', icon: 'passport' },
+    ],
+    health: [
+      { key: 'health_records', label: isTr ? 'Sağlık Kayıtları' : 'Health Records', icon: 'health' },
+      { key: 'vet_visits', label: isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits', icon: 'pulse' },
+      { key: 'vaccinations', label: isTr ? 'Aşılar' : 'Vaccinations', icon: 'syringe' },
+    ],
+    preferences: [
+      { key: 'notifications', label: isTr ? 'Bildirimler' : 'Notifications', icon: 'bell' },
+      { key: 'settings', label: isTr ? 'Ayarlar' : 'Settings', icon: 'settings' },
+      { key: 'support', label: isTr ? 'Yardım & Destek' : 'Help & Support', icon: 'help' },
+    ],
+  };
+}
 
 function AppIcon({ name, size = 16, color = '#7a7a7a', strokeWidth = 1.9 }: { name: IconName; size?: number; color?: string; strokeWidth?: number }) {
   if (name === 'home') {
@@ -213,6 +215,7 @@ function AppIcon({ name, size = 16, color = '#7a7a7a', strokeWidth = 1.9 }: { na
 export default function ProfileScreen({ onBackHome, onOpenPremium, onOpenProfileEdit, onOpenVaccinations, onOpenPetProfile, onOpenPetProfiles, onOpenHealthRecords, onOpenVetVisits, onOpenSettings, onOpenPetPassport, petProfiles, weightsByPet }: ProfileScreenProps) {
   const { locale } = useLocale();
   const isTr = locale === 'tr';
+  const navRows = getNavRows(isTr);
   const { user, signOut } = useAuth();
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [loading, setLoading] = useState(true);
@@ -259,7 +262,7 @@ export default function ProfileScreen({ onBackHome, onOpenPremium, onOpenProfile
 
   const displayName = profile?.full_name?.trim() || 'Alex Morrison';
   const sectionPets = isTr ? 'HAYVANLARIM' : 'MY PETS';
-  const sectionHealth = 'PET HEALTH';
+  const sectionHealth = isTr ? 'HAYVAN SAĞLIĞI' : 'PET HEALTH';
   const sectionPreferences = isTr ? 'TERCİHLER' : 'PREFERENCES';
   const displayEmail = user?.email ?? 'alex.morrison@example.com';
   const visiblePets = petProfiles
@@ -312,7 +315,7 @@ export default function ProfileScreen({ onBackHome, onOpenPremium, onOpenProfile
         <View style={styles.statsRow}>
           <StatCard label={isTr ? 'Hayvanlar' : 'Pets'} value={String(petsCount)} />
           <StatCard label={isTr ? 'Kayıtlar' : 'Records'} value={String(recordsCount)} />
-          <StatCard label="Sync" value={syncValue} subIcon="clock" />
+          <StatCard label={isTr ? 'Senkron' : 'Sync'} value={syncValue} subIcon="clock" />
         </View>
 
         <Pressable style={styles.premiumCard} onPress={onOpenPremium}>
