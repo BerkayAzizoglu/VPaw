@@ -4,12 +4,14 @@ import {
   Animated,
   Image,
   ImageBackground,
+  Modal,
   PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { useFonts } from 'expo-font';
@@ -32,15 +34,28 @@ const healthRecordsCardIconUri = Image.resolveAssetSource(require('../assets/hom
 const HOME_CARD_ICON_SIZE = 26;
 const HOME_CARD_ICON_SIZE_LARGE = 30;
 
-type JourneyEventItem = {
+export type JourneyEventItem = {
   id: string;
-  eventType: 'reminder' | 'vaccine' | 'vet' | 'insight';
+  eventType: 'reminder' | 'vaccine' | 'vet' | 'record' | 'insight';
   title: string;
   subtitle?: string;
   date?: string;
   urgent?: boolean;
   actionLabel?: string;
   onAction?: () => void;
+};
+
+export type NextImportantEventItem = {
+  id: string;
+  kind?: 'weight' | 'reminder' | 'visit' | 'vaccine' | 'record' | 'other';
+  title: string;
+  subtitle?: string;
+  date?: string;
+  urgent?: boolean;
+  ctaLabel?: string;
+  onPress?: () => void;
+  secondaryCtaLabel?: string;
+  onSecondaryPress?: () => void;
 };
 
 type HomePetData = {
@@ -88,6 +103,13 @@ type HomeScreenProps = {
   onAddCareReminder?: (petId: string, subtype: 'food' | 'litter' | 'walk' | 'custom') => void;
   topInsights?: AiInsight[];
   onInsightAction?: (insight: AiInsight) => void;
+  onQuickAddWeight?: (value: number) => void;
+  nextImportantEvent?: NextImportantEventItem | null;
+  healthJourneyEvents?: JourneyEventItem[];
+  summaryCard?: {
+    title: string;
+    body: string;
+  };
 };
 
 const BASE_PETS: HomePetData[] = [
@@ -210,6 +232,10 @@ export default function HomeScreen({
   onAddCareReminder,
   topInsights = [],
   onInsightAction,
+  onQuickAddWeight,
+  nextImportantEvent,
+  healthJourneyEvents,
+  summaryCard,
 }: HomeScreenProps) {
   const { locale } = useLocale();
   const { settings } = useAppSettings();
@@ -227,6 +253,9 @@ export default function HomeScreen({
   const [isGestureActive, setIsGestureActive] = useState(false);
   const isPetLockEnabled = petLockEnabled ?? false;
   const [frontImageLoaded, setFrontImageLoaded] = useState(false);
+  const [quickWeightVisible, setQuickWeightVisible] = useState(false);
+  const [quickWeightValue, setQuickWeightValue] = useState('');
+  const [quickWeightSaved, setQuickWeightSaved] = useState(false);
 
   // ── Native Animated: weight card breathing + urgent pulse ──
   const breathAnim = useRef(new Animated.Value(0)).current;
@@ -321,9 +350,21 @@ export default function HomeScreen({
   const activeWeightHistory = (activePet ? (weightsByPet?.[activePet.id] ?? []) : []).slice(-6);
   const hasWeightData = activeWeightHistory.length > 0;
 
-  const nextImportantEvent = activeUpcoming.length > 0 ? activeUpcoming[0] : null;
+  const fallbackNextImportantEvent: NextImportantEventItem | null = activeUpcoming.length > 0
+    ? {
+        id: activeUpcoming[0].id,
+        kind: 'reminder',
+        title: activeUpcoming[0].title,
+        subtitle: undefined,
+        date: activeUpcoming[0].date,
+        urgent: false,
+        ctaLabel: isTr ? 'Tamamla' : 'Done',
+        onPress: () => onCompleteReminder?.(activePet.id, activeUpcoming[0].id),
+      }
+    : null;
+  const resolvedNextImportantEvent = nextImportantEvent ?? fallbackNextImportantEvent;
 
-  const journeyEvents = useMemo<JourneyEventItem[]>(() => {
+  const fallbackJourneyEvents = useMemo<JourneyEventItem[]>(() => {
     const events: JourneyEventItem[] = [];
     for (const r of activeUpcoming) {
       events.push({ id: r.id, eventType: 'reminder', title: r.title, date: r.date });
@@ -340,6 +381,16 @@ export default function HomeScreen({
     }
     return events;
   }, [activeUpcoming, onInsightAction, topInsights]);
+  const journeyEvents = (healthJourneyEvents?.length ?? 0) > 0 ? healthJourneyEvents! : fallbackJourneyEvents;
+  const urgentCount = journeyEvents.filter((evt) => !!evt.urgent).length;
+  const summaryTitle = summaryCard?.title ?? (isTr ? 'Sağlık Özeti' : 'Health Outlook');
+  const summaryBody = summaryCard?.body ?? (resolvedNextImportantEvent
+    ? (isTr
+      ? `Sonraki adım net: ${resolvedNextImportantEvent.title}.`
+      : `Next step is clear: ${resolvedNextImportantEvent.title}.`)
+    : (isTr
+      ? 'Ufuk sakin görünüyor. Planlanan acil adım yok.'
+      : 'Your horizon looks clear. No urgent action is pending.'));
   const weightSpark = useMemo(() => {
     const chartW = 106;
     const chartH = 42;
@@ -373,6 +424,26 @@ export default function HomeScreen({
   useEffect(() => {
     setFrontImageLoaded(false);
   }, [activePet.id]);
+
+  useEffect(() => {
+    if (!quickWeightSaved) return;
+    const timer = setTimeout(() => setQuickWeightSaved(false), 1600);
+    return () => clearTimeout(timer);
+  }, [quickWeightSaved]);
+
+  const openQuickWeight = () => {
+    const parsed = Number(activePet.weight.replace(',', '.').split(' ')[0]);
+    setQuickWeightValue(Number.isFinite(parsed) && parsed > 0 ? parsed.toFixed(1) : '');
+    setQuickWeightVisible(true);
+  };
+
+  const submitQuickWeight = () => {
+    const parsed = Number(quickWeightValue.replace(',', '.'));
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+    onQuickAddWeight?.(Number(parsed.toFixed(1)));
+    setQuickWeightVisible(false);
+    setQuickWeightSaved(true);
+  };
 
   const resetCard = () => {
     Animated.spring(cardDragY, {
@@ -588,41 +659,53 @@ export default function HomeScreen({
           </Pressable>
         </Animated.View>
 
-        {/* ── SECONDARY HEALTH STRIP ── */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.stripContent}
-        >
-          <SecondaryHealthChip
-            label={isTr ? 'AŞILAR' : 'VACCINES'}
-            value={activePet.vaccines}
-            sub={activePet.vaccinesSub || (isTr ? 'Detay' : 'View all')}
-            accentColor="#5a7a5a"
-            onPress={() => onOpenVaccinations?.(activePet.id)}
-          />
-          <SecondaryHealthChip
-            label={isTr ? 'VET ZİYARETİ' : 'VET VISIT'}
-            value={activePet.vetVisits !== '—' ? activePet.vetVisits : (isTr ? 'Ekle' : 'Add')}
-            sub={activePet.vetVisitsSub || (isTr ? 'Ziyaret ekle' : 'Log a visit')}
-            accentColor="#8a6a3a"
-            onPress={() => onOpenVetVisits?.(activePet.id)}
-          />
-          <SecondaryHealthChip
-            label={isTr ? '+ KİLO' : '+ WEIGHT'}
-            value={isTr ? 'Kilo gir' : 'Log weight'}
-            sub={isTr ? 'Trendi takip et' : 'Track trend'}
-            accentColor="#4a6a8a"
-            onPress={() => onOpenPetProfile?.(activePet.id)}
-          />
-          <SecondaryHealthChip
-            label={isTr ? '+ HATIRLATMA' : '+ REMINDER'}
-            value={isTr ? 'Hatırlatma' : 'Add reminder'}
-            sub={isTr ? 'Yeni ekle' : 'New alert'}
-            accentColor="#6a5a8a"
-            onPress={onOpenAddReminder}
-          />
-        </ScrollView>
+        {/* ── NEXT IMPORTANT EVENT ── */}
+        <Text style={styles.nextSectionTitle}>{isTr ? 'Sonraki Önemli Olay' : 'Next Important Event'}</Text>
+        <View style={styles.nextCard}>
+          {resolvedNextImportantEvent ? (
+            <View style={styles.nextCardRow}>
+              <View style={[styles.nextDot, { backgroundColor: resolvedNextImportantEvent.urgent ? '#b55f53' : '#6e8f66' }]} />
+              <View style={styles.nextTextWrap}>
+                <Text style={styles.nextCardTitle}>{resolvedNextImportantEvent.title}</Text>
+                <Text style={styles.nextCardSub}>{resolvedNextImportantEvent.subtitle ?? resolvedNextImportantEvent.date}</Text>
+              </View>
+              <Pressable
+                style={styles.nextCardCta}
+                onPress={() => {
+                  if (resolvedNextImportantEvent.kind === 'weight') {
+                    openQuickWeight();
+                    return;
+                  }
+                  resolvedNextImportantEvent.onPress?.();
+                }}
+              >
+                <Text style={styles.nextCardCtaText}>{resolvedNextImportantEvent.ctaLabel ?? (isTr ? 'Aç' : 'Open')}</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.nextEmptyWrap}>
+              <Text style={styles.nextEmptyTitle}>{isTr ? 'Henüz planlı olay yok' : 'No upcoming event yet'}</Text>
+              <Text style={styles.nextEmptySub}>
+                {isTr ? 'Aşı, ziyaret veya hatırlatma ekleyerek planını başlat.' : 'Start by adding a vaccine, visit, or reminder.'}
+              </Text>
+              <Pressable style={styles.nextEmptyCta} onPress={onOpenAddReminder}>
+                <Text style={styles.nextEmptyCtaText}>{isTr ? 'Hatırlatma Ekle' : 'Add Reminder'}</Text>
+              </Pressable>
+            </View>
+          )}
+        </View>
+        {resolvedNextImportantEvent?.secondaryCtaLabel && resolvedNextImportantEvent?.onSecondaryPress ? (
+          <View style={styles.nextSecondaryRow}>
+            <Pressable style={styles.nextSecondaryCta} onPress={resolvedNextImportantEvent.onSecondaryPress}>
+              <Text style={styles.nextSecondaryCtaText}>{resolvedNextImportantEvent.secondaryCtaLabel}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {quickWeightSaved ? (
+          <View style={styles.quickSuccessWrap}>
+            <Text style={styles.quickSuccessText}>{isTr ? 'Kilo kaydı eklendi' : 'Weight entry saved'}</Text>
+          </View>
+        ) : null}
 
         {/* ── HEALTH JOURNEY ── */}
         <View style={styles.journeyHeader}>
@@ -670,7 +753,48 @@ export default function HomeScreen({
             </Pressable>
           </View>
         )}
+
+        <View style={styles.summaryCard}>
+          <View style={styles.summaryIconCircle}>
+            <View style={[styles.summaryIconDot, urgentCount > 0 && styles.summaryIconDotUrgent]} />
+          </View>
+          <View style={styles.summaryTextWrap}>
+            <Text style={styles.summaryTitle}>{summaryTitle}</Text>
+            <Text style={styles.summaryBody}>{summaryBody}</Text>
+          </View>
+        </View>
+
       </ScrollView>
+
+      <Modal
+        visible={quickWeightVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setQuickWeightVisible(false)}
+      >
+        <Pressable style={styles.quickWeightOverlay} onPress={() => setQuickWeightVisible(false)}>
+          <Pressable style={styles.quickWeightCard} onPress={() => {}}>
+            <Text style={styles.quickWeightTitle}>{isTr ? 'Hızlı Kilo Kaydı' : 'Quick Weight Entry'}</Text>
+            <Text style={styles.quickWeightSub}>{isTr ? 'Kilo değerini girin ve kaydedin.' : 'Enter weight value and save.'}</Text>
+            <TextInput
+              style={styles.quickWeightInput}
+              value={quickWeightValue}
+              onChangeText={setQuickWeightValue}
+              keyboardType="decimal-pad"
+              placeholder={isTr ? 'Örn: 5.2' : 'e.g. 5.2'}
+              placeholderTextColor="#9d9d9d"
+            />
+            <View style={styles.quickWeightActions}>
+              <Pressable style={styles.quickWeightCancel} onPress={() => setQuickWeightVisible(false)}>
+                <Text style={styles.quickWeightCancelText}>{isTr ? 'İptal' : 'Cancel'}</Text>
+              </Pressable>
+              <Pressable style={styles.quickWeightSave} onPress={submitQuickWeight}>
+                <Text style={styles.quickWeightSaveText}>{isTr ? 'Kaydet' : 'Save'}</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </Animated.View>
   );
 }
@@ -679,28 +803,6 @@ function QuickReminderChip({ label, onPress }: { label: string; onPress?: () => 
   return (
     <Pressable style={styles.quickReminderChip} onPress={onPress}>
       <Text style={styles.quickReminderChipText}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function SecondaryHealthChip({
-  label,
-  value,
-  sub,
-  accentColor,
-  onPress,
-}: {
-  label: string;
-  value: string;
-  sub: string;
-  accentColor: string;
-  onPress?: () => void;
-}) {
-  return (
-    <Pressable style={styles.stripChip} onPress={onPress}>
-      <Text style={[styles.stripChipLabel, { color: accentColor }]}>{label}</Text>
-      <Text style={styles.stripChipValue}>{value}</Text>
-      <Text style={styles.stripChipSub}>{sub}</Text>
     </Pressable>
   );
 }
@@ -731,6 +833,8 @@ function JourneyCard({
       ? '#5a7a5a'
       : eventType === 'vet'
         ? '#8a6a3a'
+        : eventType === 'record'
+          ? '#7b6b8d'
         : eventType === 'reminder'
           ? '#4a6a8a'
           : '#7a7a7a';
@@ -740,6 +844,8 @@ function JourneyCard({
       ? (isTr ? 'AŞI' : 'VACCINE')
       : eventType === 'vet'
         ? (isTr ? 'VET ZİYARETİ' : 'VET VISIT')
+        : eventType === 'record'
+          ? (isTr ? 'SAĞLIK KAYDI' : 'HEALTH RECORD')
         : eventType === 'reminder'
           ? (isTr ? 'HATIRLATMA' : 'REMINDER')
           : (isTr ? 'SAĞLIK NOTU' : 'HEALTH NOTE');
@@ -1020,6 +1126,124 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#2d2d2d',
     marginTop: 4,
+  },
+  nextSectionTitle: {
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: '700',
+    color: '#2d2d2d',
+    marginTop: 2,
+  },
+  nextCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  nextCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  nextDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  nextTextWrap: {
+    flex: 1,
+  },
+  nextCardTitle: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#2d2d2d',
+    fontWeight: '700',
+  },
+  nextCardSub: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#848484',
+    fontWeight: '500',
+  },
+  nextCardCta: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  nextCardCtaText: {
+    color: '#4f6b43',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  nextEmptyWrap: {
+    gap: 6,
+  },
+  nextEmptyTitle: {
+    color: '#2d2d2d',
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: '700',
+  },
+  nextEmptySub: {
+    color: '#868686',
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '500',
+  },
+  nextEmptyCta: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  nextEmptyCtaText: {
+    color: '#4f6b43',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  nextSecondaryRow: {
+    marginTop: -2,
+    alignItems: 'flex-end',
+  },
+  nextSecondaryCta: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.09)',
+    backgroundColor: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  nextSecondaryCtaText: {
+    color: '#6a6a6a',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+  },
+  quickSuccessWrap: {
+    marginTop: -2,
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: '#eef5ea',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  quickSuccessText: {
+    color: '#4f6b43',
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
   },
   weightCard: {
     borderRadius: 20,
@@ -1383,6 +1607,122 @@ const styles = StyleSheet.create({
   noPetBtnText: {
     color: '#fff',
     fontSize: 14,
+    fontWeight: '700',
+  },
+  summaryCard: {
+    marginTop: 4,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  summaryIconCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#eef3ee',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  summaryIconDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#6e8f66',
+  },
+  summaryIconDotUrgent: {
+    backgroundColor: '#c26c6c',
+  },
+  summaryTextWrap: {
+    flex: 1,
+  },
+  summaryTitle: {
+    color: '#2d2d2d',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  summaryBody: {
+    marginTop: 2,
+    color: '#818181',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  quickWeightOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.16)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  quickWeightCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    backgroundColor: '#fff',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  quickWeightTitle: {
+    color: '#2d2d2d',
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '700',
+  },
+  quickWeightSub: {
+    color: '#7f7f7f',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
+  },
+  quickWeightInput: {
+    minHeight: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: '#faf9f7',
+    paddingHorizontal: 12,
+    color: '#2d2d2d',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '600',
+  },
+  quickWeightActions: {
+    marginTop: 2,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  quickWeightCancel: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: '#fff',
+  },
+  quickWeightCancelText: {
+    color: '#6f6f6f',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  quickWeightSave: {
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: '#2d2d2d',
+  },
+  quickWeightSaveText: {
+    color: '#fff',
+    fontSize: 12,
+    lineHeight: 16,
     fontWeight: '700',
   },
 

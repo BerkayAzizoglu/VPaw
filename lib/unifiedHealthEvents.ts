@@ -1,6 +1,6 @@
 import type { PetProfile } from '../components/AuthGate';
 import type { WeightPoint } from '../screens/WeightTrackingScreen';
-import type { ByPet, MedicalEvent, VetVisit } from './healthMvpModel';
+import type { ByPet, MedicalEvent, PetId, VetVisit } from './healthMvpModel';
 
 export type UnifiedHealthEventType = 'vaccine' | 'vet' | 'record' | 'weight';
 
@@ -113,4 +113,3 @@ export function filterUnifiedHealthEvents(events: UnifiedHealthEvent[], category
   if (category === 'all') return events;
   return events.filter((event) => event.type === category);
 }
-

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 type ReminderSubtype = 'vet_visit' | 'vaccine' | 'medication' | 'food' | 'litter' | 'walk' | 'custom';
+type ReminderGroup = 'medical' | 'care';
 
 type ReminderItem = {
   id: string;
@@ -58,6 +59,10 @@ function subtypeColor(subtype: ReminderSubtype | undefined) {
 function isValidDate(value: string) {
   const ms = new Date(`${value}T12:00:00.000Z`).getTime();
   return Number.isFinite(ms);
+}
+
+function isMedicalSubtype(subtype: ReminderSubtype | undefined) {
+  return subtype === 'vet_visit' || subtype === 'vaccine' || subtype === 'medication';
 }
 
 function buildRowSub(item: ReminderItem, isTr: boolean) {
@@ -170,6 +175,7 @@ export default function RemindersScreen({
   const [error, setError] = useState('');
   const [focusedField, setFocusedField] = useState<'title' | 'date' | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
+  const [group, setGroup] = useState<ReminderGroup>('medical');
   const saveScale = useMemo(() => new Animated.Value(1), []);
   const isFullyEmpty = today.length === 0 && upcoming.length === 0 && overdue.length === 0;
 
@@ -201,6 +207,23 @@ export default function RemindersScreen({
     && isValidDate(entryDate)
     && subtypeOptions.includes(subtype)
     && !(activePetType === 'Cat' && subtype === 'walk');
+
+  const filteredToday = useMemo(
+    () => today.filter((item) => (group === 'medical' ? isMedicalSubtype(item.subtype) : !isMedicalSubtype(item.subtype))),
+    [group, today],
+  );
+  const filteredUpcoming = useMemo(
+    () => upcoming.filter((item) => (group === 'medical' ? isMedicalSubtype(item.subtype) : !isMedicalSubtype(item.subtype))),
+    [group, upcoming],
+  );
+  const filteredOverdue = useMemo(
+    () => overdue.filter((item) => (group === 'medical' ? isMedicalSubtype(item.subtype) : !isMedicalSubtype(item.subtype))),
+    [group, overdue],
+  );
+  const filteredCompleted = useMemo(
+    () => completed.filter((item) => (group === 'medical' ? isMedicalSubtype(item.subtype) : !isMedicalSubtype(item.subtype))),
+    [completed, group],
+  );
 
   const submitCreate = () => {
     const cleanedTitle = entryTitle.trim();
@@ -236,6 +259,25 @@ export default function RemindersScreen({
           </Pressable>
         </View>
 
+        <View style={styles.groupRow}>
+          <Pressable
+            style={[styles.groupChip, group === 'medical' && styles.groupChipActive]}
+            onPress={() => setGroup('medical')}
+          >
+            <Text style={[styles.groupChipText, group === 'medical' && styles.groupChipTextActive]}>
+              {isTr ? 'Tıbbi Takip' : 'Medical Follow-up'}
+            </Text>
+          </Pressable>
+          <Pressable
+            style={[styles.groupChip, group === 'care' && styles.groupChipActive]}
+            onPress={() => setGroup('care')}
+          >
+            <Text style={[styles.groupChipText, group === 'care' && styles.groupChipTextActive]}>
+              {isTr ? 'Günlük Bakım' : 'Daily Care'}
+            </Text>
+          </Pressable>
+        </View>
+
         {isFullyEmpty ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>{isTr ? 'Hatırlatma yok' : 'No reminders set'}</Text>
@@ -248,7 +290,7 @@ export default function RemindersScreen({
 
         <ReminderSection
           title={isTr ? 'Bugün' : 'Today'}
-          items={today}
+          items={filteredToday}
           empty={isTr ? 'Bugün hatırlatma yok.' : 'No reminders for today.'}
           isTr={isTr}
           onComplete={onComplete}
@@ -257,7 +299,7 @@ export default function RemindersScreen({
         />
         <ReminderSection
           title={isTr ? 'Yaklaşan' : 'Upcoming'}
-          items={upcoming}
+          items={filteredUpcoming}
           empty={isTr ? 'Yaklaşan hatırlatma yok.' : 'No upcoming reminders.'}
           isTr={isTr}
           onComplete={onComplete}
@@ -266,7 +308,7 @@ export default function RemindersScreen({
         />
         <ReminderSection
           title={isTr ? 'Gecikmiş' : 'Overdue'}
-          items={overdue}
+          items={filteredOverdue}
           empty={isTr ? 'Gecikmiş hatırlatma yok.' : 'No overdue reminders.'}
           isTr={isTr}
           onComplete={onComplete}
@@ -274,19 +316,19 @@ export default function RemindersScreen({
           actionLabel="overdue"
         />
 
-        {completed.length > 0 ? (
+        {filteredCompleted.length > 0 ? (
           <>
             <Pressable style={styles.completedToggle} onPress={() => setShowCompleted((v) => !v)}>
               <Text style={styles.completedToggleText}>
                 {isTr
-                  ? `${showCompleted ? '▾' : '▸'} Geçmiş (${completed.length})`
-                  : `${showCompleted ? '▾' : '▸'} History (${completed.length})`}
+                  ? `${showCompleted ? '▾' : '▸'} Geçmiş (${filteredCompleted.length})`
+                  : `${showCompleted ? '▾' : '▸'} History (${filteredCompleted.length})`}
               </Text>
             </Pressable>
             {showCompleted ? (
               <ReminderSection
                 title=""
-                items={completed}
+                items={filteredCompleted}
                 empty=""
                 isTr={isTr}
                 onDelete={onDeleteReminder}
@@ -415,6 +457,33 @@ const styles = StyleSheet.create({
     color: '#faf8f5',
     fontSize: 12,
     fontWeight: '700',
+  },
+  groupRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  groupChip: {
+    flex: 1,
+    minHeight: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupChipActive: {
+    borderColor: '#7f9a70',
+    backgroundColor: '#eef5ea',
+  },
+  groupChipText: {
+    color: '#6f6f6f',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+  },
+  groupChipTextActive: {
+    color: '#4f6b43',
   },
   emptyCard: {
     borderRadius: 16,

@@ -34,6 +34,7 @@ export type VetVisitCreatePreset = {
 
 export type CreateVetVisitPayload = {
   date: string;
+  clinic?: string;
   reason: VetVisitReasonCategory;
   note?: string;
   reminderEnabled: boolean;
@@ -133,75 +134,86 @@ function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethosc
   );
 }
 
-function StatPill({ icon, text }: { icon: 'stethoscope' | 'wallet'; text: string }) {
+
+const MONTHS_EN = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+const MONTHS_TR = ['OCA','ŞUB','MAR','NİS','MAY','HAZ','TEM','AĞU','EYL','EKİ','KAS','ARA'];
+
+function FeaturedCard({ item, isTr }: { item: VisitItem; isTr: boolean }) {
+  const parts = item.date.split('-');
+  const monthIdx = parseInt(parts[1] ?? '1', 10) - 1;
+  const day = parts[2] ?? '—';
+  const mon = (isTr ? MONTHS_TR : MONTHS_EN)[monthIdx] ?? '—';
   return (
-    <View style={styles.statPill}>
-      <Icon kind={icon} size={14} color="#6f7b63" />
-      <Text style={styles.statPillText}>{text}</Text>
+    <View style={styles.featuredCard}>
+      <View style={styles.featuredInner}>
+        <View style={styles.featuredLeft}>
+          <View style={styles.featuredGlassTag}>
+            <Text style={styles.featuredGlassText}>{isTr ? 'PLANLI' : 'PLANNED'}</Text>
+          </View>
+          <Text style={styles.featuredClinic}>{item.clinic || (isTr ? 'Veteriner Kliniği' : 'Vet Clinic')}</Text>
+          {item.doctor ? <Text style={styles.featuredDoctor}>{item.doctor}</Text> : null}
+        </View>
+        <View style={styles.featuredDateBox}>
+          <Text style={styles.featuredDateMon}>{mon}</Text>
+          <Text style={styles.featuredDateDay}>{day}</Text>
+        </View>
+      </View>
+      <View style={styles.featuredDivider} />
+      <View style={styles.featuredMeta}>
+        <Icon kind="stethoscope" size={14} color="rgba(255,255,255,0.6)" />
+        <Text style={styles.featuredMetaText}>{item.title}</Text>
+      </View>
     </View>
   );
 }
 
-function AttachmentChip({ label }: { label: string }) {
+function VisitCard({ item, isTr, today }: { item: VisitItem; isTr: boolean; today: string }) {
+  const isPlanned = item.date > today;
   return (
-    <Pressable style={styles.attachmentChip}>
-      <Icon kind="file" size={14} color="#757575" />
-      <Text style={styles.attachmentText}>{label}</Text>
-    </Pressable>
-  );
-}
-
-function TimelineCard({ item, attachDocuments }: { item: VisitItem; attachDocuments: string }) {
-  return (
-    <View style={styles.timelineRow}>
-      <View style={styles.timelineIconWrap}>
-        <Icon kind={item.icon} size={18} color="#6a7b5f" />
+    <View style={styles.visitCard}>
+      {/* Top row */}
+      <View style={styles.visitCardTopRow}>
+        <View style={[styles.visitIconBox, { backgroundColor: isPlanned ? '#dff0e3' : '#edffe3' }]}>
+          <Icon kind={item.icon} size={22} color={isPlanned ? '#4a7a5a' : '#3a6e45'} />
+        </View>
+        <View style={styles.visitCardBody}>
+          <Text style={styles.visitCardTitle}>{item.title}</Text>
+          <View style={styles.visitCardMeta}>
+            {item.clinic ? <Text style={styles.visitMetaText}>{item.clinic}</Text> : null}
+            {item.clinic && item.doctor ? <Text style={styles.visitMetaDot}>{'  ·  '}</Text> : null}
+            {item.doctor ? <Text style={styles.visitMetaText}>{item.doctor}</Text> : null}
+          </View>
+        </View>
+        <Text style={styles.visitCardDate}>{item.date.slice(2).replace(/-/g, '.')}</Text>
       </View>
 
-      <View style={styles.visitCard}>
-        <View style={styles.cardTopRow}>
-          <View style={styles.dateTag}>
-            <Text style={styles.dateTagText}>{item.date.toUpperCase()}</Text>
+      {/* Status + amount */}
+      <View style={styles.visitStatusRow}>
+        <View style={[styles.visitStatusPill, isPlanned ? styles.visitStatusPlanned : styles.visitStatusDone]}>
+          <Text style={[styles.visitStatusText, isPlanned ? styles.visitStatusTextPlanned : styles.visitStatusTextDone]}>
+            {isPlanned ? (isTr ? 'Planlandı' : 'Planned') : (isTr ? 'Tamamlandı' : 'Completed')}
+          </Text>
+        </View>
+        {isPlanned ? (
+          <View style={styles.visitAutoReminderPill}>
+            <Text style={styles.visitAutoReminderText}>{isTr ? 'Otomatik hatırlatma' : 'Auto-reminder'}</Text>
           </View>
-
-          {item.amount ? (
-            <View style={styles.amountTag}>
-              <Icon kind="wallet" size={14} color="#5c6b54" />
-              <Text style={styles.amountText}>{item.amount}</Text>
-            </View>
-          ) : (
-            <View style={styles.paymentTag}>
-              <Icon kind="wallet" size={12} color="#b55858" />
-              <Text style={styles.paymentText}>{item.paymentText}</Text>
-            </View>
-          )}
-        </View>
-
-        <Text style={styles.cardTitle}>{item.title}</Text>
-
-        <View style={styles.metaRow}>
-          <Icon kind="clinic" size={15} color="#9a9a9a" />
-          <Text style={styles.metaText}>{item.clinic}</Text>
-        </View>
-        <View style={styles.metaRow}>
-          <View style={styles.metaDot} />
-          <Text style={styles.metaDoctor}>{item.doctor}</Text>
-        </View>
-
-        <View style={styles.cardDivider} />
-
-        {item.attachPlaceholder ? (
-          <Pressable style={styles.attachPlaceholder}>
-            <Text style={styles.attachPlaceholderText}>{attachDocuments}</Text>
-          </Pressable>
-        ) : (
-          <View style={styles.attachmentsWrap}>
-            {item.attachments.map((attachment) => (
-              <AttachmentChip key={attachment} label={attachment} />
-            ))}
-          </View>
-        )}
+        ) : null}
+        {item.amount ? <Text style={styles.visitAmount}>{item.amount}</Text> : null}
       </View>
+
+      {/* Records / attachments */}
+      {item.attachments.length > 0 ? (
+        <View style={styles.visitRecords}>
+          <Text style={styles.visitRecordsLabel}>{isTr ? 'ZİYARET KAYITLARI' : 'VISIT RECORDS'}</Text>
+          {item.attachments.map((att, i) => (
+            <View key={i} style={styles.visitRecordRow}>
+              <View style={styles.visitRecordDot} />
+              <Text style={styles.visitRecordText}>{att}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -214,6 +226,7 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
   const [isCreateVisible, setIsCreateVisible] = useState(false);
   const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
   const [visitDate, setVisitDate] = useState(today);
+  const [visitClinic, setVisitClinic] = useState('');
   const [visitReason, setVisitReason] = useState<VetVisitReasonCategory>('checkup');
   const [visitNote, setVisitNote] = useState('');
   const [reminderEnabled, setReminderEnabled] = useState(false);
@@ -376,6 +389,7 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
 
   const resetCreateForm = () => {
     setVisitDate(today);
+    setVisitClinic('');
     setVisitReason('checkup');
     setVisitNote('');
     setReminderEnabled(false);
@@ -591,6 +605,7 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
 
     const payload: CreateVetVisitPayload = {
       date: visitDateIso,
+      clinic: visitClinic.trim() || undefined,
       reason: visitReason,
       note: visitNote.trim() || undefined,
       reminderEnabled,
@@ -619,6 +634,10 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
   };
 
   const visitsData = visits ?? fallbackVisits;
+  const pastVisits = useMemo(() => visitsData.filter((v) => v.date <= today), [visitsData, today]);
+  const plannedVisits = useMemo(() => visitsData.filter((v) => v.date > today), [visitsData, today]);
+  const nextVisit = plannedVisits[0] ?? null;
+
   const totalAmount = visitsData.reduce((sum, item) => {
     const raw = item.amount ? Number(item.amount.replace(/[^0-9.-]/g, '')) : 0;
     return sum + (Number.isFinite(raw) ? raw : 0);
@@ -658,32 +677,73 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
       <Animated.View style={[styles.frontLayer, swipePanResponder.frontLayerStyle]} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={!swipePanResponder.isSwiping}>
+        {/* ── Header ── */}
         <View style={styles.headerRow}>
           <Pressable style={styles.backBtn} onPress={onBack}>
-            <Icon kind="back" size={22} color="#7a7a7a" />
+            <Icon kind="back" size={22} color="#5d605a" />
           </Pressable>
           <Text style={styles.headerTitle}>{copy.title}</Text>
-          <View style={styles.headerPlaceholder} />
+          {showAddButton ? (
+            <Pressable style={styles.addPill} onPress={() => setIsCreateVisible(true)}>
+              <Text style={styles.addPillText}>{isTr ? '+ Ekle' : '+ Add'}</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.headerPlaceholder} />
+          )}
         </View>
 
         {showMainContent ? (
           <>
-            <View style={styles.titleWrap}>
-              <Text style={styles.title}>{copy.medicalHistory}</Text>
-              <View style={styles.statsRow}>
-                <StatPill icon="stethoscope" text={visitsCountText} />
-                <StatPill icon="wallet" text={totalCostText} />
+            {/* ── Featured next appointment ── */}
+            {nextVisit ? (
+              <>
+                <Text style={styles.sectionLabel}>{isTr ? 'SONRAKI RANDEVU' : 'NEXT APPOINTMENT'}</Text>
+                <FeaturedCard item={nextVisit} isTr={isTr} />
+              </>
+            ) : null}
+
+            {/* ── Visit History ── */}
+            {pastVisits.length > 0 ? (
+              <View style={styles.sectionHeaderRow}>
+                <Text style={styles.sectionLabel}>{isTr ? 'ZİYARET GEÇMİŞİ' : 'VISIT HISTORY'}</Text>
               </View>
+            ) : null}
+
+            <View style={styles.cardsColumn}>
+              {pastVisits.map((item) => (
+                <VisitCard key={item.id} item={item} isTr={isTr} today={today} />
+              ))}
             </View>
 
-            <View style={styles.timelineWrap}>
-              <View style={styles.timelineLine} />
-              <View style={styles.cardsColumn}>
-                {visitsData.map((item) => (
-                  <TimelineCard key={item.id} item={item} attachDocuments={copy.attachDocuments} />
-                ))}
+            {/* ── Planned visits (when no featured) ── */}
+            {!nextVisit && plannedVisits.length > 0 ? (
+              <>
+                <View style={styles.sectionHeaderRow}>
+                  <Text style={styles.sectionLabel}>{isTr ? 'PLANLANANLAR' : 'PLANNED'}</Text>
+                </View>
+                <View style={styles.cardsColumn}>
+                  {plannedVisits.map((item) => (
+                    <VisitCard key={item.id} item={item} isTr={isTr} today={today} />
+                  ))}
+                </View>
+              </>
+            ) : null}
+
+            {/* ── Stats grid ── */}
+            {visitsData.length > 0 ? (
+              <View style={styles.statsGrid}>
+                <View style={styles.statGridCard}>
+                  <Text style={styles.statGridLabel}>{isTr ? 'YILLIK HARCAMA' : 'ANNUAL SPEND'}</Text>
+                  <Text style={styles.statGridValue}>{totalCostText}</Text>
+                  <Text style={styles.statGridSub}>{isTr ? 'BU YIL' : 'THIS YEAR'}</Text>
+                </View>
+                <View style={styles.statGridCard}>
+                  <Text style={styles.statGridLabel}>{isTr ? 'TOPLAM ZİYARET' : 'TOTAL VISITS'}</Text>
+                  <Text style={styles.statGridValue}>{String(visitsData.length)}</Text>
+                  <Text style={styles.statGridSub}>{isTr ? 'TOPLAM' : 'SINCE JOINING'}</Text>
+                </View>
               </View>
-            </View>
+            ) : null}
           </>
         ) : (
           <ScreenStateCard
@@ -695,16 +755,6 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
           />
         )}
       </ScrollView>
-
-      {showAddButton ? (
-        <Pressable
-          style={styles.addBtn}
-          onPress={() => setIsCreateVisible(true)}
-        >
-          <Icon kind="plus" size={20} color="#faf8f5" />
-          <Text style={styles.addBtnText}>{copy.addVisit}</Text>
-        </Pressable>
-      ) : null}
 
       <Modal
         visible={isCreateVisible}
@@ -737,6 +787,17 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
                     onBlur={() => setFocusedField(null)}
                   />
 
+                  <Text style={styles.modalLabel}>{isTr ? 'Klinik (opsiyonel)' : 'Clinic (optional)'}</Text>
+                  <TextInput
+                    style={[styles.modalInput, focusedField === 'visitClinic' ? styles.modalInputFocused : null]}
+                    value={visitClinic}
+                    onChangeText={setVisitClinic}
+                    placeholder={isTr ? 'Örn: Harmony Vet Clinic' : 'e.g. Harmony Vet Clinic'}
+                    placeholderTextColor="#a4a4a4"
+                    onFocus={() => setFocusedField('visitClinic')}
+                    onBlur={() => setFocusedField(null)}
+                  />
+
                   <Text style={styles.modalLabel}>{isTr ? 'Ziyaret Nedeni' : 'Visit reason'}</Text>
                   <Text style={styles.modalLabelHint}>
                     {isTr ? 'Ornek: rutin kontrol, asi takibi, hastalik' : 'Example: routine checkup, vaccine follow-up, illness'}
@@ -760,11 +821,11 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
                 </View>
 
                 <View style={styles.modalSection}>
-                  <Text style={styles.modalSectionTitle}>{isTr ? 'Islemler' : 'Actions'}</Text>
+                  <Text style={styles.modalSectionTitle}>{isTr ? 'Ziyaret Sonuçları' : 'Visit outcomes'}</Text>
                   <Text style={styles.modalHelperText}>
-                    {isTr ? 'Bu ziyarette yapilan islemleri secin. Sonra her islem icin kategori belirleyin.' : 'Select what happened during this visit, then choose a category for each action.'}
+                    {isTr ? 'Bu ziyarette neler olduğunu seçin. Boş bırakılırsa genel kontrol olarak kaydedilir.' : 'Select what happened during this visit. If left empty, it is saved as a general checkup.'}
                   </Text>
-                  <Text style={styles.modalLabel}>{isTr ? 'Yapilan Islemler' : 'Actions performed'}</Text>
+                  <Text style={styles.modalLabel}>{isTr ? 'Bu ziyarette ne oldu?' : 'What happened during this visit?'}</Text>
                   <View style={styles.chipsRow}>
                     {actionOrder.map((type) => (
                       <Pressable
@@ -931,9 +992,10 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
 }
 
 const styles = StyleSheet.create({
+  // ── shell ──────────────────────────────────────────────────────────────────
   screen: {
     flex: 1,
-    backgroundColor: '#faf9f8',
+    backgroundColor: '#f6f4f0',
   },
   backLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -943,291 +1005,338 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   content: {
-    paddingTop: 32,
-    paddingHorizontal: 24,
-    paddingBottom: 110,
-    gap: 20,
+    paddingTop: 56,
+    paddingHorizontal: 22,
+    paddingBottom: 60,
+    gap: 16,
   },
+
+  // ── header ─────────────────────────────────────────────────────────────────
   headerRow: {
-    height: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 4,
   },
   backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f1f1ef',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: '700',
-    color: '#2d2d2d',
-    letterSpacing: -0.4,
-  },
-  headerPlaceholder: {
-    width: 44,
-    height: 44,
-  },
-  titleWrap: {
-    gap: 10,
-    paddingLeft: 2,
-  },
-  title: {
-    fontSize: 38,
-    lineHeight: 44,
-    fontWeight: '700',
-    color: '#2d2d2d',
-    letterSpacing: -0.8,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  statPill: {
-    height: 32,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
-  },
-  statPillText: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: 'rgba(45,45,45,0.8)',
-    fontWeight: '700',
-  },
-  timelineWrap: {
-    position: 'relative',
-    paddingLeft: 0,
-  },
-  timelineLine: {
-    position: 'absolute',
-    left: 18,
-    top: 14,
-    bottom: 12,
-    width: 2,
-    borderRadius: 999,
-    backgroundColor: 'rgba(0,0,0,0.06)',
-  },
-  cardsColumn: {
-    gap: 20,
-  },
-  timelineRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 16,
-  },
-  timelineIconWrap: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#fff',
-    borderWidth: 3,
-    borderColor: '#f6f5f3',
+    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    shadowColor: '#30332e',
     shadowOpacity: 0.06,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
-    zIndex: 2,
   },
-  visitCard: {
-    flex: 1,
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.02)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 18,
-    paddingTop: 18,
-    paddingBottom: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#30332e',
+    letterSpacing: -0.3,
   },
-  cardTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  headerPlaceholder: {
+    width: 80,
   },
-  dateTag: {
-    minHeight: 28,
-    borderRadius: 14,
-    backgroundColor: '#faf9f8',
+  addPill: {
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#47664a',
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#3b5a3f',
+    shadowOpacity: 0.28,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  addPillText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#e9ffe6',
+  },
+
+  // ── section headers ────────────────────────────────────────────────────────
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    color: '#5d605a',
+    textTransform: 'uppercase',
+  },
+
+  // ── featured card (dark gradient) ─────────────────────────────────────────
+  featuredCard: {
+    borderRadius: 24,
+    backgroundColor: '#2e4230',
+    paddingHorizontal: 22,
+    paddingTop: 22,
+    paddingBottom: 18,
+    shadowColor: '#1a2a1c',
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  featuredInner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 16,
+  },
+  featuredLeft: {
+    flex: 1,
+    gap: 6,
+  },
+  featuredGlassTag: {
+    alignSelf: 'flex-start',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
-  dateTagText: {
-    fontSize: 13,
-    lineHeight: 20,
+  featuredGlassText: {
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 1.3,
-    color: '#787878',
+    color: 'rgba(255,255,255,0.85)',
+    letterSpacing: 0.8,
   },
-  amountTag: {
-    height: 34,
-    borderRadius: 999,
-    backgroundColor: '#f4f7f2',
-    borderWidth: 1,
-    borderColor: '#dce3d8',
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    shadowColor: '#718562',
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
-  },
-  amountText: {
-    fontSize: 13,
-    lineHeight: 20,
+  featuredClinic: {
+    fontSize: 20,
     fontWeight: '700',
-    color: '#5c6b54',
+    color: '#ffffff',
+    letterSpacing: -0.3,
+    lineHeight: 26,
   },
-  paymentTag: {
-    height: 54,
-    borderRadius: 27,
-    backgroundColor: '#fdf3f3',
-    borderWidth: 1,
-    borderColor: '#f5e3e3',
-    paddingHorizontal: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    maxWidth: 128,
-    shadowColor: '#c96a6a',
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
-  },
-  paymentText: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '700',
-    color: '#b55858',
-  },
-  cardTitle: {
-    marginTop: 10,
-    fontSize: 30,
-    lineHeight: 36,
-    fontWeight: '700',
-    letterSpacing: -0.6,
-    color: '#2d2d2d',
-  },
-  metaRow: {
-    marginTop: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  metaText: {
+  featuredDoctor: {
     fontSize: 14,
-    lineHeight: 21,
-    color: '#787878',
     fontWeight: '500',
+    color: 'rgba(255,255,255,0.7)',
   },
-  metaDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(120,120,120,0.4)',
-    marginLeft: 6,
-  },
-  metaDoctor: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: 'rgba(45,45,45,0.8)',
-    fontWeight: '500',
-  },
-  cardDivider: {
-    marginTop: 14,
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.03)',
-  },
-  attachmentsWrap: {
-    marginTop: 14,
-    gap: 8,
-  },
-  attachmentChip: {
-    alignSelf: 'flex-start',
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: 'rgba(232,227,219,0.3)',
+  featuredDateBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.02)',
-    paddingHorizontal: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  attachmentText: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: 'rgba(45,45,45,0.8)',
-    fontWeight: '600',
-  },
-  attachPlaceholder: {
-    marginTop: 14,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.15)',
-    borderStyle: 'dashed',
+    borderColor: 'rgba(255,255,255,0.2)',
     alignItems: 'center',
     justifyContent: 'center',
+    marginLeft: 14,
   },
-  attachPlaceholderText: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#787878',
-    fontWeight: '500',
+  featuredDateMon: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.65)',
+    letterSpacing: 0.6,
   },
-  addBtn: {
-    position: 'absolute',
-    bottom: 24,
-    alignSelf: 'center',
-    height: 52,
-    borderRadius: 999,
-    backgroundColor: '#2d2d2d',
-    paddingHorizontal: 28,
+  featuredDateDay: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#ffffff',
+    lineHeight: 30,
+    letterSpacing: -1,
+  },
+  featuredDivider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginBottom: 14,
+  },
+  featuredMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 6,
   },
-  addBtnText: {
-    fontSize: 16,
-    lineHeight: 24,
+  featuredMetaText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.65)',
+  },
+
+  // ── visit card (history item) ──────────────────────────────────────────────
+  cardsColumn: {
+    gap: 12,
+  },
+  visitCard: {
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+    shadowColor: '#30332e',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  visitCardTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 10,
+  },
+  visitIconBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  visitCardBody: {
+    flex: 1,
+    gap: 3,
+  },
+  visitCardTitle: {
+    fontSize: 15,
     fontWeight: '700',
-    color: '#faf8f5',
-    letterSpacing: 0.4,
+    color: '#30332e',
+    letterSpacing: -0.2,
   },
+  visitCardMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  visitMetaText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#5d605a',
+  },
+  visitMetaDot: {
+    fontSize: 12,
+    color: '#b1b3ab',
+  },
+  visitCardDate: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5d605a',
+    flexShrink: 0,
+  },
+  visitStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 0,
+  },
+  visitStatusPill: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  visitStatusDone: {
+    backgroundColor: '#cbebc8',
+  },
+  visitStatusPlanned: {
+    backgroundColor: '#e3eef8',
+  },
+  visitStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  visitStatusTextDone: {
+    color: '#3a6e45',
+  },
+  visitStatusTextPlanned: {
+    color: '#3a4e7a',
+  },
+  visitAutoReminderPill: {
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: '#eeeee8',
+  },
+  visitAutoReminderText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#5d605a',
+  },
+  visitAmount: {
+    marginLeft: 'auto',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#47664a',
+  },
+  visitRecords: {
+    marginTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#eeeee8',
+    paddingTop: 10,
+    gap: 5,
+  },
+  visitRecordsLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    color: '#797c75',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  visitRecordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  visitRecordDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#cbebc8',
+    flexShrink: 0,
+  },
+  visitRecordText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#30332e',
+  },
+
+  // ── stats bento grid ───────────────────────────────────────────────────────
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 4,
+  },
+  statGridCard: {
+    flex: 1,
+    borderRadius: 22,
+    backgroundColor: '#eeeee8',
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+    gap: 4,
+  },
+  statGridLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    color: '#5d605a',
+    textTransform: 'uppercase',
+  },
+  statGridValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#30332e',
+    letterSpacing: -0.8,
+    lineHeight: 32,
+  },
+  statGridSub: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#797c75',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+
   modalOverlay: {
     flex: 1,
     backgroundColor: '#faf9f8',

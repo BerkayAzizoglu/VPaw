@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, type ReactNode } from 'react';
+import React, { useEffect, useRef, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Animated,
@@ -9,11 +9,13 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type VaccinationsScreenProps = {
   onBack: () => void;
@@ -47,7 +49,17 @@ export type VaccinationsNextUpData = {
   inWeeks: string;
 };
 
-function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' | 'warning' | 'clock' | 'check' | 'syringe' | 'arrow'; size?: number; color?: string }) {
+// ─── Icons ───────────────────────────────────────────────────────────────────
+
+function Icon({
+  kind,
+  size = 22,
+  color = '#7a7a7a',
+}: {
+  kind: 'back' | 'shield' | 'shieldFill' | 'warning' | 'clock' | 'check' | 'syringe' | 'arrow' | 'add';
+  size?: number;
+  color?: string;
+}) {
   if (kind === 'back') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -55,7 +67,6 @@ function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' 
       </Svg>
     );
   }
-
   if (kind === 'shield') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -63,7 +74,14 @@ function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' 
       </Svg>
     );
   }
-
+  if (kind === 'shieldFill') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M12 3.8L18 6.1V11.3C18 15 15.5 18 12 20.2C8.5 18 6 15 6 11.3V6.1L12 3.8Z" fill={color} stroke={color} strokeWidth={1.4} strokeLinejoin="round" />
+        <Path d="M9 12L11.2 14L15 10" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
   if (kind === 'warning') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -73,7 +91,6 @@ function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' 
       </Svg>
     );
   }
-
   if (kind === 'clock') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -82,7 +99,6 @@ function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' 
       </Svg>
     );
   }
-
   if (kind === 'check') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -90,7 +106,6 @@ function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' 
       </Svg>
     );
   }
-
   if (kind === 'arrow') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -98,7 +113,14 @@ function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' 
       </Svg>
     );
   }
-
+  if (kind === 'add') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M12 6V18M6 12H18" stroke={color} strokeWidth={2.1} strokeLinecap="round" />
+      </Svg>
+    );
+  }
+  // syringe
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M14.5 5.5L18.5 9.5" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
@@ -108,58 +130,106 @@ function Icon({ kind, size = 22, color = '#7a7a7a' }: { kind: 'back' | 'shield' 
   );
 }
 
-function StatusPill({ status, labels }: { status: VaccinationsHistoryItem['status']; labels: { overdue: string; dueSoon: string; upToDate: string } }) {
-  if (status === 'overdue') {
-    return (
-      <View style={[styles.pill, styles.pillDanger]}>
-        <Text style={[styles.pillText, styles.pillTextDanger]}>{labels.overdue}</Text>
-      </View>
-    );
-  }
+// ─── Featured (Next Up) Card ─────────────────────────────────────────────────
 
-  if (status === 'dueSoon') {
-    return (
-      <View style={[styles.pill, styles.pillWarn]}>
-        <Text style={[styles.pillText, styles.pillTextWarn]}>{labels.dueSoon}</Text>
-      </View>
-    );
-  }
+function FeaturedVaccineCard({ data }: { data: VaccinationsNextUpData }) {
+  // Parse a simple "Apr 18" or "18.04.2025" display date for the date box
+  const parts = data.date.split(/[.\-\/\s]/);
+  const dayStr = parts[0] ?? '—';
 
   return (
-    <View style={[styles.pill, styles.pillSafe]}>
-      <Text style={[styles.pillText, styles.pillTextSafe]}>{labels.upToDate}</Text>
-    </View>
-  );
-}
+    <View style={styles.featuredCard}>
+      {/* glass blob */}
+      <View style={styles.featuredBlob} />
 
-function HistoryCard({ item, statusLabels, dueDateLabel }: { item: VaccinationsHistoryItem; statusLabels: { overdue: string; dueSoon: string; upToDate: string }; dueDateLabel: string }) {
-  const iconColor = item.status === 'overdue' ? '#c96a6a' : item.status === 'dueSoon' ? '#c48d42' : '#718562';
-  const iconKind = item.status === 'overdue' ? 'warning' : item.status === 'dueSoon' ? 'clock' : 'shield';
-
-  return (
-    <View style={[styles.historyCard, item.tint === 'danger' ? styles.historyCardDanger : styles.historyCardNeutral]}>
-      <View style={styles.historyTop}>
-        <View style={styles.historyLeft}>
-          <View style={[styles.historyIconWrap, item.status === 'overdue' ? styles.historyIconDanger : styles.historyIconNeutral]}>
-            <Icon kind={iconKind} size={22} color={iconColor} />
+      <View style={styles.featuredTop}>
+        <View style={styles.featuredLeft}>
+          {/* glass tag */}
+          <View style={styles.glassTag}>
+            <Text style={styles.glassTagText}>UPCOMING</Text>
           </View>
-          <View>
-            <Text style={styles.historyTitle}>{item.name}</Text>
-            <Text style={styles.historySubtitle}>{item.subtitle}</Text>
-          </View>
+          <Text style={styles.featuredTitle}>{data.name}</Text>
+          <Text style={styles.featuredSub}>{data.subtitle}</Text>
         </View>
-        <StatusPill status={item.status} labels={statusLabels} />
+        {/* date box */}
+        <View style={styles.featuredDateBox}>
+          <Text style={styles.featuredDateNum}>{dayStr}</Text>
+          <Text style={styles.featuredDateSub}>{data.inWeeks}</Text>
+        </View>
       </View>
 
-      <View style={styles.historyDivider} />
-
-      <View style={styles.historyBottom}>
-        <Text style={styles.historyDueLabel}>{dueDateLabel}</Text>
-        <Text style={styles.historyDueValue}>{item.dueDate}</Text>
+      <View style={styles.featuredMeta}>
+        <View style={styles.featuredMetaItem}>
+          <Icon kind="syringe" size={14} color="rgba(255,255,255,0.8)" />
+          <Text style={styles.featuredMetaText}>{data.date}</Text>
+        </View>
+        <View style={styles.featuredMetaItem}>
+          <Icon kind="shield" size={14} color="rgba(255,255,255,0.8)" />
+          <Text style={styles.featuredMetaText}>{data.subtitle}</Text>
+        </View>
       </View>
     </View>
   );
 }
+
+// ─── Vaccine History Card ─────────────────────────────────────────────────────
+
+function VaccineCard({
+  item,
+  statusLabels,
+  dueDateLabel,
+}: {
+  item: VaccinationsHistoryItem;
+  statusLabels: { overdue: string; dueSoon: string; upToDate: string };
+  dueDateLabel: string;
+}) {
+  const isOverdue = item.status === 'overdue';
+  const isDueSoon = item.status === 'dueSoon';
+  const isUpToDate = item.status === 'upToDate';
+
+  const iconBg = isOverdue ? '#fdf0f0' : isDueSoon ? '#fef6ea' : '#eef4eb';
+  const iconColor = isOverdue ? '#c96a6a' : isDueSoon ? '#c48d42' : '#718562';
+  const iconKind: 'warning' | 'clock' | 'shieldFill' = isOverdue
+    ? 'warning'
+    : isDueSoon
+    ? 'clock'
+    : 'shieldFill';
+
+  const pillBg = isOverdue ? '#fdf0f0' : isDueSoon ? '#fef6ea' : '#eef4eb';
+  const pillBorder = isOverdue ? '#f5dede' : isDueSoon ? '#f5e9d1' : '#d8ebcf';
+  const pillColor = iconColor;
+  const pillLabel = isOverdue
+    ? statusLabels.overdue
+    : isDueSoon
+    ? statusLabels.dueSoon
+    : statusLabels.upToDate;
+
+  return (
+    <View style={styles.vaccineCard}>
+      {/* icon box */}
+      <View style={[styles.vaccineIconBox, { backgroundColor: iconBg }]}>
+        <Icon kind={iconKind} size={22} color={iconColor} />
+      </View>
+
+      {/* main text */}
+      <View style={styles.vaccineMain}>
+        <Text style={styles.vaccineName}>{item.name}</Text>
+        <View style={styles.vaccineMetaRow}>
+          <Text style={styles.vaccineSub}>{item.subtitle}</Text>
+          <View style={styles.vaccineDot} />
+          <Text style={styles.vaccineDueText}>{item.dueDate}</Text>
+        </View>
+      </View>
+
+      {/* status pill */}
+      <View style={[styles.vaccinePill, { backgroundColor: pillBg, borderColor: pillBorder }]}>
+        <Text style={[styles.vaccinePillText, { color: pillColor }]}>{pillLabel}</Text>
+      </View>
+    </View>
+  );
+}
+
+// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function VaccinationsScreen({
   onBack,
@@ -176,6 +246,7 @@ export default function VaccinationsScreen({
   const copy = getWording(locale).vaccinations;
   const isTr = locale === 'tr';
 
+  // ── data ──
   const fallbackHistory: VaccinationsHistoryItem[] = [
     { name: 'Bordetella', subtitle: copy.history.bordetellaSub, status: 'overdue', dueDate: copy.history.bordetellaDate, tint: 'danger' },
     { name: copy.nextCard.name, subtitle: copy.history.rabiesSub, status: 'dueSoon', dueDate: copy.history.rabiesDate, tint: 'neutral' },
@@ -183,24 +254,41 @@ export default function VaccinationsScreen({
     { name: 'Leptospirosis', subtitle: copy.history.leptoSub, status: 'upToDate', dueDate: copy.history.leptoDate, tint: 'neutral' },
   ];
   const history = historyItems && historyItems.length > 0 ? historyItems : fallbackHistory;
-  const overdueLabel = attentionCounts ? `${attentionCounts.overdueCount} ${copy.statuses.overdue}` : copy.oneOverdue;
-  const dueSoonLabel = attentionCounts ? `${attentionCounts.dueSoonCount} ${copy.statuses.dueSoon}` : copy.oneDueSoon;
   const nextCard = nextUpData ?? copy.nextCard;
 
+  const overdueCount = attentionCounts?.overdueCount ?? history.filter((h) => h.status === 'overdue').length;
+  const dueSoonCount = attentionCounts?.dueSoonCount ?? history.filter((h) => h.status === 'dueSoon').length;
+  const upToDateCount = history.filter((h) => h.status === 'upToDate').length;
+  const hasAttention = overdueCount > 0 || dueSoonCount > 0;
+
+  // ── screen state ──
   const screenState = status;
   const showMainContent = screenState === 'ready';
   const showAddButton = screenState !== 'loading' && screenState !== 'error';
-  const stateTitle = screenState === 'loading'
-    ? (isTr ? 'A��lar y�kleniyor' : 'Loading vaccinations')
-    : screenState === 'empty'
-      ? (isTr ? 'Hen�z a�� kayd� yok' : 'No vaccination records yet')
-      : (isTr ? 'A�� kay�tlar� al�namad�' : 'Could not load vaccinations');
-  const stateBody = screenState === 'loading'
-    ? (isTr ? 'Kay�tlar haz�rlan�yor, l�tfen k�sa bir s�re bekleyin.' : 'Preparing records, please wait a moment.')
-    : screenState === 'empty'
-      ? (isTr ? '�lk a�� kayd�n� ekledi�inizde bu alan otomatik olarak dolacakt�r.' : 'This area will populate automatically once you add the first vaccination.')
-      : (isTr ? 'Ba�lant�y� kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
+  const stateTitle =
+    screenState === 'loading'
+      ? isTr ? 'Aşılar yükleniyor' : 'Loading vaccinations'
+      : screenState === 'empty'
+      ? isTr ? 'Henüz aşı kaydı yok' : 'No vaccination records yet'
+      : isTr ? 'Aşı kayıtları alınamadı' : 'Could not load vaccinations';
+  const stateBody =
+    screenState === 'loading'
+      ? isTr ? 'Kayıtlar hazırlanıyor, lütfen kısa bir süre bekleyin.' : 'Preparing records, please wait a moment.'
+      : screenState === 'empty'
+      ? isTr ? 'İlk aşı kaydını eklediğinizde bu alan otomatik olarak dolacaktır.' : 'This area will populate automatically once you add the first vaccination.'
+      : isTr ? 'Bağlantıyı kontrol edip tekrar deneyin.' : 'Please check your connection and try again.';
 
+  // ── entrance animation ──
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(20)).current;
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 420, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 380, useNativeDriver: true }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
+  // ── swipe ──
   const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: true, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
 
   return (
@@ -210,122 +298,153 @@ export default function VaccinationsScreen({
           {backPreview}
         </Animated.View>
       ) : null}
+
       <Animated.View style={[styles.frontLayer, swipePanResponder.frontLayerStyle]} {...swipePanResponder.panHandlers}>
-      <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={!swipePanResponder.isSwiping}>
-        <View style={styles.header}>
-          <Pressable style={styles.backBtn} onPress={onBack}>
-            <Icon kind="back" size={22} color="#7a7a7a" />
-          </Pressable>
-          <Text style={styles.headerTitle}>{copy.title}</Text>
-          <View style={styles.headerPlaceholder} />
-        </View>
-
-        {showMainContent ? (
-          <>
-            <View style={styles.attentionCard}>
-              <View style={styles.attentionTop}>
-                <View style={styles.attentionTexts}>
-                  <Text style={styles.attentionTitle}>{copy.needsAttention}</Text>
-                  <Text style={styles.attentionSub}>{copy.needsAttentionBody}</Text>
-                </View>
-                <View style={styles.attentionIconWrap}>
-                  <Icon kind="shield" size={28} color="#c96a6a" />
-                </View>
-              </View>
-
-              <View style={styles.attentionDivider} />
-
-              <View style={styles.attentionPillsRow}>
-                <View style={[styles.pill, styles.pillDanger]}>
-                  <Icon kind="warning" size={15} color="#b55858" />
-                  <Text style={[styles.pillText, styles.pillTextDanger]}>{overdueLabel}</Text>
-                </View>
-                <View style={[styles.pill, styles.pillWarn]}>
-                  <Icon kind="clock" size={15} color="#ad762d" />
-                  <Text style={[styles.pillText, styles.pillTextWarn]}>{dueSoonLabel}</Text>
-                </View>
-              </View>
-
+        <StatusBar style="dark" />
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!swipePanResponder.isSwiping}
+        >
+          {/* ── Header ── */}
+          <View style={styles.header}>
+            <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
+              <Icon kind="back" size={20} color="#30332e" />
+            </Pressable>
+            <Text style={styles.headerTitle}>{copy.title}</Text>
+            {showAddButton ? (
               <Pressable
-                style={styles.resolveLink}
+                style={styles.addPill}
                 onPress={() => {
-                  if (onResolve) {
-                    onResolve();
-                    return;
-                  }
+                  if (onAddVaccination) { onAddVaccination(); return; }
                   Alert.alert(
-                    isTr ? 'Yak�nda' : 'Coming soon',
-                    isTr ? 'Bu i�lem bir sonraki ad�mda aktif edilecek.' : 'This action will be enabled in the next step.',
+                    isTr ? 'Yakında' : 'Coming soon',
+                    isTr ? 'Aşı ekleme akışı bir sonraki adımda aktif edilecek.' : 'Add vaccination flow will be enabled in the next step.',
                   );
                 }}
               >
-                <Text style={styles.resolveText}>{copy.resolve}</Text>
-                <Icon kind="arrow" size={16} color="#c96a6a" />
+                <Icon kind="add" size={16} color="#fff" />
+                <Text style={styles.addPillText}>{isTr ? 'Ekle' : 'Add'}</Text>
               </Pressable>
-            </View>
+            ) : (
+              <View style={styles.headerPlaceholder} />
+            )}
+          </View>
 
-            <Text style={styles.sectionLabel}>{copy.nextUp}</Text>
-            <View style={styles.nextCard}>
-              <View style={styles.nextAccent} />
-              <View style={styles.nextIconWrap}>
-                <Icon kind="syringe" size={28} color="#c48d42" />
-              </View>
-              <View style={styles.nextMain}>
-                <Text style={styles.nextTitle}>{nextCard.name}</Text>
-                <Text style={styles.nextSub}>{nextCard.subtitle}</Text>
-              </View>
-              <View style={styles.nextRight}>
-                <Text style={styles.nextDate}>{nextCard.date}</Text>
-                <Text style={styles.nextSoon}>{nextCard.inWeeks}</Text>
-              </View>
-            </View>
+          {showMainContent ? (
+            <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
 
-            <Text style={styles.sectionLabel}>{copy.vaccineHistory}</Text>
-            <View style={styles.historyList}>
-              {history.map((item) => (
-                <HistoryCard key={`${item.name}-${item.dueDate}`} item={item} statusLabels={copy.statuses} dueDateLabel={copy.dueDate} />
-              ))}
-            </View>
-          </>
-        ) : (
-          <ScreenStateCard
-            mode={screenState as ScreenStateMode}
-            title={stateTitle}
-            body={stateBody}
-            actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : undefined}
-            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'L�tfen k�sa bir s�re sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
-          />
-        )}
-      </ScrollView>
+              {/* ── Attention banner ── */}
+              {hasAttention && (
+                <Pressable
+                  style={styles.attentionBanner}
+                  onPress={() => {
+                    if (onResolve) { onResolve(); return; }
+                    Alert.alert(
+                      isTr ? 'Yakında' : 'Coming soon',
+                      isTr ? 'Bu işlem bir sonraki adımda aktif edilecek.' : 'This action will be enabled in the next step.',
+                    );
+                  }}
+                >
+                  <View style={styles.attentionLeft}>
+                    {overdueCount > 0 && (
+                      <View style={[styles.attentionPill, styles.attentionPillDanger]}>
+                        <Icon kind="warning" size={13} color="#c96a6a" />
+                        <Text style={[styles.attentionPillText, { color: '#c96a6a' }]}>
+                          {overdueCount} {copy.statuses.overdue}
+                        </Text>
+                      </View>
+                    )}
+                    {dueSoonCount > 0 && (
+                      <View style={[styles.attentionPill, styles.attentionPillWarn]}>
+                        <Icon kind="clock" size={13} color="#c48d42" />
+                        <Text style={[styles.attentionPillText, { color: '#c48d42' }]}>
+                          {dueSoonCount} {copy.statuses.dueSoon}
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.attentionRight}>
+                    <Text style={styles.attentionCta}>{copy.resolve}</Text>
+                    <Icon kind="arrow" size={14} color="#47664a" />
+                  </View>
+                </Pressable>
+              )}
 
-      {showAddButton ? (
-        <Pressable
-          style={styles.addBtn}
-          onPress={() => {
-            if (onAddVaccination) {
-              onAddVaccination();
-              return;
-            }
-            Alert.alert(
-              isTr ? 'Yak�nda' : 'Coming soon',
-              isTr ? 'A�� ekleme ak��� bir sonraki ad�mda aktif edilecek.' : 'Add vaccination flow will be enabled in the next step.',
-            );
-          }}
-        >
-          <Text style={styles.addPlus}>+</Text>
-          <Text style={styles.addText}>{copy.addVaccination}</Text>
-        </Pressable>
-      ) : null}
+              {/* ── Next Up featured card ── */}
+              <Text style={styles.sectionLabel}>{copy.nextUp}</Text>
+              <FeaturedVaccineCard data={nextCard} />
+
+              {/* ── Vaccine history ── */}
+              <Text style={[styles.sectionLabel, { marginTop: 28 }]}>{copy.vaccineHistory}</Text>
+              <View style={styles.historyList}>
+                {history.map((item) => (
+                  <VaccineCard
+                    key={`${item.name}-${item.dueDate}`}
+                    item={item}
+                    statusLabels={copy.statuses}
+                    dueDateLabel={copy.dueDate}
+                  />
+                ))}
+              </View>
+
+              {/* ── Stats bento grid ── */}
+              <View style={styles.statsGrid}>
+                <View style={styles.statsCard}>
+                  <Text style={styles.statsLabel}>{isTr ? 'Güncel Aşılar' : 'Up to Date'}</Text>
+                  <Text style={styles.statsValue}>{upToDateCount}</Text>
+                  <View style={styles.statsSubRow}>
+                    <View style={[styles.statsDot, { backgroundColor: '#718562' }]} />
+                    <Text style={styles.statsSub}>{isTr ? 'KORUMA TAMAM' : 'PROTECTED'}</Text>
+                  </View>
+                </View>
+                <View style={styles.statsCard}>
+                  <Text style={styles.statsLabel}>{isTr ? 'Dikkat Gereken' : 'Need Attention'}</Text>
+                  <Text style={[styles.statsValue, hasAttention && { color: '#c96a6a' }]}>
+                    {overdueCount + dueSoonCount}
+                  </Text>
+                  <View style={styles.statsSubRow}>
+                    <View style={[styles.statsDot, { backgroundColor: hasAttention ? '#c96a6a' : '#b1b3ab' }]} />
+                    <Text style={styles.statsSub}>
+                      {hasAttention
+                        ? isTr ? 'İŞLEM GEREKLİ' : 'ACTION NEEDED'
+                        : isTr ? 'TEMİZ' : 'ALL CLEAR'}
+                    </Text>
+                  </View>
+                </View>
+              </View>
+
+            </Animated.View>
+          ) : (
+            <ScreenStateCard
+              mode={screenState as ScreenStateMode}
+              title={stateTitle}
+              body={stateBody}
+              actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : undefined}
+              onAction={
+                screenState === 'error'
+                  ? (onRetry ??
+                    (() =>
+                      Alert.alert(
+                        isTr ? 'Tekrar Dene' : 'Retry',
+                        isTr ? 'Lütfen kısa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.',
+                      )))
+                  : undefined
+              }
+            />
+          )}
+        </ScrollView>
       </Animated.View>
     </View>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#faf9f8',
+    backgroundColor: '#f6f4f0',
   },
   backLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -335,337 +454,337 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   content: {
-    paddingTop: 32,
-    paddingHorizontal: 24,
-    paddingBottom: 110,
-    gap: 18,
+    paddingTop: 56,
+    paddingHorizontal: 20,
+    paddingBottom: 120,
   },
+
+  // ── Header ──
   header: {
-    height: 44,
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 24,
   },
   backBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#f1f1f0',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  headerTitle: {
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: '700',
-    color: '#2d2d2d',
-    letterSpacing: -0.4,
-  },
-  headerPlaceholder: {
-    width: 44,
-    height: 44,
-  },
-  attentionCard: {
-    marginTop: 8,
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: '#f5ece1',
-    backgroundColor: '#fff',
-    paddingHorizontal: 24,
-    paddingTop: 24,
-    paddingBottom: 18,
     shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  attentionTop: {
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#30332e',
+    letterSpacing: -0.2,
+  },
+  headerPlaceholder: {
+    width: 76,
+  },
+  addPill: {
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: '#47664a',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    shadowColor: '#47664a',
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  addPillText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+  },
+
+  // ── Attention banner ──
+  attentionBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    marginBottom: 24,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  attentionLeft: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+    flex: 1,
+  },
+  attentionPill: {
+    height: 28,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 1,
+  },
+  attentionPillDanger: {
+    backgroundColor: '#fdf0f0',
+    borderColor: '#f5dede',
+  },
+  attentionPillWarn: {
+    backgroundColor: '#fef6ea',
+    borderColor: '#f5e9d1',
+  },
+  attentionPillText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  attentionRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingLeft: 8,
+  },
+  attentionCta: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#47664a',
+  },
+
+  // ── Section label ──
+  sectionLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#5d605a',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: 12,
+    marginLeft: 2,
+  },
+
+  // ── Featured card ──
+  featuredCard: {
+    borderRadius: 28,
+    backgroundColor: '#2e4230',
+    padding: 24,
+    overflow: 'hidden',
+  },
+  featuredBlob: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+  },
+  featuredTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 20,
   },
-  attentionTexts: {
+  featuredLeft: {
     flex: 1,
     paddingRight: 12,
+    gap: 8,
   },
-  attentionTitle: {
-    fontSize: 34,
-    lineHeight: 40,
-    fontWeight: '700',
-    color: '#2d2d2d',
-    letterSpacing: -0.6,
-  },
-  attentionSub: {
-    marginTop: 8,
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#787878',
-    fontWeight: '500',
-  },
-  attentionIconWrap: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
+  glassTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderWidth: 1,
-    borderColor: '#f5e3e3',
-    backgroundColor: '#fdf3f3',
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  glassTagText: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    color: 'rgba(255,255,255,0.85)',
+  },
+  featuredTitle: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: -0.3,
+    lineHeight: 28,
+  },
+  featuredSub: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.65)',
+    lineHeight: 20,
+  },
+  featuredDateBox: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     alignItems: 'center',
     justifyContent: 'center',
+    minWidth: 72,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
-  attentionDivider: {
-    marginTop: 18,
-    height: 1,
-    backgroundColor: 'rgba(245,236,225,0.7)',
+  featuredDateNum: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#fff',
+    lineHeight: 32,
   },
-  attentionPillsRow: {
-    marginTop: 16,
+  featuredDateSub: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.7)',
+    letterSpacing: 0.5,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  featuredMeta: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 20,
   },
-  pill: {
-    height: 32,
-    borderRadius: 18,
-    paddingHorizontal: 10,
+  featuredMetaItem: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    borderWidth: 1,
   },
-  pillDanger: {
-    backgroundColor: '#fdf3f3',
-    borderColor: '#f5e3e3',
+  featuredMetaText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.75)',
   },
-  pillWarn: {
-    backgroundColor: '#fcf6ee',
-    borderColor: '#f2ebd9',
+
+  // ── Vaccine card ──
+  historyList: {
+    gap: 10,
   },
-  pillSafe: {
-    backgroundColor: '#f4f7f2',
-    borderColor: '#e6eddc',
+  vaccineCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 14,
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
-  pillText: {
+  vaccineIconBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  vaccineMain: {
+    flex: 1,
+    gap: 3,
+  },
+  vaccineName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#30332e',
+    lineHeight: 21,
+  },
+  vaccineMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  vaccineSub: {
     fontSize: 12,
-    lineHeight: 18,
+    fontWeight: '500',
+    color: '#5d605a',
+  },
+  vaccineDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: '#b1b3ab',
+  },
+  vaccineDueText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#5d605a',
+  },
+  vaccinePill: {
+    height: 26,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  vaccinePillText: {
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
-  pillTextDanger: {
-    color: '#b55858',
-  },
-  pillTextWarn: {
-    color: '#ad762d',
-  },
-  pillTextSafe: {
-    color: '#718562',
-  },
-  resolveLink: {
-    marginTop: 16,
-    alignSelf: 'flex-start',
+
+  // ── Stats bento grid ──
+  statsGrid: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-    paddingHorizontal: 2,
+    gap: 12,
+    marginTop: 28,
   },
-  resolveText: {
-    fontSize: 13,
-    lineHeight: 20,
-    fontWeight: '700',
-    color: '#c96a6a',
-  },
-  sectionLabel: {
-    marginTop: 6,
-    marginLeft: 4,
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '700',
-    color: '#787878',
-    letterSpacing: 1.4,
-  },
-  nextCard: {
-    height: 116,
+  statsCard: {
+    flex: 1,
+    backgroundColor: '#eeeee8',
     borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 24,
+    padding: 20,
+    gap: 2,
+  },
+  statsLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#5d605a',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    marginBottom: 6,
+  },
+  statsValue: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#30332e',
+    letterSpacing: -1,
+    lineHeight: 42,
+  },
+  statsSubRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 4,
+    gap: 5,
+    marginTop: 4,
   },
-  nextAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 1,
-    bottom: 1,
+  statsDot: {
     width: 6,
-    borderTopLeftRadius: 24,
-    borderBottomLeftRadius: 24,
-    backgroundColor: 'rgba(196,141,66,0.9)',
+    height: 6,
+    borderRadius: 3,
   },
-  nextIconWrap: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: '#fcf6ee',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 16,
-  },
-  nextMain: {
-    flex: 1,
-    gap: 2,
-  },
-  nextTitle: {
-    fontSize: 24,
-    lineHeight: 30,
-    color: '#2d2d2d',
+  statsSub: {
+    fontSize: 9,
     fontWeight: '700',
-  },
-  nextSub: {
-    fontSize: 15,
-    lineHeight: 23,
-    color: '#787878',
-    fontWeight: '500',
-  },
-  nextRight: {
-    alignItems: 'flex-end',
-    justifyContent: 'center',
-    paddingLeft: 8,
-    gap: 4,
-  },
-  nextDate: {
-    fontSize: 16,
-    lineHeight: 24,
-    color: '#2d2d2d',
-    fontWeight: '700',
-  },
-  nextSoon: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: '#c48d42',
-    fontWeight: '600',
-  },
-  historyList: {
-    gap: 12,
-  },
-  historyCard: {
-    minHeight: 140,
-    borderRadius: 24,
-    borderWidth: 1,
-    backgroundColor: '#fff',
-    paddingHorizontal: 21,
-    paddingVertical: 18,
-  },
-  historyCardDanger: {
-    borderColor: '#f5e3e3',
-    shadowColor: '#c96a6a',
-    shadowOpacity: 0.15,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
-  },
-  historyCardNeutral: {
-    borderColor: 'rgba(0,0,0,0.02)',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  historyTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-  },
-  historyLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  historyIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  historyIconDanger: {
-    backgroundColor: '#fdf3f3',
-  },
-  historyIconNeutral: {
-    backgroundColor: '#faf9f8',
-  },
-  historyTitle: {
-    fontSize: 17,
-    lineHeight: 25,
-    color: '#2d2d2d',
-    fontWeight: '700',
-  },
-  historySubtitle: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: '#787878',
-    fontWeight: '500',
-  },
-  historyDivider: {
-    marginTop: 16,
-    marginBottom: 16,
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.03)',
-  },
-  historyBottom: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 4,
-  },
-  historyDueLabel: {
-    fontSize: 14,
-    lineHeight: 21,
-    color: '#787878',
-    fontWeight: '500',
-  },
-  historyDueValue: {
-    fontSize: 15,
-    lineHeight: 23,
-    color: 'rgba(45,45,45,0.9)',
-    fontWeight: '600',
-  },
-  addBtn: {
-    position: 'absolute',
-    alignSelf: 'center',
-    bottom: 28,
-    height: 52,
-    borderRadius: 999,
-    paddingHorizontal: 30,
-    backgroundColor: '#2d2d2d',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 6,
-  },
-  addPlus: {
-    fontSize: 24,
-    lineHeight: 24,
-    color: '#faf8f5',
-    fontWeight: '400',
-    marginTop: -1,
-  },
-  addText: {
-    fontSize: 17,
-    lineHeight: 25,
-    color: '#faf8f5',
-    fontWeight: '700',
+    color: '#5d605a',
+    letterSpacing: 0.8,
   },
 });
-

@@ -1,23 +1,82 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {
+  Bell,
+  ChevronRight,
+  ClipboardList,
+  FileText,
+  Scale,
+  Stethoscope,
+  Syringe,
+} from 'lucide-react-native';
 
+// ─── Colour palette (matches reference design system) ────────────────────────
+const C = {
+  bg: '#f6f4f0',
+  surface: '#ffffff',
+  surfaceLow: '#f4f4ee',
+  surfaceContainer: '#eeeee8',
+  primary: '#47664a',
+  primaryDim: '#3b5a3f',
+  onPrimary: '#e9ffe6',
+  onSurface: '#30332e',
+  onSurfaceVariant: '#5d605a',
+  outlineVariant: '#b1b3ab',
+  outline: '#797c75',
+  // category icon backgrounds
+  iconVet: '#edffe3',
+  iconRecords: '#ede8f5',
+  iconVaccines: '#cbebc8',
+  iconReminders: '#dff0e8',
+  iconWeight: '#e3eef8',
+  iconDocuments: '#f5ede3',
+  // category icon foregrounds
+  fgVet: '#3a6e45',
+  fgRecords: '#5a4a7a',
+  fgVaccines: '#3a6a3a',
+  fgReminders: '#3a6a56',
+  fgWeight: '#3a4e7a',
+  fgDocuments: '#7a5a3a',
+  // timeline type accents
+  accentVaccine: '#3d6fa8',
+  accentVet: '#7a5a28',
+  accentRecord: '#4f6b43',
+  accentWeight: '#3a4e7a',
+  // status
+  urgent: '#a73b21',
+  urgentBg: '#fde8e3',
+};
+
+// ─── Exported types ────────────────────────────────────────────────────────────
 export type HealthHubCategory = 'all' | 'vaccine' | 'vet' | 'record' | 'weight';
-
 export type AddHealthRecordType = 'vaccine' | 'diagnosis' | 'procedure' | 'prescription' | 'test';
-
 export type AddHealthRecordPayload = {
   type: AddHealthRecordType;
   title: string;
   date: string;
   note?: string;
 };
+export type HealthHubExpenses = {
+  total: number;
+  currency: string;
+  breakdown: { label: string; amount: number; color: string }[];
+};
 
 export type HealthHubSummary = {
   latestWeight: string;
   vaccineStatus: string;
   lastVetVisit: string;
+  totalExpenses?: HealthHubExpenses;
 };
-
 export type HealthHubTimelineItem = {
   id: string;
   type: Exclude<HealthHubCategory, 'all'>;
@@ -25,68 +84,107 @@ export type HealthHubTimelineItem = {
   title: string;
   notes?: string;
 };
-
+type HealthHubDomainKey = 'vet' | 'records' | 'vaccines' | 'reminders' | 'weight' | 'documents';
+export type HealthHubDomainOverview = Partial<
+  Record<HealthHubDomainKey, { countText: string; statusText: string; infoText: string }>
+>;
 type HealthHubScreenProps = {
   summary: HealthHubSummary;
   timeline: HealthHubTimelineItem[];
   initialCategory?: HealthHubCategory;
   categoryResetKey?: string | number;
+  createPreset?: {
+    type?: AddHealthRecordType;
+    title?: string;
+    note?: string;
+    openCreate?: boolean;
+    nonce?: number;
+  } | null;
   onPrimaryCta?: () => void;
   onAddRecord?: (payload: AddHealthRecordPayload) => void;
   onDeleteRecord?: (timelineItemId: string) => void;
+  onOpenVetVisits?: () => void;
+  onOpenHealthRecords?: () => void;
+  onOpenVaccines?: () => void;
+  onOpenReminders?: () => void;
+  onOpenWeightTracking?: () => void;
+  onOpenDocuments?: () => void;
+  domainOverview?: HealthHubDomainOverview;
   locale?: 'en' | 'tr';
 };
 
-function SummaryCard({ title, value }: { title: string; value: string }) {
-  return (
-    <View style={styles.summaryCard}>
-      <Text style={styles.summaryTitle}>{title}</Text>
-      <Text style={styles.summaryValue}>{value}</Text>
-    </View>
-  );
-}
-
-function categoryLabel(category: HealthHubCategory, isTr: boolean) {
-  if (category === 'all') return isTr ? 'Tümü' : 'All';
-  if (category === 'vaccine') return isTr ? 'Aşılar' : 'Vaccines';
-  if (category === 'vet') return isTr ? 'Vet Ziy.' : 'Vet Visits';
-  if (category === 'record') return isTr ? 'Kayıtlar' : 'Records';
+// ─── Helpers ───────────────────────────────────────────────────────────────────
+function categoryLabel(c: HealthHubCategory, isTr: boolean) {
+  if (c === 'all') return isTr ? 'Tümü' : 'All';
+  if (c === 'vaccine') return isTr ? 'Aşılar' : 'Vaccines';
+  if (c === 'vet') return isTr ? 'Veteriner' : 'Vet Visits';
+  if (c === 'record') return isTr ? 'Kayıtlar' : 'Records';
   return isTr ? 'Kilo' : 'Weight';
 }
-
 function typeTag(type: Exclude<HealthHubCategory, 'all'>, isTr: boolean) {
   if (type === 'vaccine') return isTr ? 'Aşı' : 'Vaccine';
-  if (type === 'vet') return isTr ? 'Vet' : 'Vet';
+  if (type === 'vet') return isTr ? 'Veteriner' : 'Vet Visit';
   if (type === 'record') return isTr ? 'Kayıt' : 'Record';
   return isTr ? 'Kilo' : 'Weight';
+}
+function recordTypeLabel(t: AddHealthRecordType, isTr: boolean) {
+  if (t === 'vaccine') return isTr ? 'Aşı' : 'Vaccine';
+  if (t === 'diagnosis') return isTr ? 'Teşhis' : 'Diagnosis';
+  if (t === 'procedure') return isTr ? 'Prosedür' : 'Procedure';
+  if (t === 'prescription') return isTr ? 'İlaç' : 'Prescription';
+  return isTr ? 'Test' : 'Test';
+}
+function isValidDate(v: string) {
+  return Number.isFinite(new Date(`${v}T12:00:00.000Z`).getTime());
+}
+function timelineTypeBg(type: Exclude<HealthHubCategory, 'all'>) {
+  if (type === 'vaccine') return C.iconVaccines;
+  if (type === 'vet') return C.iconVet;
+  if (type === 'weight') return C.iconWeight;
+  return '#eeeee8';
+}
+function timelineTypeAccent(type: Exclude<HealthHubCategory, 'all'>) {
+  if (type === 'vaccine') return C.accentVaccine;
+  if (type === 'vet') return C.accentVet;
+  if (type === 'weight') return C.accentWeight;
+  return C.accentRecord;
 }
 
 const RECORD_TYPES: AddHealthRecordType[] = ['vaccine', 'diagnosis', 'procedure', 'prescription', 'test'];
 
-function recordTypeLabel(type: AddHealthRecordType, isTr: boolean) {
-  if (type === 'vaccine') return isTr ? 'Aşı' : 'Vaccine';
-  if (type === 'diagnosis') return isTr ? 'Teşhis' : 'Diagnosis';
-  if (type === 'procedure') return isTr ? 'Prosedür' : 'Procedure';
-  if (type === 'prescription') return isTr ? 'İlaç' : 'Prescription';
-  return isTr ? 'Test' : 'Test';
-}
-
-function isValidDate(value: string) {
-  const ms = new Date(`${value}T12:00:00.000Z`).getTime();
-  return Number.isFinite(ms);
-}
-
+// ─── Main screen ──────────────────────────────────────────────────────────────
 export default function HealthHubScreen({
   summary,
   timeline,
   initialCategory = 'all',
   categoryResetKey,
+  createPreset,
   onPrimaryCta,
   onAddRecord,
   onDeleteRecord,
+  onOpenVetVisits,
+  onOpenHealthRecords,
+  onOpenVaccines,
+  onOpenReminders,
+  onOpenWeightTracking,
+  onOpenDocuments,
+  domainOverview,
   locale = 'en',
 }: HealthHubScreenProps) {
   const isTr = locale === 'tr';
+
+  // ── entrance animations ──
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(18)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 420, useNativeDriver: true }),
+      Animated.timing(slideAnim, { toValue: 0, duration: 380, useNativeDriver: true }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
+
+  // ── local state ──
   const [category, setCategory] = useState<HealthHubCategory>(initialCategory);
   const [selectedItem, setSelectedItem] = useState<HealthHubTimelineItem | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -99,157 +197,262 @@ export default function HealthHubScreen({
   const [error, setError] = useState('');
   const saveScale = useMemo(() => new Animated.Value(1), []);
 
+  useEffect(() => { setCategory(initialCategory); }, [initialCategory, categoryResetKey]);
+
   useEffect(() => {
-    setCategory(initialCategory);
-  }, [initialCategory, categoryResetKey]);
+    if (!createPreset?.openCreate) return;
+    openCreate(createPreset.type ?? 'diagnosis', createPreset.title, createPreset.note);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createPreset?.nonce, createPreset?.openCreate]);
 
-  const filteredTimeline = useMemo(() => {
-    if (category === 'all') return timeline;
-    return timeline.filter((item) => item.type === category);
-  }, [category, timeline]);
-
+  // ── derived ──
+  const filteredTimeline = useMemo(
+    () => (category === 'all' ? timeline : timeline.filter((i) => i.type === category)),
+    [category, timeline],
+  );
   const categoryCounts = useMemo(() => {
-    const counts: Partial<Record<HealthHubCategory, number>> = { all: timeline.length };
-    for (const item of timeline) {
-      counts[item.type] = (counts[item.type] ?? 0) + 1;
-    }
-    return counts;
+    const c: Partial<Record<HealthHubCategory, number>> = { all: timeline.length };
+    for (const item of timeline) c[item.type] = (c[item.type] ?? 0) + 1;
+    return c;
   }, [timeline]);
-
   const isFormValid = recTitle.trim().length > 0 && recDate.trim().length > 0 && isValidDate(recDate);
 
-  const openCreate = () => {
-    setRecType('diagnosis');
-    setRecTitle('');
+  // ── hub entries ──
+  const hubEntries = useMemo(
+    () => [
+      {
+        key: 'vet',
+        title: isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits',
+        subtitle: isTr ? 'Klinik görüşmeleri ve randevular' : 'Clinic visits & appointments',
+        icon: <Stethoscope size={22} color={C.fgVet} />,
+        iconBg: C.iconVet,
+        onPress: onOpenVetVisits,
+        overview: domainOverview?.vet,
+      },
+      {
+        key: 'records',
+        title: isTr ? 'Sağlık Kayıtları' : 'Health Records',
+        subtitle: isTr ? 'Tanı, prosedür, test sonuçları' : 'Diagnosis, procedures & tests',
+        icon: <ClipboardList size={22} color={C.fgRecords} />,
+        iconBg: C.iconRecords,
+        onPress: onOpenHealthRecords ?? (() => setCategory('record')),
+        overview: domainOverview?.records,
+      },
+      {
+        key: 'vaccines',
+        title: isTr ? 'Aşılar' : 'Vaccines',
+        subtitle: isTr ? 'Yapılan ve planlanan aşılar' : 'Administered & upcoming vaccines',
+        icon: <Syringe size={22} color={C.fgVaccines} />,
+        iconBg: C.iconVaccines,
+        onPress: onOpenVaccines,
+        overview: domainOverview?.vaccines,
+      },
+      {
+        key: 'reminders',
+        title: isTr ? 'Hatırlatıcılar' : 'Reminders',
+        subtitle: isTr ? 'Bir sonraki aksiyonlar' : 'Upcoming tasks & alerts',
+        icon: <Bell size={22} color={C.fgReminders} />,
+        iconBg: C.iconReminders,
+        onPress: onOpenReminders,
+        overview: domainOverview?.reminders,
+      },
+      {
+        key: 'weight',
+        title: isTr ? 'Kilo Takibi' : 'Weight Tracking',
+        subtitle: isTr ? 'Trend ve değişim analizi' : 'Trends & body condition',
+        icon: <Scale size={22} color={C.fgWeight} />,
+        iconBg: C.iconWeight,
+        onPress: onOpenWeightTracking,
+        overview: domainOverview?.weight,
+      },
+      {
+        key: 'documents',
+        title: isTr ? 'Belgeler' : 'Documents',
+        subtitle: isTr ? 'PDF, rapor, görüntüleme' : 'Lab reports & imaging',
+        icon: <FileText size={22} color={C.fgDocuments} />,
+        iconBg: C.iconDocuments,
+        onPress: onOpenDocuments,
+        overview: domainOverview?.documents,
+      },
+    ],
+    [domainOverview, isTr, onOpenDocuments, onOpenHealthRecords, onOpenReminders, onOpenVaccines, onOpenVetVisits, onOpenWeightTracking],
+  );
+
+  // ── form helpers ──
+  const openCreate = (presetType: AddHealthRecordType = 'diagnosis', presetTitle = '', presetNote = '') => {
+    setRecType(presetType);
+    setRecTitle(presetTitle ?? '');
     setRecDate(new Date().toISOString().slice(0, 10));
-    setRecNote('');
+    setRecNote(presetNote ?? '');
     setError('');
     setCreateOpen(true);
   };
-
   const submitCreate = () => {
     const cleanTitle = recTitle.trim();
-    if (!cleanTitle) {
-      setError(isTr ? 'Başlık girin.' : 'Please enter a title.');
-      return;
-    }
-    if (!isValidDate(recDate)) {
-      setError(isTr ? 'Geçerli tarih girin (YYYY-AA-GG).' : 'Please enter a valid date (YYYY-MM-DD).');
-      return;
-    }
-    onAddRecord?.({
-      type: recType,
-      title: cleanTitle,
-      date: recDate,
-      note: recNote.trim() || undefined,
-    });
+    if (!cleanTitle) { setError(isTr ? 'Başlık girin.' : 'Please enter a title.'); return; }
+    if (!isValidDate(recDate)) { setError(isTr ? 'Geçerli tarih girin (YYYY-AA-GG).' : 'Enter a valid date (YYYY-MM-DD).'); return; }
+    onAddRecord?.({ type: recType, title: cleanTitle, date: recDate, note: recNote.trim() || undefined });
     setCreateOpen(false);
   };
 
+  // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.headerRow}>
-          <Text style={styles.headerTitle}>{isTr ? 'Sağlık' : 'Health'}</Text>
-          {onAddRecord ? (
-            <Pressable style={styles.addBtn} onPress={openCreate}>
-              <Text style={styles.addBtnText}>{isTr ? '+ Ekle' : '+ Add'}</Text>
-            </Pressable>
-          ) : null}
-        </View>
+    <View style={s.screen}>
+      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
 
-        <View style={styles.summaryGrid}>
-          <SummaryCard title={isTr ? 'Kilo' : 'Weight'} value={summary.latestWeight} />
-          <SummaryCard title={isTr ? 'Aşı Durumu' : 'Vaccine Status'} value={summary.vaccineStatus} />
-          <SummaryCard title={isTr ? 'Son Vet Ziyareti' : 'Last Vet Visit'} value={summary.lastVetVisit} />
-        </View>
+        {/* ── HEADER ── */}
+        <Animated.View style={[s.headerRow, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          <View>
+            <Text style={s.headerLabel}>{isTr ? 'SAĞLIK KAYITLARI' : 'CARE RECORDS'}</Text>
+            <Text style={s.headerTitle}>{isTr ? 'Sağlık Merkezi' : 'Health Hub'}</Text>
+          </View>
+        </Animated.View>
 
-        <Text style={styles.sectionTitle}>{isTr ? 'Geçmiş' : 'Timeline'}</Text>
+        {/* ── QUICK STATS STRIP ── */}
+        <Animated.View style={[s.statsStrip, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          <View style={s.statItem}>
+            <Text style={s.statLabel}>{isTr ? 'KİLO' : 'WEIGHT'}</Text>
+            <Text style={s.statValue} numberOfLines={1}>{summary.latestWeight || '—'}</Text>
+          </View>
+          <View style={s.statDivider} />
+          <View style={s.statItem}>
+            <Text style={s.statLabel}>{isTr ? 'AŞI' : 'VACCINES'}</Text>
+            <Text style={s.statValue} numberOfLines={1}>{summary.vaccineStatus || '—'}</Text>
+          </View>
+          <View style={s.statDivider} />
+          <View style={s.statItem}>
+            <Text style={s.statLabel}>{isTr ? 'SON ZİYARET' : 'LAST VISIT'}</Text>
+            <Text style={s.statValue} numberOfLines={1}>{summary.lastVetVisit || '—'}</Text>
+          </View>
+        </Animated.View>
 
-        <View style={styles.filtersRow}>
-          {(['all', 'record', 'vaccine', 'vet', 'weight'] as HealthHubCategory[]).map((item) => {
-            const count = categoryCounts[item] ?? 0;
-            const isActive = category === item;
-            return (
-              <Pressable key={item} style={[styles.filterChip, isActive && styles.filterChipActive]} onPress={() => setCategory(item)}>
-                <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                  {categoryLabel(item, isTr)}{count > 0 ? ` ${count}` : ''}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        <View style={styles.timelineCard}>
-          {filteredTimeline.length === 0 ? (
-            <View style={styles.emptyWrap}>
-              <Text style={styles.emptyTitle}>{isTr ? 'Henüz kayıt yok' : 'No health records yet'}</Text>
-              <Text style={styles.emptyText}>{isTr ? 'İlk kaydı eklemek için + Ekle düğmesine dokun.' : 'Tap + Add to log your first health record.'}</Text>
-              <Pressable style={styles.emptyCta} onPress={onAddRecord ? openCreate : onPrimaryCta}>
-                <Text style={styles.emptyCtaText}>{isTr ? 'Kayıt Ekle' : 'Add Record'}</Text>
-              </Pressable>
+        {/* ── TOTAL EXPENSES DARK CARD ── */}
+        {summary.totalExpenses ? (
+          <Animated.View style={[s.expensesCard, { opacity: fadeAnim }]}>
+            <View style={s.expensesTopRow}>
+              <Text style={s.expensesLabel}>{isTr ? 'TOPLAM HARCAMA' : 'TOTAL EXPENSES'}</Text>
+              <View style={s.expensesYearPill}>
+                <Text style={s.expensesYearText}>{new Date().getFullYear()}</Text>
+              </View>
             </View>
-          ) : (
-            filteredTimeline.map((item, index) => (
-              <Pressable
-                key={item.id}
-                style={[styles.eventRow, index !== filteredTimeline.length - 1 && styles.eventRowDivider]}
-                onPress={() => { setDeleteConfirm(false); setSelectedItem(item); }}
-              >
-                <View style={styles.eventHeadRow}>
-                  <Text style={styles.eventDate}>{item.date}</Text>
-                  <Text style={[styles.eventTypeTag, item.type === 'vaccine' && styles.eventTypeTagVaccine, item.type === 'vet' && styles.eventTypeTagVet]}>
-                    {typeTag(item.type, isTr)}
-                  </Text>
-                </View>
-                <Text style={styles.eventTitle}>{item.title}</Text>
-                {item.notes ? <Text style={styles.eventNote}>{item.notes}</Text> : null}
-              </Pressable>
-            ))
-          )}
+            <Text style={s.expensesTotal}>
+              {summary.totalExpenses.total.toLocaleString('tr-TR')}
+              <Text style={s.expensesCurrency}> {summary.totalExpenses.currency}</Text>
+            </Text>
+            {summary.totalExpenses.breakdown.length > 0 ? (
+              <View style={s.expensesBreakRow}>
+                {summary.totalExpenses.breakdown.map((item) => (
+                  <View key={item.label} style={s.expensesBreakItem}>
+                    <View style={[s.expensesDot, { backgroundColor: item.color }]} />
+                    <Text style={s.expensesBreakLabel}>{item.label}</Text>
+                    <Text style={s.expensesBreakAmt}>{item.amount.toLocaleString('tr-TR')}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </Animated.View>
+        ) : null}
+
+        {/* ── CATEGORY SECTION HEADER ── */}
+        <View style={s.sectionHeaderRow}>
+          <Text style={s.sectionLabel}>{isTr ? 'KAYIT KATEGORİLERİ' : 'RECORD CATEGORIES'}</Text>
         </View>
+
+        {/* ── CATEGORY CARDS ── */}
+        <Animated.View style={[s.categoryList, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          {hubEntries.map((entry, idx) => (
+            <Pressable
+              key={entry.key}
+              style={[s.categoryCard, idx < hubEntries.length - 1 && s.categoryCardDivider]}
+              onPress={entry.onPress}
+              android_ripple={{ color: 'rgba(71,102,74,0.06)' }}
+            >
+              {/* Icon box */}
+              <View style={[s.categoryIconBox, { backgroundColor: entry.iconBg }]}>
+                {entry.icon}
+              </View>
+
+              {/* Body text */}
+              <View style={s.categoryCardBody}>
+                <Text style={s.categoryCardTitle}>{entry.title}</Text>
+                <Text style={s.categoryCardSub} numberOfLines={1}>
+                  {entry.overview?.infoText ?? entry.subtitle}
+                </Text>
+              </View>
+
+              {/* Right side: count badge + status */}
+              <View style={s.categoryCardRight}>
+                {entry.overview?.countText ? (
+                  <View style={s.countBadge}>
+                    <Text style={s.countBadgeText}>{entry.overview.countText}</Text>
+                  </View>
+                ) : null}
+                {entry.overview?.statusText ? (
+                  <Text style={s.categoryStatusText} numberOfLines={1}>
+                    {entry.overview.statusText}
+                  </Text>
+                ) : null}
+              </View>
+
+              <ChevronRight size={16} color={C.outlineVariant} />
+            </Pressable>
+          ))}
+        </Animated.View>
+
       </ScrollView>
 
-      {/* Detail / Delete modal */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* DETAIL / DELETE BOTTOM SHEET                                          */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
       <Modal
         visible={!!selectedItem}
         transparent
-        animationType="fade"
+        animationType="slide"
         onRequestClose={() => setSelectedItem(null)}
       >
-        <Pressable style={styles.detailOverlay} onPress={() => setSelectedItem(null)}>
-          <Pressable style={styles.detailSheet} onPress={() => {}}>
+        <Pressable style={s.sheetOverlay} onPress={() => setSelectedItem(null)}>
+          <Pressable style={s.sheet} onPress={() => {}}>
             {selectedItem ? (
               <>
-                <View style={styles.detailHeadRow}>
-                  <Text style={[styles.detailTypeTag, selectedItem.type === 'vaccine' && styles.eventTypeTagVaccine, selectedItem.type === 'vet' && styles.eventTypeTagVet]}>
-                    {typeTag(selectedItem.type, isTr)}
-                  </Text>
-                  <Text style={styles.detailDate}>{selectedItem.date}</Text>
-                </View>
-                <Text style={styles.detailTitle}>{selectedItem.title}</Text>
-                {selectedItem.notes ? <Text style={styles.detailNote}>{selectedItem.notes}</Text> : null}
+                {/* Sheet handle */}
+                <View style={s.sheetHandle} />
 
-                <View style={styles.detailActions}>
-                  <Pressable style={styles.detailCloseBtn} onPress={() => setSelectedItem(null)}>
-                    <Text style={styles.detailCloseBtnText}>{isTr ? 'Kapat' : 'Close'}</Text>
+                <View style={s.sheetHead}>
+                  <View style={[s.sheetTypePill, { borderColor: `${timelineTypeAccent(selectedItem.type)}30`, backgroundColor: `${timelineTypeAccent(selectedItem.type)}12` }]}>
+                    <Text style={[s.sheetTypeText, { color: timelineTypeAccent(selectedItem.type) }]}>
+                      {typeTag(selectedItem.type, isTr)}
+                    </Text>
+                  </View>
+                  <Text style={s.sheetDate}>{selectedItem.date}</Text>
+                </View>
+
+                <Text style={s.sheetTitle}>{selectedItem.title}</Text>
+                {selectedItem.notes ? (
+                  <Text style={s.sheetNote}>{selectedItem.notes}</Text>
+                ) : null}
+
+                <View style={s.sheetActions}>
+                  <Pressable style={s.sheetCloseBtn} onPress={() => setSelectedItem(null)}>
+                    <Text style={s.sheetCloseBtnText}>{isTr ? 'Kapat' : 'Close'}</Text>
                   </Pressable>
 
                   {onDeleteRecord && (selectedItem.type === 'record' || selectedItem.type === 'vaccine') ? (
                     deleteConfirm ? (
                       <Pressable
-                        style={styles.detailDeleteConfirmBtn}
+                        style={s.sheetDeleteConfirmBtn}
                         onPress={() => {
                           onDeleteRecord(selectedItem.id);
                           setSelectedItem(null);
                           setDeleteConfirm(false);
                         }}
                       >
-                        <Text style={styles.detailDeleteConfirmText}>{isTr ? 'Sil — emin misin?' : 'Confirm Delete'}</Text>
+                        <Text style={s.sheetDeleteConfirmText}>
+                          {isTr ? 'Sil — emin misin?' : 'Confirm Delete'}
+                        </Text>
                       </Pressable>
                     ) : (
-                      <Pressable style={styles.detailDeleteBtn} onPress={() => setDeleteConfirm(true)}>
-                        <Text style={styles.detailDeleteBtnText}>{isTr ? 'Sil' : 'Delete'}</Text>
+                      <Pressable style={s.sheetDeleteBtn} onPress={() => setDeleteConfirm(true)}>
+                        <Text style={s.sheetDeleteBtnText}>{isTr ? 'Sil' : 'Delete'}</Text>
                       </Pressable>
                     )
                   ) : null}
@@ -260,6 +463,9 @@ export default function HealthHubScreen({
         </Pressable>
       </Modal>
 
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* CREATE MODAL (full screen slide-up)                                   */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
       <Modal
         visible={createOpen}
         transparent={false}
@@ -268,39 +474,65 @@ export default function HealthHubScreen({
         statusBarTranslucent={false}
         onRequestClose={() => setCreateOpen(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{isTr ? 'Kayıt Ekle' : 'Add Health Record'}</Text>
+        <View style={s.createScreen}>
+          {/* Header */}
+          <View style={s.createHeader}>
+            <Pressable style={s.createCancelBtn} onPress={() => setCreateOpen(false)}>
+              <Text style={s.createCancelText}>{isTr ? 'İptal' : 'Cancel'}</Text>
+            </Pressable>
+            <Text style={s.createHeaderTitle}>{isTr ? 'Kayıt Ekle' : 'Add Record'}</Text>
+            <Animated.View style={{ transform: [{ scale: saveScale }] }}>
+              <Pressable
+                style={[s.createSaveBtn, !isFormValid && s.createSaveBtnDisabled]}
+                disabled={!isFormValid}
+                onPress={submitCreate}
+                onPressIn={() =>
+                  Animated.spring(saveScale, { toValue: 0.97, useNativeDriver: true, speed: 40, bounciness: 6 }).start()
+                }
+                onPressOut={() =>
+                  Animated.spring(saveScale, { toValue: 1, useNativeDriver: true, speed: 36, bounciness: 5 }).start()
+                }
+              >
+                <Text style={s.createSaveText}>{isTr ? 'Kaydet' : 'Save'}</Text>
+              </Pressable>
+            </Animated.View>
+          </View>
 
-            <Text style={styles.fieldLabel}>{isTr ? 'Tür' : 'Type'}</Text>
-            <View style={styles.chips}>
+          <ScrollView style={s.createBody} contentContainerStyle={s.createBodyContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+            {/* Type chips */}
+            <Text style={s.createFieldLabel}>{isTr ? 'KAYIT TÜRÜ' : 'RECORD TYPE'}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.createChipsRow}>
               {RECORD_TYPES.map((t) => (
                 <Pressable
                   key={t}
-                  style={[styles.chip, recType === t ? styles.chipActive : styles.chipInactive]}
+                  style={[s.createChip, recType === t && s.createChipActive]}
                   onPress={() => setRecType(t)}
                 >
-                  <Text style={[styles.chipText, recType === t && styles.chipTextActive]}>{recordTypeLabel(t, isTr)}</Text>
+                  <Text style={[s.createChipText, recType === t && s.createChipTextActive]}>
+                    {recordTypeLabel(t, isTr)}
+                  </Text>
                 </Pressable>
               ))}
-            </View>
+            </ScrollView>
 
-            <Text style={styles.fieldLabel}>{isTr ? 'Başlık' : 'Title'}</Text>
+            {/* Title */}
+            <Text style={s.createFieldLabel}>{isTr ? 'BAŞLIK' : 'TITLE'}</Text>
             <TextInput
-              style={[styles.input, focusedField === 'title' && styles.inputFocused]}
+              style={[s.createInput, focusedField === 'title' && s.createInputFocused]}
               placeholder={isTr ? 'Kayıt başlığı' : 'Record title'}
-              placeholderTextColor="#a4a4a4"
+              placeholderTextColor={C.outlineVariant}
               value={recTitle}
               onChangeText={setRecTitle}
               onFocus={() => setFocusedField('title')}
               onBlur={() => setFocusedField(null)}
             />
 
-            <Text style={styles.fieldLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
+            {/* Date */}
+            <Text style={s.createFieldLabel}>{isTr ? 'TARİH (YYYY-AA-GG)' : 'DATE (YYYY-MM-DD)'}</Text>
             <TextInput
-              style={[styles.input, focusedField === 'date' && styles.inputFocused]}
-              placeholder="2026-03-22"
-              placeholderTextColor="#a4a4a4"
+              style={[s.createInput, focusedField === 'date' && s.createInputFocused]}
+              placeholder={new Date().toISOString().slice(0, 10)}
+              placeholderTextColor={C.outlineVariant}
               value={recDate}
               onChangeText={setRecDate}
               autoCapitalize="none"
@@ -308,446 +540,651 @@ export default function HealthHubScreen({
               onBlur={() => setFocusedField(null)}
             />
 
-            <Text style={styles.fieldLabel}>{isTr ? 'Not (opsiyonel)' : 'Note (optional)'}</Text>
+            {/* Note */}
+            <Text style={s.createFieldLabel}>{isTr ? 'NOT (OPSİYONEL)' : 'NOTE (OPTIONAL)'}</Text>
             <TextInput
-              style={[styles.input, styles.inputMultiline, focusedField === 'note' && styles.inputFocused]}
-              placeholder={isTr ? 'Ek not...' : 'Additional note...'}
-              placeholderTextColor="#a4a4a4"
+              style={[s.createInput, s.createInputMultiline, focusedField === 'note' && s.createInputFocused]}
+              placeholder={isTr ? 'Ek not...' : 'Additional notes...'}
+              placeholderTextColor={C.outlineVariant}
               value={recNote}
               onChangeText={setRecNote}
               multiline
-              numberOfLines={3}
+              numberOfLines={4}
               onFocus={() => setFocusedField('note')}
               onBlur={() => setFocusedField(null)}
             />
 
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-            <View style={styles.modalActions}>
-              <Pressable style={styles.secondaryBtn} onPress={() => setCreateOpen(false)}>
-                <Text style={styles.secondaryBtnText}>{isTr ? 'İptal' : 'Cancel'}</Text>
-              </Pressable>
-              <Animated.View style={{ transform: [{ scale: saveScale }] }}>
-                <Pressable
-                  style={[styles.primaryBtn, !isFormValid && styles.primaryBtnDisabled]}
-                  disabled={!isFormValid}
-                  onPress={submitCreate}
-                  onPressIn={() => Animated.spring(saveScale, { toValue: 0.98, useNativeDriver: true, speed: 40, bounciness: 6 }).start()}
-                  onPressOut={() => Animated.spring(saveScale, { toValue: 1, useNativeDriver: true, speed: 36, bounciness: 5 }).start()}
-                >
-                  <Text style={styles.primaryBtnText}>{isTr ? 'Kaydet' : 'Save'}</Text>
-                </Pressable>
-              </Animated.View>
-            </View>
-          </View>
+            {error ? <Text style={s.createError}>{error}</Text> : null}
+          </ScrollView>
         </View>
       </Modal>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+// ─── Styles ───────────────────────────────────────────────────────────────────
+const s = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#faf8f5',
+    backgroundColor: C.bg,
   },
   content: {
-    paddingTop: 52,
-    paddingHorizontal: 24,
+    paddingTop: 56,
+    paddingHorizontal: 22,
     paddingBottom: 120,
-    gap: 12,
   },
+
+  // Header
   headerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  headerLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    color: C.onSurfaceVariant,
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  headerTitle: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: C.onSurface,
+    letterSpacing: -0.8,
+    lineHeight: 38,
+  },
+  addBtn: {
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: C.primary,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: C.primaryDim,
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  addBtnText: {
+    color: C.onPrimary,
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+
+  // Stats strip
+  statsStrip: {
+    flexDirection: 'row',
+    backgroundColor: C.surface,
+    borderRadius: 18,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    marginBottom: 24,
+    shadowColor: C.onSurface,
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  statItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 4,
+  },
+  statLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    color: C.onSurfaceVariant,
+    textTransform: 'uppercase',
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.onSurface,
+    textAlign: 'center',
+  },
+  statDivider: {
+    width: 1,
+    marginVertical: 2,
+    backgroundColor: C.outlineVariant,
+    opacity: 0.35,
+  },
+
+  // Expenses dark card
+  expensesCard: {
+    borderRadius: 22,
+    backgroundColor: '#243028',
+    paddingHorizontal: 22,
+    paddingVertical: 20,
+    marginBottom: 22,
+    shadowColor: '#1a2420',
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 6,
+  },
+  expensesTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 10,
   },
-  headerTitle: {
-    fontSize: 30,
-    lineHeight: 34,
-    color: '#2d2d2d',
+  expensesLabel: {
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: -0.6,
+    letterSpacing: 1.4,
+    color: 'rgba(255,255,255,0.55)',
+    textTransform: 'uppercase',
   },
-  addBtn: {
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#2d2d2d',
-    paddingHorizontal: 12,
+  expensesYearPill: {
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  expensesYearText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  expensesTotal: {
+    fontSize: 36,
+    fontWeight: '800',
+    color: '#ffffff',
+    letterSpacing: -1,
+    lineHeight: 42,
+    marginBottom: 14,
+  },
+  expensesCurrency: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.7)',
+  },
+  expensesBreakRow: {
+    flexDirection: 'row',
+    gap: 16,
+    flexWrap: 'wrap',
+  },
+  expensesBreakItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  expensesDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  expensesBreakLabel: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.55)',
+  },
+  expensesBreakAmt: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.85)',
+  },
+
+  // Section headers
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    color: C.onSurfaceVariant,
+    textTransform: 'uppercase',
+  },
+  timelineCountText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: C.outlineVariant,
+  },
+
+  // Category cards
+  categoryList: {
+    backgroundColor: C.surface,
+    borderRadius: 20,
+    marginBottom: 24,
+    overflow: 'hidden',
+    shadowColor: C.onSurface,
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  categoryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    gap: 14,
+  },
+  categoryCardDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.surfaceContainer,
+  },
+  categoryIconBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  addBtnText: {
-    color: '#faf8f5',
+  categoryCardBody: {
+    flex: 1,
+    gap: 3,
+  },
+  categoryCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.onSurface,
+    letterSpacing: -0.2,
+  },
+  categoryCardSub: {
     fontSize: 12,
+    fontWeight: '500',
+    color: C.onSurfaceVariant,
+    lineHeight: 16,
+  },
+  categoryCardRight: {
+    alignItems: 'flex-end',
+    gap: 3,
+  },
+  countBadge: {
+    backgroundColor: C.surfaceContainer,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  countBadgeText: {
+    fontSize: 11,
     fontWeight: '700',
+    color: C.primary,
   },
-  summaryGrid: {
-    gap: 8,
+  categoryStatusText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: C.onSurfaceVariant,
+    maxWidth: 80,
+    textAlign: 'right',
   },
-  summaryCard: {
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  summaryTitle: {
-    color: '#8a8a8a',
-    fontSize: 12,
-    lineHeight: 14,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  summaryValue: {
-    marginTop: 4,
-    color: '#2d2d2d',
-    fontSize: 16,
-    lineHeight: 20,
-    fontWeight: '700',
-  },
-  sectionTitle: {
-    marginTop: 4,
-    fontSize: 18,
-    lineHeight: 22,
-    color: '#2d2d2d',
-    fontWeight: '700',
-  },
+
+  // Filter chips
   filtersRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
+    paddingRight: 4,
+    marginBottom: 12,
   },
   filterChip: {
-    minHeight: 32,
+    height: 32,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
+    borderColor: C.outlineVariant,
+    backgroundColor: C.surface,
+    paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
   filterChipActive: {
-    borderColor: '#7f9a70',
-    backgroundColor: '#eef5ea',
+    borderColor: C.primary,
+    backgroundColor: '#edf5ea',
   },
   filterChipText: {
-    color: '#5f5f5f',
+    color: C.onSurfaceVariant,
     fontSize: 12,
-    lineHeight: 16,
     fontWeight: '600',
   },
   filterChipTextActive: {
-    color: '#4f6b43',
+    color: C.primary,
+    fontWeight: '700',
+  },
+
+  // Timeline
+  timelineContainer: {
+    backgroundColor: C.surface,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowColor: C.onSurface,
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   timelineCard: {
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    overflow: 'hidden',
-  },
-  emptyWrap: {
-    paddingHorizontal: 14,
-    paddingVertical: 16,
-    gap: 8,
-  },
-  emptyTitle: {
-    color: '#2d2d2d',
-    fontSize: 15,
-    lineHeight: 19,
-    fontWeight: '700',
-  },
-  emptyText: {
-    color: '#888',
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  emptyCta: {
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  emptyCtaText: {
-    color: '#4f6b43',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-  },
-  eventRow: {
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 3,
-  },
-  eventRowDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.06)',
-  },
-  eventHeadRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    gap: 12,
   },
-  eventDate: {
-    color: '#8a8a8a',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
+  timelineCardDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.surfaceContainer,
   },
-  eventTypeTag: {
-    color: '#6f7f65',
+  timelineIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  timelineBody: {
+    flex: 1,
+    gap: 2,
+  },
+  timelineTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.onSurface,
+    letterSpacing: -0.1,
+  },
+  timelineMeta: {
     fontSize: 11,
-    lineHeight: 14,
+    fontWeight: '500',
+    color: C.onSurfaceVariant,
+  },
+  timelineNote: {
+    fontSize: 11,
+    fontWeight: '400',
+    color: C.onSurfaceVariant,
+    lineHeight: 15,
+    marginTop: 1,
+  },
+  typeTagPill: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    flexShrink: 0,
+  },
+  typeTagText: {
+    fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
+    letterSpacing: 0.4,
   },
-  eventTypeTagVaccine: {
-    color: '#5a7a9e',
-  },
-  eventTypeTagVet: {
-    color: '#8a6a3a',
-  },
-  eventTitle: {
-    color: '#2d2d2d',
-    fontSize: 15,
-    lineHeight: 19,
-    fontWeight: '700',
-  },
-  eventNote: {
-    color: '#747474',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '500',
-  },
-  detailOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.32)',
-    justifyContent: 'flex-end',
-  },
-  detailSheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+
+  // Empty state
+  emptyWrap: {
     paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 36,
+    paddingVertical: 28,
+    alignItems: 'flex-start',
     gap: 6,
   },
-  detailHeadRow: {
+  emptyTitle: {
+    color: C.onSurface,
+    fontSize: 16,
+    fontWeight: '700',
+    letterSpacing: -0.2,
+  },
+  emptyText: {
+    color: C.onSurfaceVariant,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 19,
+  },
+  emptyCta: {
+    marginTop: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: `${C.primary}40`,
+    backgroundColor: '#edf5ea',
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  emptyCtaText: {
+    color: C.primary,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+
+  // Detail bottom sheet
+  sheetOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(48,51,46,0.40)',
+    justifyContent: 'flex-end',
+  },
+  sheet: {
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 22,
+    paddingTop: 14,
+    paddingBottom: 40,
+    gap: 6,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: C.outlineVariant,
+    marginBottom: 16,
+    opacity: 0.5,
+  },
+  sheetHead: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  detailTypeTag: {
+  sheetTypePill: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  sheetTypeText: {
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
-    color: '#6f7f65',
+    letterSpacing: 0.5,
   },
-  detailDate: {
+  sheetDate: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#8a8a8a',
+    color: C.onSurfaceVariant,
   },
-  detailTitle: {
-    fontSize: 18,
-    lineHeight: 22,
+  sheetTitle: {
+    fontSize: 20,
     fontWeight: '700',
-    color: '#2d2d2d',
+    color: C.onSurface,
+    letterSpacing: -0.3,
+    lineHeight: 26,
   },
-  detailNote: {
+  sheetNote: {
     fontSize: 14,
-    lineHeight: 20,
-    color: '#666',
-    fontWeight: '500',
-    marginTop: 2,
+    fontWeight: '400',
+    color: C.onSurfaceVariant,
+    lineHeight: 21,
+    marginTop: 4,
   },
-  detailActions: {
+  sheetActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 20,
   },
-  detailCloseBtn: {
-    height: 36,
-    borderRadius: 18,
+  sheetCloseBtn: {
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    paddingHorizontal: 16,
+    borderColor: C.outlineVariant,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  detailCloseBtnText: {
-    fontSize: 13,
+  sheetCloseBtnText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#5f5f5f',
+    color: C.onSurfaceVariant,
   },
-  detailDeleteBtn: {
-    height: 36,
-    borderRadius: 18,
+  sheetDeleteBtn: {
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(194,108,108,0.3)',
-    paddingHorizontal: 16,
+    borderColor: 'rgba(167,59,33,0.3)',
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  detailDeleteBtnText: {
-    fontSize: 13,
+  sheetDeleteBtnText: {
+    fontSize: 14,
     fontWeight: '600',
-    color: '#c26c6c',
+    color: C.urgent,
   },
-  detailDeleteConfirmBtn: {
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#c26c6c',
-    paddingHorizontal: 16,
+  sheetDeleteConfirmBtn: {
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: C.urgent,
+    paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  detailDeleteConfirmText: {
-    fontSize: 13,
+  sheetDeleteConfirmText: {
+    fontSize: 14,
     fontWeight: '700',
     color: '#fff',
   },
-  modalOverlay: {
+
+  // Create modal
+  createScreen: {
     flex: 1,
-    backgroundColor: '#faf8f5',
-    paddingHorizontal: 18,
-    paddingTop: 52,
-    paddingBottom: 24,
+    backgroundColor: C.bg,
   },
-  modalCard: {
-    flex: 1,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 12,
-  },
-  modalTitle: {
-    fontSize: 18,
-    lineHeight: 22,
-    color: '#2d2d2d',
-    fontWeight: '700',
-    marginBottom: 8,
-  },
-  fieldLabel: {
-    marginTop: 10,
-    marginBottom: 6,
-    color: '#7f7f7f',
-    fontSize: 12,
-    lineHeight: 14,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  chips: {
+  createHeader: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingTop: 56,
+    paddingBottom: 16,
+    backgroundColor: C.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.surfaceContainer,
   },
-  chip: {
-    minHeight: 32,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
+  createCancelBtn: {
+    height: 36,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  chipActive: {
-    borderColor: '#7f9a70',
-    backgroundColor: '#eef5ea',
-  },
-  chipInactive: {
-    opacity: 0.82,
-  },
-  chipText: {
-    color: '#5f5f5f',
-    fontSize: 12,
-    lineHeight: 16,
+  createCancelText: {
+    fontSize: 15,
     fontWeight: '600',
+    color: C.onSurfaceVariant,
   },
-  chipTextActive: {
-    color: '#4f6b43',
+  createHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: C.onSurface,
+    letterSpacing: -0.2,
   },
-  input: {
-    minHeight: 40,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    color: '#2d2d2d',
+  createSaveBtn: {
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: C.primary,
+    paddingHorizontal: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createSaveBtnDisabled: {
+    opacity: 0.45,
+  },
+  createSaveText: {
     fontSize: 14,
+    fontWeight: '700',
+    color: C.onPrimary,
   },
-  inputMultiline: {
-    minHeight: 72,
-    paddingTop: 10,
+  createBody: {
+    flex: 1,
+  },
+  createBodyContent: {
+    paddingHorizontal: 22,
+    paddingTop: 24,
+    paddingBottom: 48,
+    gap: 0,
+  },
+  createFieldLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.3,
+    color: C.onSurfaceVariant,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    marginTop: 20,
+  },
+  createChipsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingRight: 4,
+  },
+  createChip: {
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: C.outlineVariant,
+    backgroundColor: C.surface,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  createChipActive: {
+    borderColor: C.primary,
+    backgroundColor: '#edf5ea',
+  },
+  createChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.onSurfaceVariant,
+  },
+  createChipTextActive: {
+    color: C.primary,
+    fontWeight: '700',
+  },
+  createInput: {
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.outlineVariant,
+    backgroundColor: C.surface,
+    paddingHorizontal: 16,
+    color: C.onSurface,
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  createInputMultiline: {
+    height: 96,
+    paddingTop: 14,
     textAlignVertical: 'top',
   },
-  inputFocused: {
-    borderColor: '#9ab395',
-    shadowColor: '#8ca486',
-    shadowOpacity: 0.16,
-    shadowRadius: 6,
+  createInputFocused: {
+    borderColor: C.primary,
+    shadowColor: C.primary,
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
   },
-  errorText: {
-    marginTop: 8,
-    color: '#c26c6c',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
-  },
-  modalActions: {
-    marginTop: 14,
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-  },
-  secondaryBtn: {
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  secondaryBtnText: {
-    color: '#5f5f5f',
+  createError: {
+    marginTop: 12,
     fontSize: 13,
     fontWeight: '600',
-  },
-  primaryBtn: {
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#2d2d2d',
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  primaryBtnDisabled: {
-    opacity: 0.55,
-  },
-  primaryBtnText: {
-    color: '#faf8f5',
-    fontSize: 13,
-    fontWeight: '700',
+    color: C.urgent,
+    lineHeight: 18,
   },
 });
