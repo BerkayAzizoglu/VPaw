@@ -2,12 +2,13 @@
 import { StatusBar } from 'expo-status-bar';
 import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View, Image, RefreshControl, Switch } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { Plus, RefreshCw, Trash2, PawPrint, ChevronDown, ChevronUp } from 'lucide-react-native';
+import { RefreshCw, PawPrint } from 'lucide-react-native';
 import type { PetProfile } from '../components/AuthGate';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import type { HealthCardSummary } from '../lib/healthEventAdapters';
+import type { PetPassportExportSelection } from '../lib/petHealthPassportPdf';
 
 type PetHealthPassportScreenProps = {
   onBack: () => void;
@@ -20,18 +21,18 @@ type PetHealthPassportScreenProps = {
   onOpenWeight?: () => void;
   isPremiumPlan?: boolean;
   healthCardSummary?: HealthCardSummary;
+  onExportPdf?: (selection: PetPassportExportSelection) => Promise<void> | void;
 };
 
-type ExportRowKey = 'vaccines' | 'visits' | 'health' | 'weight' | 'allergy' | 'surgery' | 'meds';
+type ExportRowKey = 'summary' | 'vaccines' | 'visits' | 'health' | 'weight' | 'documents';
 
 type ExportRowMeta = {
   key: ExportRowKey;
-  icon: 'vaccine' | 'pulse' | 'health' | 'weight';
+  icon: 'vaccine' | 'pulse' | 'health' | 'weight' | 'download';
   title: string;
-  onPress?: () => void;
+  helper?: string;
+  priority?: 'high' | 'normal';
 };
-
-const rowOrder: ExportRowKey[] = ['vaccines', 'visits', 'health', 'weight', 'allergy', 'surgery', 'meds'];
 
 function Icon({ kind, size = 20, color = '#6f6f6f' }: { kind: 'back' | 'vaccine' | 'pulse' | 'health' | 'weight' | 'download'; size?: number; color?: string }) {
   if (kind === 'back') return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Path d="M15 6L9 12L15 18" stroke={color} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" /></Svg>;
@@ -75,78 +76,57 @@ export default function PetHealthPassportScreen({
   onOpenWeight,
   isPremiumPlan = false,
   healthCardSummary,
+  onExportPdf,
 }: PetHealthPassportScreenProps) {
   const { locale } = useLocale();
   const isTr = locale === 'tr';
   const [refreshing, setRefreshing] = useState(false);
-  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: true, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
-  const [expandedKey, setExpandedKey] = useState<ExportRowKey | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true });
 
   const initialRows = useMemo<Record<ExportRowKey, string[]>>(() => {
+    const noRecords = isTr ? 'Kayıt yok' : 'No records yet';
     const fallback: Record<ExportRowKey, string[]> = {
-      vaccines: pet.vaccinations.length ? pet.vaccinations.map((v) => `${v.name} • ${v.date}`) : ['Rabies • Apr 12, 2026'],
-      visits: ['Annual Checkup • Mar 5, 2026', 'Ear follow-up • Oct 12, 2025', 'Dental check • Jan 20, 2025'],
-      health: ['Chicken Protein • Active', 'Flea Bites • Resolved'],
-      weight: weightEntries.length ? weightEntries.map((w) => `${w.value.toFixed(1)} kg • ${w.date}`) : ['5.2 kg • Apr 15, 2026'],
-      allergy: pet.allergiesLog.length ? pet.allergiesLog.map((a) => `${a.category} • ${a.status}`) : ['No allergy records'],
-      surgery: pet.surgeriesLog.length ? pet.surgeriesLog.map((s) => `${s.name} • ${s.date}`) : ['No surgery records'],
-      meds: pet.diabetesLog.length ? pet.diabetesLog.map((d) => `${d.type} • ${d.status}`) : ['No active medication'],
+      summary: [isTr ? 'Özet kartı eklenecek' : 'Health summary included'],
+      vaccines: pet.vaccinations.length ? pet.vaccinations.map((v) => `${v.name} • ${v.date}`) : [noRecords],
+      visits: healthCardSummary?.exportRows.visits.length ? healthCardSummary.exportRows.visits : [noRecords],
+      health: healthCardSummary?.exportRows.health.length ? healthCardSummary.exportRows.health : [noRecords],
+      weight: weightEntries.length ? weightEntries.map((w) => `${w.value.toFixed(1)} kg • ${w.date}`) : [noRecords],
+      documents: [isTr ? 'Belge kasasından eklenecek' : 'Included from document vault'],
     };
 
     if (!healthCardSummary) return fallback;
 
     return {
+      summary: fallback.summary,
       vaccines: healthCardSummary.exportRows.vaccines.length ? healthCardSummary.exportRows.vaccines : fallback.vaccines,
       visits: healthCardSummary.exportRows.visits.length ? healthCardSummary.exportRows.visits : fallback.visits,
       health: healthCardSummary.exportRows.health.length ? healthCardSummary.exportRows.health : fallback.health,
       weight: healthCardSummary.exportRows.weight.length ? healthCardSummary.exportRows.weight : fallback.weight,
-      allergy: healthCardSummary.exportRows.allergy.length ? healthCardSummary.exportRows.allergy : fallback.allergy,
-      surgery: healthCardSummary.exportRows.surgery.length ? healthCardSummary.exportRows.surgery : fallback.surgery,
-      meds: healthCardSummary.exportRows.meds.length ? healthCardSummary.exportRows.meds : fallback.meds,
+      documents: fallback.documents,
     };
   }, [healthCardSummary, pet, weightEntries]);
 
   const [recordsByRow, setRecordsByRow] = useState<Record<ExportRowKey, string[]>>(initialRows);
 
-  const [recordIncluded, setRecordIncluded] = useState<Record<ExportRowKey, boolean[]>>(() => ({
-    vaccines: recordsByRow.vaccines.map(() => true),
-    visits: recordsByRow.visits.map(() => isPremiumPlan),
-    health: recordsByRow.health.map(() => isPremiumPlan),
-    weight: recordsByRow.weight.map(() => isPremiumPlan),
-    allergy: recordsByRow.allergy.map(() => isPremiumPlan),
-    surgery: recordsByRow.surgery.map(() => isPremiumPlan),
-    meds: recordsByRow.meds.map(() => isPremiumPlan),
-  }));
-
   const [sectionIncluded, setSectionIncluded] = useState<Record<ExportRowKey, boolean>>({
+    summary: true,
     vaccines: true,
     visits: isPremiumPlan,
     health: isPremiumPlan,
     weight: isPremiumPlan,
-    allergy: isPremiumPlan,
-    surgery: isPremiumPlan,
-    meds: isPremiumPlan,
+    documents: isPremiumPlan,
   });
 
   useEffect(() => {
     setRecordsByRow(initialRows);
-    setRecordIncluded({
-      vaccines: initialRows.vaccines.map(() => true),
-      visits: initialRows.visits.map(() => isPremiumPlan),
-      health: initialRows.health.map(() => isPremiumPlan),
-      weight: initialRows.weight.map(() => isPremiumPlan),
-      allergy: initialRows.allergy.map(() => isPremiumPlan),
-      surgery: initialRows.surgery.map(() => isPremiumPlan),
-      meds: initialRows.meds.map(() => isPremiumPlan),
-    });
     setSectionIncluded({
+      summary: true,
       vaccines: true,
       visits: isPremiumPlan,
       health: isPremiumPlan,
       weight: isPremiumPlan,
-      allergy: isPremiumPlan,
-      surgery: isPremiumPlan,
-      meds: isPremiumPlan,
+      documents: isPremiumPlan,
     });
   }, [initialRows, isPremiumPlan, pet.id]);
 
@@ -159,25 +139,67 @@ export default function PetHealthPassportScreen({
   const ageText = isTr ? `${pet.ageYears} yıl` : `${pet.ageYears} years`;
 
   const rowMeta: Record<ExportRowKey, ExportRowMeta> = {
-    vaccines: { key: 'vaccines', icon: 'vaccine', title: isTr ? 'Aşı Kayıtları' : 'Vaccination Records', onPress: onOpenVaccinations },
-    visits: { key: 'visits', icon: 'pulse', title: isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits', onPress: onOpenVetVisits },
-    health: { key: 'health', icon: 'health', title: isTr ? 'Sağlık Kayıtları' : 'Health Records', onPress: onOpenHealthRecords },
-    weight: { key: 'weight', icon: 'weight', title: isTr ? 'Kilo Günlüğü' : 'Weight Log', onPress: onOpenWeight },
-    allergy: { key: 'allergy', icon: 'health', title: isTr ? 'Alerjiler' : 'Allergies' },
-    surgery: { key: 'surgery', icon: 'pulse', title: isTr ? 'Ameliyatlar' : 'Surgeries' },
-    meds: { key: 'meds', icon: 'vaccine', title: isTr ? 'Kullandığı İlaçlar' : 'Current Medications' },
+    summary: { key: 'summary', icon: 'health', title: isTr ? 'Sağlık Özeti' : 'Health Summary', helper: isTr ? 'Ön sayfada temel sağlık özeti yer alır.' : 'Adds a concise overview to the first page.', priority: 'high' },
+    vaccines: { key: 'vaccines', icon: 'vaccine', title: isTr ? 'Aşılar' : 'Vaccinations', helper: isTr ? 'Aşı geçmişi ve durum bilgileri.' : 'Vaccine history and status.' },
+    visits: { key: 'visits', icon: 'pulse', title: isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits', helper: isTr ? 'Veteriner ziyaretleri zaman çizelgesi.' : 'Chronology of clinic visits.' },
+    health: { key: 'health', icon: 'health', title: isTr ? 'Sağlık Kayıtları' : 'Medical Records', helper: isTr ? 'Tanı, test ve klinik notlar.' : 'Diagnoses, tests, and clinical notes.' },
+    weight: { key: 'weight', icon: 'weight', title: isTr ? 'Kilo Takibi' : 'Weight Tracking', helper: isTr ? 'Trend grafiği ve kilo özetleri.' : 'Trend chart and weight snapshots.' },
+    documents: { key: 'documents', icon: 'download', title: isTr ? 'Belgeleri dahil et' : 'Include documents', helper: isTr ? 'Belgeleri eklemek dosya boyutunu artırabilir.' : 'Including documents may increase file size.' },
   };
 
-  const selectedCount = useMemo(() => {
-    let sum = 0;
-    rowOrder.forEach((key) => {
-      if (!sectionIncluded[key]) return;
-      recordIncluded[key].forEach((flag) => {
-        if (flag) sum += 1;
-      });
-    });
-    return sum;
-  }, [recordIncluded, sectionIncluded]);
+  const includeRows = useMemo<ExportRowKey[]>(() => ['summary', 'vaccines', 'visits', 'health', 'weight'], []);
+  const selectedCount = useMemo(() => includeRows.filter((key) => sectionIncluded[key]).length + (sectionIncluded.documents ? 1 : 0), [includeRows, sectionIncluded]);
+
+  const handleExportPress = async () => {
+    if (!onExportPdf) {
+      Alert.alert(isTr ? 'PDF hazır değil' : 'PDF not ready');
+      return;
+    }
+
+    const selectedForKey = (key: ExportRowKey) => {
+      if (!sectionIncluded[key]) return 0;
+      return recordsByRow[key]?.length ?? 0;
+    };
+
+    const timelineSelectedCount =
+      selectedForKey('visits')
+      + selectedForKey('health');
+
+    const selection: PetPassportExportSelection = isPremiumPlan
+      ? {
+          includeSections: {
+            summary: true,
+            timeline: sectionIncluded.visits || sectionIncluded.health,
+            vaccines: sectionIncluded.vaccines,
+            weight: sectionIncluded.weight,
+            documents: sectionIncluded.documents,
+          },
+          limits: {
+            timeline: timelineSelectedCount,
+            vaccines: selectedForKey('vaccines'),
+            weight: selectedForKey('weight'),
+          },
+        }
+      : {
+          includeSections: {
+            summary: false,
+            timeline: false,
+            vaccines: true,
+            weight: false,
+            documents: false,
+          },
+          limits: {
+            vaccines: selectedForKey('vaccines'),
+          },
+        };
+
+    try {
+      setIsExporting(true);
+      await onExportPdf(selection);
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const ensurePremium = () => {
     if (isPremiumPlan) return true;
@@ -199,68 +221,6 @@ export default function PetHealthPassportScreen({
     setSectionIncluded((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const openSection = (key: ExportRowKey) => {
-    if (!isPremiumPlan && key !== 'vaccines') {
-      ensurePremium();
-      return;
-    }
-    setExpandedKey((prev) => (prev === key ? null : key));
-  };
-
-  const toggleRecord = (key: ExportRowKey, index: number) => {
-    if (!isPremiumPlan && key !== 'vaccines') {
-      ensurePremium();
-      return;
-    }
-
-    if (!isPremiumPlan && key === 'vaccines') return;
-
-    setRecordIncluded((prev) => {
-      const next = { ...prev };
-      next[key] = [...next[key]];
-      next[key][index] = !next[key][index];
-      return next;
-    });
-  };
-
-  const addRecord = (key: ExportRowKey) => {
-    if (!isPremiumPlan) {
-      ensurePremium();
-      return;
-    }
-
-    setRecordsByRow((prev) => {
-      const next = { ...prev };
-      next[key] = [...next[key], isTr ? `Yeni kayıt ${next[key].length + 1}` : `New record ${next[key].length + 1}`];
-      return next;
-    });
-
-    setRecordIncluded((prev) => {
-      const next = { ...prev };
-      next[key] = [...next[key], true];
-      return next;
-    });
-  };
-
-  const removeRecord = (key: ExportRowKey, index: number) => {
-    if (!isPremiumPlan) {
-      ensurePremium();
-      return;
-    }
-
-    setRecordsByRow((prev) => {
-      const next = { ...prev };
-      next[key] = next[key].filter((_, i) => i !== index);
-      return next;
-    });
-
-    setRecordIncluded((prev) => {
-      const next = { ...prev };
-      next[key] = next[key].filter((_, i) => i !== index);
-      return next;
-    });
-  };
-
   return (
     <View style={styles.screen}>
       {backPreview ? (
@@ -278,7 +238,7 @@ export default function PetHealthPassportScreen({
       >
         <View style={styles.header}>
           <Pressable style={styles.backBtn} onPress={onBack}><Icon kind="back" size={22} /></Pressable>
-          <Text style={styles.title}>{isTr ? 'Pet Sağlık Pasaportu' : 'Pet Health Passport'}</Text>
+          <Text style={styles.title}>{isTr ? 'Pet Sağlık Kartı' : 'Pet Health Card'}</Text>
           <View style={styles.backBtnGhost}>{refreshing ? <RefreshCw size={16} color="#6f6f6f" /> : null}</View>
         </View>
 
@@ -295,89 +255,70 @@ export default function PetHealthPassportScreen({
           <View style={styles.identityDivider} />
           <View style={styles.identityBottom}>
             <View><Text style={styles.identityLabel}>{isTr ? 'MİKROÇİP' : 'MICROCHIP'}</Text><Text style={styles.identityValue}>{pet.microchip}</Text></View>
-            <View><Text style={styles.identityLabel}>{isTr ? 'SAHİP' : 'OWNER'}</Text><Text style={styles.identityValue}>Alex Morrison</Text></View>
+            <View><Text style={styles.identityLabel}>{isTr ? 'SAHİP' : 'OWNER'}</Text><Text style={styles.identityValue}>-</Text></View>
           </View>
         </View>
 
-        <Text style={styles.sectionTitle}>{isTr ? 'Dışa Aktarıma Dahil Et' : 'Include in Export'}</Text>
-        <Text style={styles.sectionSub}>{isTr ? 'Pasaporta eklenecek kayıtları seçin.' : 'Select records to include in this passport.'}</Text>
+        <Text style={styles.sectionTitle}>{isTr ? 'Pet Sağlık Kartı' : 'Pet Health Card'}</Text>
+        <Text style={styles.sectionSub}>{isTr ? 'Dışa aktarılan rapora nelerin dahil olacağını seçin.' : 'Choose what to include in your exported report.'}</Text>
         {!isPremiumPlan ? (
           <View style={styles.freeHintPill}>
             <Text style={styles.freeHintText}>{isTr ? 'Free sürüm: yalnızca Aşı Kayıtları PDF’e dahil edilir.' : 'Free: only Vaccination Records are included in PDF.'}</Text>
           </View>
         ) : null}
 
+        <Text style={styles.groupTitle}>{isTr ? 'INCLUDE IN REPORT' : 'INCLUDE IN REPORT'}</Text>
         <View style={styles.exportCard}>
-          {rowOrder.map((key, idx) => {
+          {includeRows.map((key, idx) => {
             const meta = rowMeta[key];
-            const records = recordsByRow[key];
-            const expanded = expandedKey === key;
-
             return (
-              <View key={key} style={[idx !== rowOrder.length - 1 && styles.exportRowBorder]}>
-                <Pressable style={styles.exportRow} onPress={() => openSection(key)}>
-                  <View style={styles.exportLeft}>
-                    <View style={styles.exportIcon}><Icon kind={meta.icon} size={18} color="#6f7f67" /></View>
-                    <View style={styles.exportTextWrap}>
-                      <Text style={styles.exportTitle}>{meta.title}</Text>
-                      <Text style={styles.exportSub}>{records.length} {isTr ? 'kayıt mevcut' : 'records available'}</Text>
-                    </View>
+              <View key={key} style={[styles.scopeRow, idx !== includeRows.length - 1 && styles.exportRowBorder, meta.priority === 'high' && styles.scopeRowPrimary]}>
+                <View style={styles.exportLeft}>
+                  <View style={[styles.exportIcon, meta.priority === 'high' && styles.exportIconPrimary]}>
+                    <Icon kind={meta.icon} size={18} color={meta.priority === 'high' ? '#3e5b45' : '#6f7f67'} />
                   </View>
-
-                  <View style={styles.exportRight}>
-                    {expanded ? <ChevronUp size={16} color="#9a9a9a" /> : <ChevronDown size={16} color="#9a9a9a" />}
-                    <PawSwitch
-                      value={sectionIncluded[key]}
-                      onValueChange={() => toggleSection(key)}
-                      disabled={!isPremiumPlan && key === 'vaccines'}
-                    />
+                  <View style={styles.exportTextWrap}>
+                    <Text style={[styles.exportTitle, meta.priority === 'high' && styles.exportTitlePrimary]}>{meta.title}</Text>
+                    <Text style={styles.exportSub}>{meta.helper}</Text>
                   </View>
-                </Pressable>
-
-                {expanded ? (
-                  <View style={styles.recordsWrap}>
-                    {records.map((record, recordIndex) => (
-                      <View key={`${key}-${recordIndex}`} style={styles.recordRow}>
-                        <Text style={styles.recordText}>{record}</Text>
-                        <View style={styles.recordActions}>
-                          <PawSwitch
-                            value={recordIncluded[key][recordIndex] ?? true}
-                            onValueChange={() => toggleRecord(key, recordIndex)}
-                            disabled={!isPremiumPlan && key === 'vaccines'}
-                          />
-                          {isPremiumPlan ? (
-                            <Pressable onPress={() => removeRecord(key, recordIndex)} style={styles.iconActionBtn}>
-                              <Trash2 size={14} color="#b75e5e" />
-                            </Pressable>
-                          ) : null}
-                        </View>
-                      </View>
-                    ))}
-
-                    <View style={styles.recordsFooter}>
-                      {meta.onPress ? (
-                        <Pressable style={styles.linkBtn} onPress={meta.onPress}>
-                          <Text style={styles.linkBtnText}>{isTr ? 'Kaynak ekranı aç' : 'Open source screen'}</Text>
-                        </Pressable>
-                      ) : <View />}
-
-                      <Pressable style={styles.addRecordBtn} onPress={() => addRecord(key)}>
-                        <Plus size={14} color="#2d2d2d" />
-                        <Text style={styles.addRecordText}>{isTr ? 'Kayıt Ekle' : 'Add Record'}</Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ) : null}
+                </View>
+                <PawSwitch
+                  value={sectionIncluded[key]}
+                  onValueChange={() => toggleSection(key)}
+                  disabled={!isPremiumPlan && key !== 'vaccines'}
+                />
               </View>
             );
           })}
         </View>
+
+        <Text style={styles.groupTitle}>{isTr ? 'ATTACHMENTS' : 'ATTACHMENTS'}</Text>
+        <View style={styles.exportCard}>
+          <View style={styles.scopeRow}>
+            <View style={styles.exportLeft}>
+              <View style={styles.exportIcon}>
+                <Icon kind="download" size={18} color="#6f7f67" />
+              </View>
+              <View style={styles.exportTextWrap}>
+                <Text style={styles.exportTitle}>{rowMeta.documents.title}</Text>
+                <Text style={styles.exportSub}>{rowMeta.documents.helper}</Text>
+              </View>
+            </View>
+            <PawSwitch
+              value={sectionIncluded.documents}
+              onValueChange={() => toggleSection('documents')}
+              disabled={!isPremiumPlan}
+            />
+          </View>
+        </View>
       </ScrollView>
 
-      <Pressable style={styles.exportBtn}>
+      <Pressable style={[styles.exportBtn, isExporting && styles.exportBtnDisabled]} onPress={handleExportPress} disabled={isExporting}>
         <Icon kind="download" size={18} color="#faf8f5" />
         <Text style={styles.exportBtnText}>
-          {isPremiumPlan
+          {isExporting
+            ? (isTr ? 'PDF olusturuluyor...' : 'Generating PDF...')
+            : isPremiumPlan
             ? (isTr ? `PDF Dışa Aktar (${selectedCount})` : `Export PDF (${selectedCount})`)
             : (isTr ? 'PDF Dışa Aktar (Demo)' : 'Export PDF (Demo)')}
         </Text>
@@ -410,7 +351,8 @@ const styles = StyleSheet.create({
   identityLabel: { fontSize: 11, lineHeight: 16, color: '#8b8b8b', fontWeight: '700', letterSpacing: 0.6 },
   identityValue: { marginTop: 2, fontSize: 16, lineHeight: 20, color: '#2d2d2d', fontWeight: '600' },
   sectionTitle: { marginTop: 8, fontSize: 30, lineHeight: 34, color: '#2d2d2d', fontWeight: '700' },
-  sectionSub: { fontSize: 14, lineHeight: 20, color: '#808080' },
+  sectionSub: { fontSize: 14, lineHeight: 21, color: '#6f747a' },
+  groupTitle: { marginTop: 10, fontSize: 11, lineHeight: 15, color: '#8a9098', fontWeight: '800', letterSpacing: 0.8 },
   freeHintPill: {
     alignSelf: 'flex-start',
     marginTop: 4,
@@ -427,36 +369,17 @@ const styles = StyleSheet.create({
     color: '#9a6a2f',
     fontWeight: '600',
   },
-  exportCard: { borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)', overflow: 'hidden' },
-  exportRow: { minHeight: 68, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14 },
+  exportCard: { borderRadius: 20, backgroundColor: '#F7F8FA', borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)', overflow: 'hidden', paddingVertical: 4 },
+  scopeRow: { minHeight: 82, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, backgroundColor: '#F7F8FA' },
+  scopeRowPrimary: { backgroundColor: '#F3F5F8' },
   exportRowBorder: { borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
   exportLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   exportTextWrap: { flex: 1 },
   exportIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#f2f3f0', alignItems: 'center', justifyContent: 'center' },
+  exportIconPrimary: { backgroundColor: '#eaf0ee' },
   exportTitle: { fontSize: 16, lineHeight: 20, color: '#2d2d2d', fontWeight: '700' },
-  exportSub: { marginTop: 2, fontSize: 13, lineHeight: 17, color: '#8a8a8a' },
-  exportRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  recordsWrap: { paddingHorizontal: 12, paddingBottom: 10, gap: 8 },
-  recordRow: {
-    minHeight: 42,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    backgroundColor: '#faf9f8',
-    paddingHorizontal: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  recordText: { flex: 1, fontSize: 13, lineHeight: 18, color: '#636363', fontWeight: '500' },
-  recordActions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  recordsFooter: { marginTop: 2, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  addRecordBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, height: 30, borderRadius: 8, backgroundColor: '#f1f1ef' },
-  addRecordText: { fontSize: 12, lineHeight: 16, color: '#2d2d2d', fontWeight: '600' },
-  linkBtn: { paddingHorizontal: 8, height: 28, justifyContent: 'center' },
-  linkBtnText: { fontSize: 12, lineHeight: 16, color: '#7a7a7a', fontWeight: '600' },
-  iconActionBtn: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  exportTitlePrimary: { color: '#34483d' },
+  exportSub: { marginTop: 4, fontSize: 12, lineHeight: 17, color: '#7b8188' },
   pawSwitchScale: {
     width: 42,
     alignItems: 'center',
@@ -481,6 +404,7 @@ const styles = StyleSheet.create({
     opacity: 1,
   },
   exportBtn: { position: 'absolute', left: 50, right: 50, bottom: 24, height: 52, borderRadius: 26, backgroundColor: '#2d2d2d', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  exportBtnDisabled: { opacity: 0.72 },
   exportBtnText: { fontSize: 16, lineHeight: 22, color: '#faf8f5', fontWeight: '700' },
 });
 

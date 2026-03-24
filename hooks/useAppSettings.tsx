@@ -8,6 +8,7 @@ export type DateFormat = 'dmy' | 'mdy';
 export type AppSettings = {
   weightUnit: WeightUnit;
   dateFormat: DateFormat;
+  notificationsEnabled: boolean;
 };
 
 type AppSettingsContextValue = {
@@ -25,12 +26,14 @@ function defaultsForLocale(locale: Locale): AppSettings {
     return {
       weightUnit: 'kg',
       dateFormat: 'dmy',
+      notificationsEnabled: true,
     };
   }
 
   return {
     weightUnit: 'kg',
     dateFormat: 'mdy',
+    notificationsEnabled: true,
   };
 }
 
@@ -60,6 +63,7 @@ export function AppSettingsProvider({
           const next: AppSettings = {
             weightUnit: parsed.weightUnit === 'lb' ? 'lb' : 'kg',
             dateFormat: parsed.dateFormat === 'dmy' ? 'dmy' : 'mdy',
+            notificationsEnabled: parsed.notificationsEnabled !== false,
           };
           setSettingsState(next);
         } catch {

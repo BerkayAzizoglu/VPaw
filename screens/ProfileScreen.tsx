@@ -1,6 +1,7 @@
 ﻿import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
+  Alert,
   ActivityIndicator,
   Image,
   Pressable,
@@ -26,28 +27,28 @@ type ProfileScreenProps = {
   onBackHome?: () => void;
   onOpenPremium?: () => void;
   onOpenProfileEdit?: () => void;
-  onOpenVaccinations?: () => void;
-  onOpenPetProfile?: () => void;
   onOpenPetProfiles?: () => void;
-  onOpenHealthRecords?: () => void;
-  onOpenVetVisits?: () => void;
   onOpenSettings?: () => void;
+  onOpenNotifications?: () => void;
   onOpenPetPassport?: () => void;
   petProfiles?: Record<string, PetProfile>;
   weightsByPet?: Record<string, WeightPoint[]>;
+  isPremiumPlan?: boolean;
 };
 
 type IconName =
   | 'home'
   | 'edit'
   | 'user'
-  | 'passport'
+  | 'card'
   | 'health'
   | 'pulse'
   | 'syringe'
   | 'bell'
   | 'settings'
+  | 'share'
   | 'help'
+  | 'feedback'
   | 'clock'
   | 'chevronRight'
   | 'chevronLeft'
@@ -57,21 +58,22 @@ type IconName =
 const fallbackAvatar = 'https://www.figma.com/api/mcp/asset/7f9b54a3-43e6-4459-a7f9-0ae7b68618e2';
 const petProfilesIconUri = Image.resolveAssetSource(require('../assets/vpaw-login-illustrator.svg')).uri;
 
-function getNavRows(isTr: boolean): Record<'pets' | 'health' | 'preferences', Array<{ key: string; label: string; icon: IconName }>> {
+function getNavRows(isTr: boolean): Record<'healthCard' | 'management' | 'system' | 'support', Array<{ key: string; label: string; icon: IconName }>> {
   return {
-    pets: [
-      { key: 'pet_profiles', label: isTr ? 'Hayvan Profilleri' : 'Pet Profiles', icon: 'user' },
-      { key: 'pet_passport', label: isTr ? 'Hayvan Sağlık Pasaportu' : 'Pet Health Passport', icon: 'passport' },
+    healthCard: [
+      { key: 'pet_health_card', label: isTr ? 'Pet Sağlık Kartı' : 'Pet Health Card', icon: 'card' },
     ],
-    health: [
-      { key: 'health_records', label: isTr ? 'Sağlık Kayıtları' : 'Health Records', icon: 'health' },
-      { key: 'vet_visits', label: isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits', icon: 'pulse' },
-      { key: 'vaccinations', label: isTr ? 'Aşılar' : 'Vaccinations', icon: 'syringe' },
+    management: [
+      { key: 'pet_profiles', label: isTr ? 'Hayvan Profilleri' : 'Pets', icon: 'user' },
+      { key: 'family_sharing', label: isTr ? 'Aile Paylaşımı' : 'Family Sharing', icon: 'share' },
     ],
-    preferences: [
+    system: [
       { key: 'notifications', label: isTr ? 'Bildirimler' : 'Notifications', icon: 'bell' },
       { key: 'settings', label: isTr ? 'Ayarlar' : 'Settings', icon: 'settings' },
-      { key: 'support', label: isTr ? 'Yardım & Destek' : 'Help & Support', icon: 'help' },
+    ],
+    support: [
+      { key: 'help', label: isTr ? 'Yardım' : 'Help', icon: 'help' },
+      { key: 'feedback', label: isTr ? 'Geri Bildirim' : 'Feedback', icon: 'feedback' },
     ],
   };
 }
@@ -119,13 +121,12 @@ function AppIcon({ name, size = 16, color = '#7a7a7a', strokeWidth = 1.9 }: { na
     );
   }
 
-  if (name === 'passport') {
+  if (name === 'card') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-        <Path d="M7 4.8H15.5L19 8.2V19.2H7V4.8Z" stroke={color} strokeWidth={strokeWidth} strokeLinejoin="round" />
-        <Path d="M15.4 4.8V8.3H19" stroke={color} strokeWidth={strokeWidth} strokeLinejoin="round" />
-        <Line x1="9.4" y1="12" x2="16.4" y2="12" stroke={color} strokeWidth={strokeWidth - 0.2} strokeLinecap="round" />
-        <Line x1="9.4" y1="15.2" x2="16.4" y2="15.2" stroke={color} strokeWidth={strokeWidth - 0.2} strokeLinecap="round" />
+        <Path d="M5.2 7.2C5.2 6.1 6.1 5.2 7.2 5.2H16.8C17.9 5.2 18.8 6.1 18.8 7.2V16.8C18.8 17.9 17.9 18.8 16.8 18.8H7.2C6.1 18.8 5.2 17.9 5.2 16.8V7.2Z" stroke={color} strokeWidth={strokeWidth} />
+        <Line x1="8.4" y1="10.2" x2="15.6" y2="10.2" stroke={color} strokeWidth={strokeWidth - 0.2} strokeLinecap="round" />
+        <Line x1="8.4" y1="13.2" x2="13.6" y2="13.2" stroke={color} strokeWidth={strokeWidth - 0.2} strokeLinecap="round" />
       </Svg>
     );
   }
@@ -186,6 +187,29 @@ function AppIcon({ name, size = 16, color = '#7a7a7a', strokeWidth = 1.9 }: { na
     );
   }
 
+  if (name === 'share') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Circle cx="17.5" cy="6.5" r="2.3" stroke={color} strokeWidth={strokeWidth} />
+        <Circle cx="6.5" cy="12" r="2.3" stroke={color} strokeWidth={strokeWidth} />
+        <Circle cx="17.5" cy="17.5" r="2.3" stroke={color} strokeWidth={strokeWidth} />
+        <Path d="M8.7 11L15.3 7.5" stroke={color} strokeWidth={strokeWidth - 0.2} strokeLinecap="round" />
+        <Path d="M8.7 13L15.3 16.5" stroke={color} strokeWidth={strokeWidth - 0.2} strokeLinecap="round" />
+      </Svg>
+    );
+  }
+
+  if (name === 'feedback') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M6 7.2C6 6.1 6.9 5.2 8 5.2H16C17.1 5.2 18 6.1 18 7.2V13.2C18 14.3 17.1 15.2 16 15.2H11L8 18V15.2H8C6.9 15.2 6 14.3 6 13.2V7.2Z" stroke={color} strokeWidth={strokeWidth} strokeLinejoin="round" />
+        <Circle cx="10" cy="10.2" r="0.9" fill={color} />
+        <Circle cx="13" cy="10.2" r="0.9" fill={color} />
+        <Circle cx="16" cy="10.2" r="0.9" fill={color} />
+      </Svg>
+    );
+  }
+
   if (name === 'clock') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -212,7 +236,7 @@ function AppIcon({ name, size = 16, color = '#7a7a7a', strokeWidth = 1.9 }: { na
   );
 }
 
-export default function ProfileScreen({ onBackHome, onOpenPremium, onOpenProfileEdit, onOpenVaccinations, onOpenPetProfile, onOpenPetProfiles, onOpenHealthRecords, onOpenVetVisits, onOpenSettings, onOpenPetPassport, petProfiles, weightsByPet }: ProfileScreenProps) {
+export default function ProfileScreen({ onBackHome, onOpenPremium, onOpenProfileEdit, onOpenPetProfiles, onOpenSettings, onOpenNotifications, onOpenPetPassport, petProfiles, weightsByPet, isPremiumPlan = false }: ProfileScreenProps) {
   const { locale } = useLocale();
   const isTr = locale === 'tr';
   const navRows = getNavRows(isTr);
@@ -260,37 +284,37 @@ export default function ProfileScreen({ onBackHome, onOpenPremium, onOpenProfile
     };
   }, [isTr, user?.id]);
 
-  const displayName = profile?.full_name?.trim() || 'Alex Morrison';
-  const sectionPets = isTr ? 'HAYVANLARIM' : 'MY PETS';
-  const sectionHealth = isTr ? 'HAYVAN SAĞLIĞI' : 'PET HEALTH';
-  const sectionPreferences = isTr ? 'TERCİHLER' : 'PREFERENCES';
-  const displayEmail = user?.email ?? 'alex.morrison@example.com';
+  const displayName = profile?.full_name?.trim() || (isTr ? 'Kullanıcı' : 'User');
+  const sectionHealthCard = isTr ? 'PET SAĞLIK KARTI' : 'PET HEALTH CARD';
+  const sectionManagement = isTr ? 'YÖNETİM' : 'MANAGEMENT';
+  const sectionSystem = isTr ? 'SİSTEM' : 'SYSTEM';
+  const sectionSupport = isTr ? 'DESTEK' : 'SUPPORT';
+  const displayEmail = user?.email ?? '-';
   const visiblePets = petProfiles
     ? Object.values(petProfiles).filter((p) => p && typeof p.name === 'string' && p.name.trim().length > 0)
     : [];
-  const petsCount = visiblePets.length > 0 ? visiblePets.length : 1;
+  const petsCount = visiblePets.length;
   const recordsCount = visiblePets.length > 0
     ? visiblePets.reduce((sum, p) => {
         const weightCount = weightsByPet?.[p.id]?.length ?? 0;
         return sum + p.vaccinations.length + p.surgeriesLog.length + p.allergiesLog.length + p.diabetesLog.length + weightCount;
       }, 0)
-    : 13;
+    : 0;
   const syncValue = isTr ? 'Canlı' : 'Live';
 
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Pressable style={styles.editIconFloating} onPress={onOpenProfileEdit}>
-          <AppIcon name="edit" size={22} color="#6f6f6f" strokeWidth={2.1} />
-        </Pressable>
         <View style={styles.topActionRow}>
           {onBackHome ? (
             <Pressable style={styles.homeIconBtn} onPress={onBackHome}>
               <AppIcon name="home" size={22} color="#6f6f6f" strokeWidth={2.1} />
             </Pressable>
           ) : <View />}
-
+          <Pressable style={styles.editIconBtn} onPress={onOpenProfileEdit}>
+            <AppIcon name="edit" size={22} color="#6f6f6f" strokeWidth={2.1} />
+          </Pressable>
         </View>
         <View style={styles.headerRow}>
           <View style={styles.avatarWrap}>
@@ -300,8 +324,10 @@ export default function ProfileScreen({ onBackHome, onOpenPremium, onOpenProfile
           <View style={styles.headerInfo}>
             <Text style={styles.name}>{displayName}</Text>
             <Text style={styles.email}>{displayEmail}</Text>
-            <View style={styles.planPill}>
-              <Text style={styles.planPillText}>{isTr ? 'ÜCRETSİZ PLAN' : 'FREE PLAN'}</Text>
+            <View style={[styles.planPill, isPremiumPlan && styles.planPillPremium]}>
+              <Text style={[styles.planPillText, isPremiumPlan && styles.planPillTextPremium]}>
+                {isPremiumPlan ? 'V-PAW PREMIUM' : (isTr ? 'ÜCRETSİZ PLAN' : 'FREE PLAN')}
+              </Text>
             </View>
           </View>
         </View>
@@ -318,42 +344,55 @@ export default function ProfileScreen({ onBackHome, onOpenPremium, onOpenProfile
           <StatCard label={isTr ? 'Senkron' : 'Sync'} value={syncValue} subIcon="clock" />
         </View>
 
-        <Pressable style={styles.premiumCard} onPress={onOpenPremium}>
+        {!isPremiumPlan ? <Pressable style={styles.premiumCard} onPress={onOpenPremium}>
           <View style={styles.premiumTexts}>
             <View style={styles.premiumKickerRow}>
               <AppIcon name="sparkles" size={12} color="#c48d42" strokeWidth={1.7} />
               <Text style={styles.premiumKicker}>V-PAW PREMIUM</Text>
             </View>
             <Text style={styles.premiumTitle}>{isTr ? 'Tüm sağlık geçmişinin kilidini aç' : 'Unlock full health history'}</Text>
-            <Text style={styles.premiumSub}>{isTr ? 'PDF pasaport dışa aktarma ve sınırsız hayvan' : 'Export PDF passports & unlimited pets'}</Text>
+            <Text style={styles.premiumSub}>{isTr ? 'PDF sağlık kartı dışa aktarma ve sınırsız hayvan' : 'Export PDF health cards & unlimited pets'}</Text>
           </View>
           <View style={styles.premiumArrowWrap}>
             <AppIcon name="chevronRight" size={20} color="#c48d42" strokeWidth={2.1} />
           </View>
-        </Pressable>
+        </Pressable> : null}
 
         <Section
-          title={sectionPets}
-          items={navRows.pets}
+          title={sectionHealthCard}
+          items={navRows.healthCard}
+          onItemPress={(key) => {
+            if (key === 'pet_health_card') onOpenPetPassport?.();
+          }}
+        />
+        <Section
+          title={sectionManagement}
+          items={navRows.management}
           onItemPress={(key) => {
             if (key === 'pet_profiles') onOpenPetProfiles?.();
-            if (key === 'pet_passport') onOpenPetPassport?.();
+            if (key === 'family_sharing') {
+              Alert.alert(isTr ? 'Aile paylaşımı yakında' : 'Family sharing coming soon');
+            }
           }}
         />
         <Section
-          title={sectionHealth}
-          items={navRows.health}
+          title={sectionSystem}
+          items={navRows.system}
           onItemPress={(key) => {
-            if (key === 'vaccinations') onOpenVaccinations?.();
-            if (key === 'health_records') onOpenHealthRecords?.();
-            if (key === 'vet_visits') onOpenVetVisits?.();
-          }}
-        />
-        <Section
-          title={sectionPreferences}
-          items={navRows.preferences}
-          onItemPress={(key) => {
+            if (key === 'notifications') onOpenNotifications?.();
             if (key === 'settings') onOpenSettings?.();
+          }}
+        />
+        <Section
+          title={sectionSupport}
+          items={navRows.support}
+          onItemPress={(key) => {
+            if (key === 'help') {
+              Alert.alert(isTr ? 'Yardım yakında' : 'Help coming soon');
+            }
+            if (key === 'feedback') {
+              Alert.alert(isTr ? 'Geri bildirim yakında' : 'Feedback coming soon');
+            }
           }}
         />
 
@@ -432,7 +471,7 @@ const styles = StyleSheet.create({
   topActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-start',
+    justifyContent: 'space-between',
     marginBottom: 6,
   },
   homeIconBtn: {
@@ -450,17 +489,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: -2,
-  },
-  editIconFloating: {
-    position: 'absolute',
-    top: 70,
-    right: 22,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 5,
   },
   headerRow: {
     flexDirection: 'row',
@@ -509,12 +537,18 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     backgroundColor: 'rgba(0,0,0,0.04)',
   },
+  planPillPremium: {
+    backgroundColor: '#fdf3e2',
+  },
   planPillText: {
     fontSize: 11,
     lineHeight: 16,
     letterSpacing: 0.55,
     fontWeight: '700',
     color: 'rgba(45,45,45,0.7)',
+  },
+  planPillTextPremium: {
+    color: '#b07a22',
   },
   loadingCard: {
     marginTop: 8,

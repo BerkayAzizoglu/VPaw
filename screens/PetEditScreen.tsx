@@ -17,6 +17,7 @@ import {
 import { SvgUri } from 'react-native-svg';
 import { Check, ChevronRight, PawPrint, Pencil } from 'lucide-react-native';
 import type { AllergyRecord, DiabetesRecord, PetProfile, SurgeryRecord, VaccinationRecord } from '../components/AuthGate';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { useLocale } from '../hooks/useLocale';
 
 type PetEditScreenProps = {
@@ -377,6 +378,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
   const [otherDiabetesText, setOtherDiabetesText] = useState('');
   const [nameDraft, setNameDraft] = useState(pet.name);
   const [microchipDraft, setMicrochipDraft] = useState(pet.microchip || '');
+  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: pickerField === null });
 
   useEffect(() => {
     setDraft(pet);
@@ -538,7 +540,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
   const allergySummary = draft.allergiesLog.length === 0 ? 'No active records' : String(draft.allergiesLog.length) + ' selected';
   const diabetesSummary = draft.diabetesLog.length === 0 ? 'No active records' : String(draft.diabetesLog.length) + ' selected';
   return (
-    <View style={styles.screen}>
+    <View style={styles.screen} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>

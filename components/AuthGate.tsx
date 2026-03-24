@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Animated, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
 import { getLocalItem, setLocalItem } from '../lib/localStore';
 import { useAuth } from '../hooks/useAuth';
 import { useLocale } from '../hooks/useLocale';
@@ -27,10 +27,35 @@ import HealthHubScreen, {
 } from '../screens/HealthHubScreen';
 import { Bell, ChartSpline, HeartPulse, Home } from 'lucide-react-native';
 import { fetchPetProfilesFromCloud, savePetProfilesToCloud } from '../lib/petProfilesRepo';
+import {
+  isSameMedicalEvent,
+  isSameVetVisit,
+  isSameWeightEntry,
+  mapLegacyHealthEventToMedicalType,
+  toVetVisitReasonCategory,
+  toVetVisitStatus,
+  toWeightPointFromLegacyEvent,
+} from '../lib/healthEventDedup';
 import { getHealthCardSummary, getVaccinesForUI, getVetVisitsForUI } from '../lib/healthEventAdapters';
+import { getAllDocumentsForPet } from '../lib/healthDocumentsVault';
+import {
+  buildTriggeredNotifications,
+  getNotificationDedupKey,
+  shouldSuppressNotification,
+  type HealthNotification,
+  type NotificationLastTriggeredByKey,
+} from '../lib/notificationInbox';
+import {
+  emptyHealthDomainUpdatedAt,
+  fetchHealthDomainFromCloud,
+  saveHealthDomainToCloud,
+  type CloudHealthDomainUpdatedAt,
+  type CloudHealthPayload,
+} from '../lib/healthSyncRepo';
 import { reconcileReminderNotifications } from '../lib/reminderNotifications';
 import { buildAiInsights, type AiInsight } from '../lib/insightsEngine';
 import { buildUnifiedHealthEventsForPet, summarizeUnifiedHealthEvents } from '../lib/unifiedHealthEvents';
+import { buildPetHealthPassportData, generatePetPassportPDF, type PetPassportExportSelection } from '../lib/petHealthPassportPdf';
 import {
   EMPTY_MEDICAL_EVENTS_BY_PET,
   EMPTY_MEDICATION_COURSES_BY_PET,
@@ -51,12 +76,14 @@ import {
   getUpcomingReminders,
   getRemindersByPet,
   markReminderCompleted,
+  snoozeReminder,
   type PetId,
   type ReminderFrequency,
   type ReminderKind,
   type ReminderSubtype,
   type ReminderType,
   type Reminder,
+  updateReminder,
   type VetVisit,
   type VetVisitReasonCategory,
   type VetVisitStatus,
@@ -157,6 +184,9 @@ const ACTIVE_PET_STORAGE_KEY = 'vpaw_active_pet_id';
 const PET_LOCK_STORAGE_KEY = 'vpaw_pet_lock_enabled';
 const DARK_MODE_STORAGE_KEY = 'vpaw_dark_mode_enabled';
 const DATA_RESET_VERSION_STORAGE_KEY = 'vpaw_data_reset_version';
+const NOTIFICATION_READ_MAP_STORAGE_KEY = 'vpaw_notification_read_map';
+const NOTIFICATION_LAST_TRIGGERED_STORAGE_KEY = 'vpaw_notification_last_triggered_by_key';
+const NOTIFICATION_INBOX_STORAGE_KEY = 'vpaw_notification_inbox';
 const DATA_RESET_TARGET_VERSION = 'milo-clean-reset-2026-03-22';
 
 type RuntimeState = {
@@ -165,6 +195,19 @@ type RuntimeState = {
 };
 
 type PerPetUpdatedAt = Record<string, string>;
+type HealthDomainClockByPet = Record<string, CloudHealthDomainUpdatedAt>;
+type HealthDomainKey = 'vetVisits' | 'medicalEvents' | 'reminders' | 'medicationCourses' | 'weights';
+type HealthDomainFingerprintsByPet = Record<string, Record<HealthDomainKey, string>>;
+type ReminderListItem = {
+  id: string;
+  title: string;
+  date: string;
+  dueDate: string;
+  petName?: string;
+  petId: string;
+  subtype?: ReminderSubtype;
+  status?: 'pending' | 'done' | 'snoozed';
+};
 
 export type HealthEventType = 'vaccination' | 'vet_visit' | 'health_note' | 'weight' | 'other';
 
@@ -266,6 +309,65 @@ function daysSince(value: string | undefined) {
   const diff = Date.now() - ms;
   if (diff < 0) return 0;
   return Math.floor(diff / (24 * 60 * 60 * 1000));
+}
+
+function getLatestTimestampMs(values: Array<string | undefined>): number {
+  let maxMs = Number.NaN;
+  values.forEach((value) => {
+    const ms = parseUpdatedAtMs(value);
+    if (ms == null) return;
+    if (!Number.isFinite(maxMs) || ms > maxMs) maxMs = ms;
+  });
+  return Number.isFinite(maxMs) ? maxMs : 0;
+}
+
+function normalizeDomainClockValue(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.floor(value));
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const asNumber = Number(value);
+    if (Number.isFinite(asNumber)) return Math.max(0, Math.floor(asNumber));
+    const parsedDate = new Date(value).getTime();
+    if (Number.isFinite(parsedDate)) return Math.max(0, Math.floor(parsedDate));
+  }
+  return 0;
+}
+
+function getCloudDomainClock(payload: CloudHealthPayload | undefined): CloudHealthDomainUpdatedAt {
+  const empty = emptyHealthDomainUpdatedAt();
+  if (!payload) return empty;
+  return {
+    vetVisitsUpdatedAt: normalizeDomainClockValue(payload.vetVisitsUpdatedAt),
+    medicalEventsUpdatedAt: normalizeDomainClockValue(payload.medicalEventsUpdatedAt),
+    remindersUpdatedAt: normalizeDomainClockValue(payload.remindersUpdatedAt),
+    medicationCoursesUpdatedAt: normalizeDomainClockValue(payload.medicationCoursesUpdatedAt),
+    weightsUpdatedAt: normalizeDomainClockValue(payload.weightsUpdatedAt),
+  };
+}
+
+function buildDomainFingerprint(items: unknown[]): string {
+  try {
+    return JSON.stringify(items);
+  } catch {
+    return `len:${items.length}`;
+  }
+}
+
+function getLocalDomainClockForPet(args: {
+  petId: string;
+  vetVisitsByPet: ByPet<VetVisit>;
+  medicalEventsByPet: ByPet<MvpMedicalEvent>;
+  remindersByPet: ByPet<Reminder>;
+  medicationCoursesByPet: ByPet<MedicationCourse>;
+  weightsByPet: Record<string, WeightPoint[]>;
+}): CloudHealthDomainUpdatedAt {
+  const { petId, vetVisitsByPet, medicalEventsByPet, remindersByPet, medicationCoursesByPet, weightsByPet } = args;
+  return {
+    vetVisitsUpdatedAt: getLatestTimestampMs((vetVisitsByPet[petId] ?? []).flatMap((item) => [item.updatedAt, item.createdAt, item.visitDate])),
+    medicalEventsUpdatedAt: getLatestTimestampMs((medicalEventsByPet[petId] ?? []).flatMap((item) => [item.updatedAt, item.createdAt, item.eventDate, item.dueDate])),
+    remindersUpdatedAt: getLatestTimestampMs((remindersByPet[petId] ?? []).flatMap((item) => [item.updatedAt, item.createdAt, item.scheduledAt, item.completedAt])),
+    medicationCoursesUpdatedAt: getLatestTimestampMs((medicationCoursesByPet[petId] ?? []).flatMap((item) => [item.updatedAt, item.createdAt, item.startDate, item.endDate])),
+    weightsUpdatedAt: getLatestTimestampMs((weightsByPet[petId] ?? []).map((item) => item.date)),
+  };
 }
 
 function normalizeUpdatedAt(raw: unknown): PerPetUpdatedAt {
@@ -418,6 +520,127 @@ function buildHealthEventsFromLegacyData(profiles: Record<string, PetProfile>, w
   return result;
 }
 
+function migrateLegacyHealthEventsToCanonical(
+  legacyHealthEventsByPet: Record<string, HealthEvent[]>,
+  canonicalVetVisitsByPet: ByPet<VetVisit>,
+  canonicalMedicalEventsByPet: ByPet<MvpMedicalEvent>,
+  canonicalWeightsByPet: Record<string, WeightPoint[]>,
+): {
+  vetVisitsByPet: ByPet<VetVisit>;
+  medicalEventsByPet: ByPet<MvpMedicalEvent>;
+  weightsByPet: Record<string, WeightPoint[]>;
+  migratedCount: number;
+} {
+  let nextVetVisitsByPet = canonicalVetVisitsByPet;
+  let nextMedicalEventsByPet = canonicalMedicalEventsByPet;
+  let nextWeightsByPet = canonicalWeightsByPet;
+  let migratedCount = 0;
+
+  for (const petId of Object.keys(legacyHealthEventsByPet)) {
+    const legacyEvents = legacyHealthEventsByPet[petId] ?? [];
+    const existingVisits = nextVetVisitsByPet[petId] ?? [];
+    const existingMedicalEvents = nextMedicalEventsByPet[petId] ?? [];
+    const existingWeights = nextWeightsByPet[petId] ?? [];
+
+    const visitsToAdd = legacyEvents
+      .filter((event) => event.type === 'vet_visit')
+      .filter((event) => !existingVisits.some((visit) => isSameVetVisit(event, visit)))
+      .map((event) => {
+        const metadata = event.metadata ?? {};
+        return {
+          id: `legacy-visit-${event.id}`,
+          petId,
+          visitDate: event.date,
+          reasonCategory: toVetVisitReasonCategory(metadata.reasonCategory),
+          status: toVetVisitStatus(metadata.status),
+          clinicName: typeof metadata.clinic === 'string' ? metadata.clinic : undefined,
+          vetName: typeof metadata.doctor === 'string' ? metadata.doctor : undefined,
+          followUpDate: typeof metadata.followUpDate === 'string' ? metadata.followUpDate : undefined,
+          notes: event.description,
+          amount: typeof metadata.amount === 'number' && metadata.amount > 0 ? metadata.amount : undefined,
+          currency: typeof metadata.currency === 'string' ? metadata.currency : undefined,
+          createdAt: event.createdAt,
+          updatedAt: event.updatedAt,
+        } satisfies VetVisit;
+      });
+
+    if (visitsToAdd.length > 0) {
+      migratedCount += visitsToAdd.length;
+      nextVetVisitsByPet = {
+        ...nextVetVisitsByPet,
+        [petId]: [...visitsToAdd, ...existingVisits].sort((a, b) => (parseUpdatedAtMs(b.visitDate) ?? 0) - (parseUpdatedAtMs(a.visitDate) ?? 0)),
+      };
+    }
+
+    const medicalEventsToAdd = legacyEvents
+      .filter((event) => event.type === 'vaccination' || event.type === 'health_note')
+      .filter((event) => !existingMedicalEvents.some((medicalEvent) => isSameMedicalEvent(event, medicalEvent)))
+      .map((event) => {
+        const metadata = event.metadata ?? {};
+        const subcategory = typeof metadata.category === 'string' ? metadata.category : undefined;
+        const dueDate = typeof metadata.dueDate === 'string' ? metadata.dueDate : undefined;
+        const status = typeof metadata.status === 'string' ? metadata.status : undefined;
+        return {
+          id: `legacy-med-${event.id}`,
+          petId,
+          type: mapLegacyHealthEventToMedicalType(event),
+          eventDate: event.date,
+          title: event.title,
+          subcategory,
+          status: status as MvpMedicalEvent['status'],
+          dueDate,
+          metadataJson: {
+            ...metadata,
+            legacyEventId: event.id,
+            source: 'legacy_health_events_migration',
+          },
+          note: event.description,
+          createdAt: event.createdAt,
+          updatedAt: event.updatedAt,
+        } satisfies MvpMedicalEvent;
+      });
+
+    if (medicalEventsToAdd.length > 0) {
+      migratedCount += medicalEventsToAdd.length;
+      nextMedicalEventsByPet = {
+        ...nextMedicalEventsByPet,
+        [petId]: [...medicalEventsToAdd, ...existingMedicalEvents].sort((a, b) => (parseUpdatedAtMs(b.eventDate) ?? 0) - (parseUpdatedAtMs(a.eventDate) ?? 0)),
+      };
+    }
+
+    const weightsToAdd = legacyEvents
+      .filter((event) => event.type === 'weight')
+      .map((event) => toWeightPointFromLegacyEvent(event))
+      .filter((entry): entry is WeightPoint => entry !== null)
+      .filter((entry) => !existingWeights.some((weight) => isSameWeightEntry({
+        id: `${petId}-${entry.date}-${entry.value}`,
+        petId,
+        type: 'weight',
+        title: 'Weight Entry',
+        description: entry.change,
+        date: entry.date,
+        metadata: { value: entry.value, label: entry.label },
+        createdAt: entry.date,
+        updatedAt: entry.date,
+      }, weight)));
+
+    if (weightsToAdd.length > 0) {
+      migratedCount += weightsToAdd.length;
+      nextWeightsByPet = {
+        ...nextWeightsByPet,
+        [petId]: [...existingWeights, ...weightsToAdd].sort((a, b) => (parseUpdatedAtMs(b.date) ?? 0) - (parseUpdatedAtMs(a.date) ?? 0)),
+      };
+    }
+  }
+
+  return {
+    vetVisitsByPet: nextVetVisitsByPet,
+    medicalEventsByPet: nextMedicalEventsByPet,
+    weightsByPet: nextWeightsByPet,
+    migratedCount,
+  };
+}
+
 export default function AuthGate() {
   const { session, loading } = useAuth();
   const { locale } = useLocale();
@@ -446,6 +669,7 @@ export default function AuthGate() {
   const [activePetId, setActivePetId] = useState<string>('');
   const [weightsByPet, setWeightsByPet] = useState<Record<string, WeightPoint[]>>({});
   const [weightsUpdatedAt, setWeightsUpdatedAt] = useState<PerPetUpdatedAt>({});
+  // Legacy fallback-only source; new writes should target canonical domain models.
   const [healthEventsByPet, setHealthEventsByPet] = useState<Record<string, HealthEvent[]>>({});
   const [vetVisitsByPet, setVetVisitsByPet] = useState<ByPet<VetVisit>>(EMPTY_VET_VISITS_BY_PET);
   const [medicalEventsByPet, setMedicalEventsByPet] = useState<ByPet<MvpMedicalEvent>>(EMPTY_MEDICAL_EVENTS_BY_PET);
@@ -461,11 +685,30 @@ export default function AuthGate() {
   const [runtimeDebug, setRuntimeDebug] = useState('');
   const [cloudHydrated, setCloudHydrated] = useState(false);
   const [cloudMetadataReady, setCloudMetadataReady] = useState(false);
+  const [healthCloudHydrated, setHealthCloudHydrated] = useState(false);
+  const [healthCloudMetadataReady, setHealthCloudMetadataReady] = useState(false);
+  const [cloudHealthDomainUpdatedAtByPet, setCloudHealthDomainUpdatedAtByPet] = useState<HealthDomainClockByPet>({});
+  const [notificationReadById, setNotificationReadById] = useState<Record<string, boolean>>({});
+  const [notificationInbox, setNotificationInbox] = useState<HealthNotification[]>([]);
+  const [notificationLastTriggeredByKey, setNotificationLastTriggeredByKey] = useState<NotificationLastTriggeredByKey>({});
   const activePetRef = useRef<string>('');
   const petLockRef = useRef(false);
   const reminderSyncInFlightRef = useRef(false);
   const queuedReminderSyncRef = useRef<ByPet<Reminder> | null>(null);
   const reminderBootstrapSyncDoneRef = useRef(false);
+  const healthDomainFingerprintsRef = useRef<HealthDomainFingerprintsByPet>({});
+  const localHealthDomainUpdatedAtRef = useRef<HealthDomainClockByPet>({});
+
+  useEffect(() => {
+    healthDomainFingerprintsRef.current = {};
+    localHealthDomainUpdatedAtRef.current = {};
+    if (!session?.user?.id) {
+      setCloudHealthDomainUpdatedAtByPet({});
+      setNotificationReadById({});
+      setNotificationInbox([]);
+      setNotificationLastTriggeredByKey({});
+    }
+  }, [session?.user?.id]);
 
   const areReminderStatesEqual = (a: ByPet<Reminder>, b: ByPet<Reminder>) => {
     const allPetIds = Array.from(new Set([...Object.keys(a), ...Object.keys(b)]));
@@ -584,46 +827,6 @@ export default function AuthGate() {
     });
   };
 
-  const addHealthEvent = (petId: string, eventInput: Omit<HealthEvent, 'id' | 'petId' | 'createdAt' | 'updatedAt'>) => {
-    const nowIso = new Date().toISOString();
-    const event: HealthEvent = {
-      ...eventInput,
-      id: `event-${petId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      petId,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
-
-    setHealthEventsByPet((prev) => {
-      const nextPetEvents = [event, ...(prev[petId] ?? [])];
-      return {
-        ...prev,
-        [petId]: nextPetEvents,
-      };
-    });
-  };
-
-  const updateHealthEvent = (petId: string, eventId: string, patch: Partial<Omit<HealthEvent, 'id' | 'petId' | 'createdAt'>>) => {
-    setHealthEventsByPet((prev) => {
-      const nextPetEvents = (prev[petId] ?? []).map((event) => {
-        if (event.id !== eventId) return event;
-        return {
-          ...event,
-          ...patch,
-          updatedAt: new Date().toISOString(),
-        };
-      });
-      return {
-        ...prev,
-        [petId]: nextPetEvents,
-      };
-    });
-  };
-
-  const getHealthEventsByPet = (petId: string): HealthEvent[] => {
-    return healthEventsByPet[petId] ?? [];
-  };
-
   useEffect(() => {
     setRoute('home');
   }, [session?.user?.id]);
@@ -649,6 +852,9 @@ export default function AuthGate() {
           petLockRaw,
           dataResetVersionRaw,
           weightGoalsRaw,
+          notificationReadMapRaw,
+          notificationLastTriggeredRaw,
+          notificationInboxRaw,
         ] = await Promise.all([
           getLocalItem(PET_PROFILES_STORAGE_KEY),
           getLocalItem(PET_PROFILES_UPDATED_AT_STORAGE_KEY),
@@ -665,10 +871,70 @@ export default function AuthGate() {
           getLocalItem(PET_LOCK_STORAGE_KEY),
           getLocalItem(DATA_RESET_VERSION_STORAGE_KEY),
           getLocalItem(WEIGHT_GOALS_BY_PET_STORAGE_KEY),
+          getLocalItem(NOTIFICATION_READ_MAP_STORAGE_KEY),
+          getLocalItem(NOTIFICATION_LAST_TRIGGERED_STORAGE_KEY),
+          getLocalItem(NOTIFICATION_INBOX_STORAGE_KEY),
         ]);
 
         if (weightGoalsRaw) {
           try { setWeightGoalsByPet(JSON.parse(weightGoalsRaw) as Record<string, number>); } catch { /* ignore */ }
+        }
+
+        if (notificationReadMapRaw) {
+          try {
+            const parsed = JSON.parse(notificationReadMapRaw) as Record<string, unknown>;
+            const normalized: Record<string, boolean> = {};
+            Object.keys(parsed ?? {}).forEach((key) => {
+              if (parsed[key] === true) normalized[key] = true;
+            });
+            setNotificationReadById(normalized);
+          } catch {
+            setNotificationReadById({});
+          }
+        }
+
+        if (notificationLastTriggeredRaw) {
+          try {
+            const parsed = JSON.parse(notificationLastTriggeredRaw) as Record<string, unknown>;
+            const normalized: NotificationLastTriggeredByKey = {};
+            Object.keys(parsed ?? {}).forEach((key) => {
+              const value = parsed[key];
+              if (typeof value === 'number' && Number.isFinite(value)) normalized[key] = value;
+            });
+            setNotificationLastTriggeredByKey(normalized);
+          } catch {
+            setNotificationLastTriggeredByKey({});
+          }
+        }
+
+        if (notificationInboxRaw) {
+          try {
+            const parsed = JSON.parse(notificationInboxRaw) as unknown;
+            if (Array.isArray(parsed)) {
+              const normalized = parsed
+                .filter((item): item is HealthNotification => {
+                  if (!item || typeof item !== 'object') return false;
+                  const value = item as Partial<HealthNotification>;
+                  return (
+                    typeof value.id === 'string'
+                    && typeof value.petId === 'string'
+                    && typeof value.type === 'string'
+                    && typeof value.title === 'string'
+                    && typeof value.message === 'string'
+                    && typeof value.createdAt === 'string'
+                    && typeof value.relatedEntityId === 'string'
+                  );
+                })
+                .map((item) => ({
+                  ...item,
+                  priority: item.priority === 'high' || item.priority === 'medium' || item.priority === 'low' ? item.priority : 'medium',
+                  isRead: item.isRead === true,
+                }));
+              setNotificationInbox(normalized);
+            }
+          } catch {
+            setNotificationInbox([]);
+          }
         }
 
         const shouldApplyCleanReset = dataResetVersionRaw !== DATA_RESET_TARGET_VERSION;
@@ -692,6 +958,9 @@ export default function AuthGate() {
           setMedicalEventsByPet(clean.medicalEvents);
           setRemindersByPet(clean.reminders);
           setMedicationCoursesByPet(clean.medicationCourses);
+          setNotificationReadById({});
+          setNotificationInbox([]);
+          setNotificationLastTriggeredByKey({});
 
           await Promise.all([
             setLocalItem(PET_PROFILES_STORAGE_KEY, JSON.stringify(clean.profiles)),
@@ -704,6 +973,9 @@ export default function AuthGate() {
             setLocalItem(MEDICAL_EVENTS_BY_PET_STORAGE_KEY, JSON.stringify(clean.medicalEvents)),
             setLocalItem(REMINDERS_BY_PET_STORAGE_KEY, JSON.stringify(clean.reminders)),
             setLocalItem(MEDICATION_COURSES_BY_PET_STORAGE_KEY, JSON.stringify(clean.medicationCourses)),
+            setLocalItem(NOTIFICATION_READ_MAP_STORAGE_KEY, JSON.stringify({})),
+            setLocalItem(NOTIFICATION_LAST_TRIGGERED_STORAGE_KEY, JSON.stringify({})),
+            setLocalItem(NOTIFICATION_INBOX_STORAGE_KEY, JSON.stringify([])),
             setLocalItem(ACTIVE_PET_STORAGE_KEY, clean.activePetId),
             setLocalItem(PET_LOCK_STORAGE_KEY, clean.petLockEnabled ? '1' : '0'),
             setLocalItem(
@@ -806,9 +1078,6 @@ export default function AuthGate() {
             }
           } catch {}
         }
-        setWeightsByPet(localWeights);
-        setLocalItem(WEIGHTS_STORAGE_KEY, JSON.stringify(localWeights)).catch(() => {});
-
         let localWeightsUpdatedAt: PerPetUpdatedAt = {};
         if (weightsUpdatedAtRaw) {
           try {
@@ -838,8 +1107,6 @@ export default function AuthGate() {
             localVetVisits = EMPTY_VET_VISITS_BY_PET;
           }
         }
-        setVetVisitsByPet(localVetVisits);
-        setLocalItem(VET_VISITS_BY_PET_STORAGE_KEY, JSON.stringify(localVetVisits)).catch(() => {});
 
         let localMedicalEvents = EMPTY_MEDICAL_EVENTS_BY_PET;
         if (medicalEventsRaw) {
@@ -849,6 +1116,26 @@ export default function AuthGate() {
             localMedicalEvents = EMPTY_MEDICAL_EVENTS_BY_PET;
           }
         }
+
+        const migratedCanonical = migrateLegacyHealthEventsToCanonical(
+          localHealthEvents,
+          localVetVisits,
+          localMedicalEvents,
+          localWeights,
+        );
+        localVetVisits = migratedCanonical.vetVisitsByPet;
+        localMedicalEvents = migratedCanonical.medicalEventsByPet;
+        localWeights = migratedCanonical.weightsByPet;
+
+        if (__DEV__ && migratedCanonical.migratedCount > 0) {
+          console.debug('[health-migration]', JSON.stringify({ migratedCount: migratedCanonical.migratedCount }));
+        }
+
+        setWeightsByPet(localWeights);
+        setLocalItem(WEIGHTS_STORAGE_KEY, JSON.stringify(localWeights)).catch(() => {});
+
+        setVetVisitsByPet(localVetVisits);
+        setLocalItem(VET_VISITS_BY_PET_STORAGE_KEY, JSON.stringify(localVetVisits)).catch(() => {});
         setMedicalEventsByPet(localMedicalEvents);
         setLocalItem(MEDICAL_EVENTS_BY_PET_STORAGE_KEY, JSON.stringify(localMedicalEvents)).catch(() => {});
 
@@ -919,6 +1206,7 @@ export default function AuthGate() {
 
   useEffect(() => {
     if (!petHydrated) return;
+    // Persisted only for backward compatibility and fallback reads.
     setLocalItem(HEALTH_EVENTS_STORAGE_KEY, JSON.stringify(healthEventsByPet)).catch(() => {});
   }, [healthEventsByPet, petHydrated]);
 
@@ -936,6 +1224,21 @@ export default function AuthGate() {
     if (!petHydrated) return;
     setLocalItem(REMINDERS_BY_PET_STORAGE_KEY, JSON.stringify(remindersByPet)).catch(() => {});
   }, [petHydrated, remindersByPet]);
+
+  useEffect(() => {
+    if (!petHydrated) return;
+    setLocalItem(NOTIFICATION_READ_MAP_STORAGE_KEY, JSON.stringify(notificationReadById)).catch(() => {});
+  }, [notificationReadById, petHydrated]);
+
+  useEffect(() => {
+    if (!petHydrated) return;
+    setLocalItem(NOTIFICATION_LAST_TRIGGERED_STORAGE_KEY, JSON.stringify(notificationLastTriggeredByKey)).catch(() => {});
+  }, [notificationLastTriggeredByKey, petHydrated]);
+
+  useEffect(() => {
+    if (!petHydrated) return;
+    setLocalItem(NOTIFICATION_INBOX_STORAGE_KEY, JSON.stringify(notificationInbox)).catch(() => {});
+  }, [notificationInbox, petHydrated]);
 
   useEffect(() => {
     if (!petHydrated) return;
@@ -1098,6 +1401,266 @@ export default function AuthGate() {
   }, [cloudHydrated, cloudMetadataReady, cloudPetProfilesUpdatedAt, petHydrated, petProfiles, petProfilesUpdatedAt, session?.user?.id]);
 
   useEffect(() => {
+    let mounted = true;
+
+    async function hydrateCloudHealthDomain() {
+      if (!session?.user?.id || !petHydrated) {
+        setHealthCloudMetadataReady(false);
+        setHealthCloudHydrated(true);
+        return;
+      }
+
+      const remote = await fetchHealthDomainFromCloud(session.user.id);
+      if (!mounted) return;
+
+      if (!remote) {
+        setHealthCloudMetadataReady(false);
+        setHealthCloudHydrated(true);
+        return;
+      }
+
+      setHealthCloudMetadataReady(true);
+      const cloudPetIds = Object.keys(remote.byPet);
+      const cloudDomainClockByPet: HealthDomainClockByPet = {};
+      const cloudMergeByPet: Record<string, Record<HealthDomainKey, boolean>> = {};
+
+      cloudPetIds.forEach((petId) => {
+        const cloudPayload = remote.byPet[petId];
+        const cloudClock = getCloudDomainClock(cloudPayload);
+        const localClock = getLocalDomainClockForPet({
+          petId,
+          vetVisitsByPet,
+          medicalEventsByPet,
+          remindersByPet,
+          medicationCoursesByPet,
+          weightsByPet,
+        });
+
+        cloudDomainClockByPet[petId] = cloudClock;
+        cloudMergeByPet[petId] = {
+          vetVisits: cloudClock.vetVisitsUpdatedAt > localClock.vetVisitsUpdatedAt,
+          medicalEvents: cloudClock.medicalEventsUpdatedAt > localClock.medicalEventsUpdatedAt,
+          reminders: cloudClock.remindersUpdatedAt > localClock.remindersUpdatedAt,
+          medicationCourses: cloudClock.medicationCoursesUpdatedAt > localClock.medicationCoursesUpdatedAt,
+          weights: cloudClock.weightsUpdatedAt > localClock.weightsUpdatedAt,
+        };
+      });
+
+      setCloudHealthDomainUpdatedAtByPet((prev) => ({ ...prev, ...cloudDomainClockByPet }));
+
+      setVetVisitsByPet((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        cloudPetIds.forEach((petId) => {
+          const cloudItems = remote.byPet[petId]?.vetVisits ?? [];
+          if (cloudMergeByPet[petId]?.vetVisits) {
+            next[petId] = cloudItems;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+
+      setMedicalEventsByPet((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        cloudPetIds.forEach((petId) => {
+          const cloudItems = remote.byPet[petId]?.medicalEvents ?? [];
+          if (cloudMergeByPet[petId]?.medicalEvents) {
+            next[petId] = cloudItems;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+
+      setRemindersWithNotificationSync((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        cloudPetIds.forEach((petId) => {
+          const cloudItems = remote.byPet[petId]?.reminders ?? [];
+          if (cloudMergeByPet[petId]?.reminders) {
+            next[petId] = cloudItems;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+
+      setMedicationCoursesByPet((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        cloudPetIds.forEach((petId) => {
+          const cloudItems = remote.byPet[petId]?.medicationCourses ?? [];
+          if (cloudMergeByPet[petId]?.medicationCourses) {
+            next[petId] = cloudItems;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+
+      setWeightsByPet((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        cloudPetIds.forEach((petId) => {
+          const cloudItems = remote.byPet[petId]?.weights ?? [];
+          if (cloudMergeByPet[petId]?.weights) {
+            next[petId] = cloudItems;
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+
+      if (__DEV__) {
+        cloudPetIds.forEach((petId) => {
+          console.debug('[health-sync:merge]', {
+            petId,
+            decisions: cloudMergeByPet[petId],
+          });
+        });
+      }
+
+      setWeightsUpdatedAt((prev) => {
+        const next = { ...prev };
+        cloudPetIds.forEach((petId) => {
+          if (!next[petId] && remote.updatedAt[petId]) next[petId] = remote.updatedAt[petId];
+        });
+        return next;
+      });
+
+      setHealthCloudHydrated(true);
+    }
+
+    hydrateCloudHealthDomain();
+    return () => {
+      mounted = false;
+    };
+  }, [petHydrated, session?.user?.id]);
+
+  useEffect(() => {
+    if (!petHydrated || !healthCloudHydrated || !healthCloudMetadataReady || !session?.user?.id) return;
+
+    const allPetIds = Array.from(
+      new Set([
+        ...petList,
+        ...Object.keys(vetVisitsByPet),
+        ...Object.keys(medicalEventsByPet),
+        ...Object.keys(remindersByPet),
+        ...Object.keys(medicationCoursesByPet),
+        ...Object.keys(weightsByPet),
+      ]),
+    );
+
+    const nowMs = Date.now();
+    const localDomainUpdatedAtByPet: HealthDomainClockByPet = {};
+    allPetIds.forEach((petId) => {
+      const previousFingerprints = healthDomainFingerprintsRef.current[petId];
+      const previousClock = localHealthDomainUpdatedAtRef.current[petId] ?? emptyHealthDomainUpdatedAt();
+      const derivedClock = getLocalDomainClockForPet({
+        petId,
+        vetVisitsByPet,
+        medicalEventsByPet,
+        remindersByPet,
+        medicationCoursesByPet,
+        weightsByPet,
+      });
+
+      const currentFingerprints: Record<HealthDomainKey, string> = {
+        vetVisits: buildDomainFingerprint(vetVisitsByPet[petId] ?? []),
+        medicalEvents: buildDomainFingerprint(medicalEventsByPet[petId] ?? []),
+        reminders: buildDomainFingerprint(remindersByPet[petId] ?? []),
+        medicationCourses: buildDomainFingerprint(medicationCoursesByPet[petId] ?? []),
+        weights: buildDomainFingerprint(weightsByPet[petId] ?? []),
+      };
+
+      const nextClock: CloudHealthDomainUpdatedAt = {
+        vetVisitsUpdatedAt:
+          previousFingerprints == null
+            ? derivedClock.vetVisitsUpdatedAt
+            : currentFingerprints.vetVisits !== previousFingerprints.vetVisits
+              ? Math.max(previousClock.vetVisitsUpdatedAt + 1, derivedClock.vetVisitsUpdatedAt, nowMs)
+              : Math.max(previousClock.vetVisitsUpdatedAt, derivedClock.vetVisitsUpdatedAt),
+        medicalEventsUpdatedAt:
+          previousFingerprints == null
+            ? derivedClock.medicalEventsUpdatedAt
+            : currentFingerprints.medicalEvents !== previousFingerprints.medicalEvents
+              ? Math.max(previousClock.medicalEventsUpdatedAt + 1, derivedClock.medicalEventsUpdatedAt, nowMs)
+              : Math.max(previousClock.medicalEventsUpdatedAt, derivedClock.medicalEventsUpdatedAt),
+        remindersUpdatedAt:
+          previousFingerprints == null
+            ? derivedClock.remindersUpdatedAt
+            : currentFingerprints.reminders !== previousFingerprints.reminders
+              ? Math.max(previousClock.remindersUpdatedAt + 1, derivedClock.remindersUpdatedAt, nowMs)
+              : Math.max(previousClock.remindersUpdatedAt, derivedClock.remindersUpdatedAt),
+        medicationCoursesUpdatedAt:
+          previousFingerprints == null
+            ? derivedClock.medicationCoursesUpdatedAt
+            : currentFingerprints.medicationCourses !== previousFingerprints.medicationCourses
+              ? Math.max(previousClock.medicationCoursesUpdatedAt + 1, derivedClock.medicationCoursesUpdatedAt, nowMs)
+              : Math.max(previousClock.medicationCoursesUpdatedAt, derivedClock.medicationCoursesUpdatedAt),
+        weightsUpdatedAt:
+          previousFingerprints == null
+            ? derivedClock.weightsUpdatedAt
+            : currentFingerprints.weights !== previousFingerprints.weights
+              ? Math.max(previousClock.weightsUpdatedAt + 1, derivedClock.weightsUpdatedAt, nowMs)
+              : Math.max(previousClock.weightsUpdatedAt, derivedClock.weightsUpdatedAt),
+      };
+
+      healthDomainFingerprintsRef.current[petId] = currentFingerprints;
+      localHealthDomainUpdatedAtRef.current[petId] = nextClock;
+      localDomainUpdatedAtByPet[petId] = nextClock;
+    });
+
+    const petIdsToUpload = allPetIds.filter((petId) => {
+      const localClock = localDomainUpdatedAtByPet[petId] ?? emptyHealthDomainUpdatedAt();
+      const cloudClock = cloudHealthDomainUpdatedAtByPet[petId] ?? emptyHealthDomainUpdatedAt();
+      return (
+        localClock.vetVisitsUpdatedAt > cloudClock.vetVisitsUpdatedAt
+        || localClock.medicalEventsUpdatedAt > cloudClock.medicalEventsUpdatedAt
+        || localClock.remindersUpdatedAt > cloudClock.remindersUpdatedAt
+        || localClock.medicationCoursesUpdatedAt > cloudClock.medicationCoursesUpdatedAt
+        || localClock.weightsUpdatedAt > cloudClock.weightsUpdatedAt
+      );
+    });
+
+    if (petIdsToUpload.length === 0) return;
+
+    saveHealthDomainToCloud(session.user.id, petIdsToUpload, {
+      vetVisitsByPet,
+      medicalEventsByPet,
+      remindersByPet,
+      medicationCoursesByPet,
+      weightsByPet,
+      domainUpdatedAtByPet: localDomainUpdatedAtByPet,
+    })
+      .then((ok) => {
+        if (!ok) return;
+        setCloudHealthDomainUpdatedAtByPet((prev) => {
+          const next: HealthDomainClockByPet = { ...prev };
+          petIdsToUpload.forEach((petId) => {
+            if (localDomainUpdatedAtByPet[petId]) next[petId] = localDomainUpdatedAtByPet[petId];
+          });
+          return next;
+        });
+      })
+      .catch(() => {});
+  }, [
+    cloudHealthDomainUpdatedAtByPet,
+    healthCloudHydrated,
+    healthCloudMetadataReady,
+    medicalEventsByPet,
+    medicationCoursesByPet,
+    petHydrated,
+    petList,
+    remindersByPet,
+    session?.user?.id,
+    vetVisitsByPet,
+    weightsByPet,
+  ]);
+
+  useEffect(() => {
     const sub = AppState.addEventListener('change', (nextState) => {
       if (nextState === 'background' || nextState === 'inactive') {
         persistRuntimeState(activePetRef.current, petLockRef.current);
@@ -1199,7 +1762,7 @@ export default function AuthGate() {
     setRoute('notifications');
   };
 
-  type DualWriteOutcome = {
+  type VetVisitOutcomeInput = {
     type: MedicalEventType;
     title: string;
     eventDate: string;
@@ -1232,7 +1795,7 @@ export default function AuthGate() {
     };
   };
 
-  type DualWriteInput = {
+  type VetVisitCreateInput = {
     petId: string;
     visitDate: string;
     reasonCategory: VetVisitReasonCategory;
@@ -1243,10 +1806,10 @@ export default function AuthGate() {
     notes?: string;
     amount?: number;
     currency?: string;
-    outcomes?: DualWriteOutcome[];
+    outcomes?: VetVisitOutcomeInput[];
   };
 
-  const recordVetVisitDualWrite = (input: DualWriteInput) => {
+  const recordVetVisitWithOutcomes = (input: VetVisitCreateInput) => {
     let createdVisit: VetVisit | null = null;
     setVetVisitsByPet((prev) => {
       const created = createVetVisit(prev, {
@@ -1303,6 +1866,7 @@ export default function AuthGate() {
           kind: outcome.reminder.kind,
           dueAt: outcome.reminder.dueAt ?? outcome.reminder.scheduledAt,
           status: 'pending',
+          originType: 'system',
           sourceType: 'vet_visit',
           sourceId: createdVisit!.id,
           note: outcome.reminder.note,
@@ -1361,14 +1925,6 @@ export default function AuthGate() {
       }).next,
     );
 
-    addHealthEvent(activePetId, {
-      type: payload.type === 'vaccine' ? 'vaccination' : 'health_note',
-      title: payload.title,
-      description: payload.note,
-      date: eventDate,
-      metadata: { category: payload.type, source: 'health_hub_form' },
-    });
-
     setPetProfilesUpdatedAt((prev) => ({ ...prev, [activePetId]: nowIso }));
   };
 
@@ -1400,6 +1956,63 @@ export default function AuthGate() {
     ),
     [activePetId, vetVisitsByPet, medicalEventsByPet, remindersByPet, medicationCoursesByPet, weightsByPet, healthEventsByPet, petProfiles],
   );
+  const documentsVaultForActivePet = useMemo(
+    () => getAllDocumentsForPet(activePetId, { vetVisitsByPet, medicalEventsByPet, weightsByPet }),
+    [activePetId, medicalEventsByPet, vetVisitsByPet, weightsByPet],
+  );
+  const documentsVaultPreview = useMemo(
+    () => documentsVaultForActivePet.slice(0, 2).map((item) => ({ id: item.id, title: item.title, date: item.date, type: item.type })),
+    [documentsVaultForActivePet],
+  );
+  const handleExportPetPassportPdf = async (selection: PetPassportExportSelection) => {
+    const data = buildPetHealthPassportData(
+      activePetId,
+      {
+        petProfiles,
+        vetVisitsByPet,
+        medicalEventsByPet,
+        remindersByPet,
+        medicationCoursesByPet,
+        weightsByPet,
+        legacyHealthEventsByPet: healthEventsByPet,
+      },
+      locale,
+    );
+
+    if (!data) {
+      Alert.alert(
+        locale === 'tr' ? 'PDF olusturulamadi' : 'Could not create PDF',
+        locale === 'tr' ? 'Bu evcil hayvan icin rapor verisi bulunamadi.' : 'No report data was found for this pet.',
+      );
+      return;
+    }
+
+    const result = await generatePetPassportPDF({
+      data,
+      locale,
+      selection,
+    });
+
+    if (!result.ok) {
+      const missingDependency = result.reason === 'missing_dependency';
+      Alert.alert(
+        locale === 'tr' ? 'PDF hazir degil' : 'PDF export unavailable',
+        missingDependency
+          ? (locale === 'tr'
+            ? 'PDF export icin expo-print ve tercihen expo-sharing eklenmeli.'
+            : 'Add expo-print and optionally expo-sharing to enable PDF export.')
+          : result.message,
+      );
+      return;
+    }
+
+    if (!result.uri) {
+      Alert.alert(
+        locale === 'tr' ? 'PDF kaydedildi' : 'PDF saved',
+        locale === 'tr' ? 'PDF olusturuldu.' : 'PDF has been generated.',
+      );
+    }
+  };
   const upcomingRemindersByPet = useMemo(() => {
     const next: Partial<Record<string, Array<{ id: string; title: string; date: string }>>> = {};
     petList.forEach((petId) => {
@@ -1550,9 +2163,9 @@ export default function AuthGate() {
     const startMs = startOfToday.getTime();
     const endMs = endOfToday.getTime();
 
-    const today: Array<{ id: string; title: string; date: string; petName?: string; petId: string; subtype?: ReminderSubtype }> = [];
-    const upcoming: Array<{ id: string; title: string; date: string; petName?: string; petId: string; subtype?: ReminderSubtype }> = [];
-    const overdue: Array<{ id: string; title: string; date: string; petName?: string; petId: string; subtype?: ReminderSubtype }> = [];
+    const today: ReminderListItem[] = [];
+    const upcoming: ReminderListItem[] = [];
+    const overdue: ReminderListItem[] = [];
 
     petList.forEach((petId) => {
       const petName = petProfiles[petId]?.name || petId;
@@ -1562,15 +2175,17 @@ export default function AuthGate() {
         .filter((reminder) => reminder.isActive && !reminder.completedAt)
         .forEach((reminder) => {
           const label = reminder.title?.trim() || (locale === 'tr' ? 'Hatırlatma' : 'Reminder');
-          const dateValue = reminder.scheduledAt ?? reminder.dueAt;
+          const dateValue = reminder.dueDate ?? reminder.scheduledAt ?? reminder.dueAt;
           const dateMs = new Date(dateValue).getTime();
-          const item = {
+          const item: ReminderListItem = {
             id: reminder.id,
             title: label,
             date: formatReminderDateLabel(dateValue, locale),
+            dueDate: dateValue,
             petName,
             petId,
             subtype: reminder.subtype,
+            status: reminder.status === 'snoozed' ? 'snoozed' : 'pending',
           };
           if (Number.isFinite(dateMs)) {
             if (dateMs >= startMs && dateMs < endMs) {
@@ -1586,17 +2201,17 @@ export default function AuthGate() {
         });
     });
 
-    const sortByDate = (items: Array<{ id: string; title: string; date: string; petName?: string; petId: string; subtype?: ReminderSubtype }>) =>
+    const sortByDate = (items: ReminderListItem[]) =>
       [...items].sort((a, b) => {
-        const aMs = new Date(a.date).getTime();
-        const bMs = new Date(b.date).getTime();
+        const aMs = new Date(a.dueDate).getTime();
+        const bMs = new Date(b.dueDate).getTime();
         if (!Number.isFinite(aMs) && !Number.isFinite(bMs)) return 0;
         if (!Number.isFinite(aMs)) return 1;
         if (!Number.isFinite(bMs)) return -1;
         return aMs - bMs;
       });
 
-    const completed: Array<{ id: string; title: string; date: string; petName?: string; petId: string; subtype?: ReminderSubtype }> = [];
+    const completed: ReminderListItem[] = [];
     petList.forEach((petId) => {
       const petName = petProfiles[petId]?.name || petId;
       const petType = petProfiles[petId]?.petType;
@@ -1607,15 +2222,17 @@ export default function AuthGate() {
             id: r.id,
             title: r.title?.trim() || (locale === 'tr' ? 'Tamamlanan hatırlatma' : 'Completed reminder'),
             date: formatReminderDateLabel((r.completedAt as string) ?? r.scheduledAt, locale),
+            dueDate: (r.completedAt as string) ?? r.dueDate ?? r.scheduledAt,
             petName,
             petId,
             subtype: r.subtype,
+            status: 'done',
           });
         });
     });
     completed.sort((a, b) => {
-      const aMs = new Date(a.date).getTime();
-      const bMs = new Date(b.date).getTime();
+      const aMs = new Date(a.dueDate).getTime();
+      const bMs = new Date(b.dueDate).getTime();
       if (!Number.isFinite(aMs) && !Number.isFinite(bMs)) return 0;
       if (!Number.isFinite(aMs)) return 1;
       if (!Number.isFinite(bMs)) return -1;
@@ -1629,6 +2246,144 @@ export default function AuthGate() {
       completed: completed.slice(0, 20),
     };
   }, [completedRemindersByPet, locale, petList, petProfiles, remindersByPet]);
+
+  const triggeredNotificationCandidates = useMemo<HealthNotification[]>(
+    () => buildTriggeredNotifications({
+      petList,
+      petProfiles,
+      remindersByPet,
+      vetVisitsByPet,
+      medicalEventsByPet,
+      weightsByPet,
+      locale,
+    }),
+    [locale, medicalEventsByPet, petList, petProfiles, remindersByPet, vetVisitsByPet, weightsByPet],
+  );
+
+  useEffect(() => {
+    if (!petHydrated) return;
+    if (triggeredNotificationCandidates.length === 0) return;
+    const nowMs = Date.now();
+    const nextTriggeredAtByKey: NotificationLastTriggeredByKey = {};
+
+    setNotificationInbox((prev) => {
+      const next = [...prev];
+      const indexById = new Map<string, number>();
+      next.forEach((item, idx) => indexById.set(item.id, idx));
+      let changed = false;
+
+      triggeredNotificationCandidates.forEach((candidate) => {
+        const existingIndex = indexById.get(candidate.id);
+        if (typeof existingIndex === 'number') {
+          const existing = next[existingIndex];
+          const nextIsRead = existing.isRead || notificationReadById[candidate.id] === true;
+          if (
+            existing.title === candidate.title
+            && existing.message === candidate.message
+            && existing.createdAt === candidate.createdAt
+            && existing.priority === candidate.priority
+            && existing.isRead === nextIsRead
+          ) {
+            return;
+          }
+          next[existingIndex] = {
+            ...candidate,
+            isRead: nextIsRead,
+          };
+          changed = true;
+          return;
+        }
+
+        if (shouldSuppressNotification(candidate, next, notificationLastTriggeredByKey, nowMs)) return;
+
+        next.unshift({
+          ...candidate,
+          isRead: notificationReadById[candidate.id] === true,
+        });
+        nextTriggeredAtByKey[getNotificationDedupKey(candidate)] = nowMs;
+        changed = true;
+      });
+
+      if (!changed) return prev;
+      return next.slice(0, 300);
+    });
+
+    if (Object.keys(nextTriggeredAtByKey).length > 0) {
+      setNotificationLastTriggeredByKey((prev) => ({ ...prev, ...nextTriggeredAtByKey }));
+    }
+  }, [
+    notificationLastTriggeredByKey,
+    notificationReadById,
+    petHydrated,
+    triggeredNotificationCandidates,
+  ]);
+
+  useEffect(() => {
+    if (!petHydrated) return;
+    setNotificationInbox((prev) => {
+      let changed = false;
+      const next = prev.map((item) => {
+        const nextIsRead = item.isRead || notificationReadById[item.id] === true;
+        if (nextIsRead === item.isRead) return item;
+        changed = true;
+        return { ...item, isRead: nextIsRead };
+      });
+      return changed ? next : prev;
+    });
+  }, [notificationReadById, petHydrated]);
+
+  const triggeredNotifications = notificationInbox;
+
+  const findReminderOwnerPetId = (reminderId: string): string | null => {
+    for (const petId of Object.keys(remindersByPet)) {
+      if ((remindersByPet[petId] ?? []).some((item) => item.id === reminderId)) return petId;
+    }
+    return null;
+  };
+
+  const markNotificationRead = (notificationId: string) => {
+    setNotificationReadById((prev) => ({ ...prev, [notificationId]: true }));
+    setNotificationInbox((prev) => prev.map((item) => (
+      item.id === notificationId && !item.isRead ? { ...item, isRead: true } : item
+    )));
+  };
+
+  const handleNotificationDone = (notificationId: string) => {
+    const item = triggeredNotifications.find((entry) => entry.id === notificationId);
+    if (!item) return;
+    markNotificationRead(notificationId);
+    if (item.type !== 'reminder_due' && item.type !== 'overdue') return;
+    const ownerPetId = findReminderOwnerPetId(item.relatedEntityId);
+    if (!ownerPetId) return;
+    setRemindersWithNotificationSync((prev) => markReminderCompleted(prev, ownerPetId, item.relatedEntityId).next);
+  };
+
+  const handleNotificationSnooze = (notificationId: string) => {
+    const item = triggeredNotifications.find((entry) => entry.id === notificationId);
+    if (!item) return;
+    markNotificationRead(notificationId);
+    if (item.type !== 'reminder_due' && item.type !== 'overdue') return;
+    const ownerPetId = findReminderOwnerPetId(item.relatedEntityId);
+    if (!ownerPetId) return;
+    setRemindersWithNotificationSync((prev) => snoozeReminder(prev, ownerPetId, item.relatedEntityId, 24 * 60).next);
+  };
+
+  const handleNotificationOpen = (notificationId: string) => {
+    const item = triggeredNotifications.find((entry) => entry.id === notificationId);
+    if (!item) return;
+    markNotificationRead(notificationId);
+    setActivePetWithPersist(item.petId);
+    if (item.type === 'followup') {
+      openSubRoute('vetVisits', 'notifications');
+      return;
+    }
+    if (item.type === 'missing_data') {
+      openPetProfile(item.petId, 'notifications');
+      return;
+    }
+    setPrimaryTab('reminders');
+    setRoute('reminders');
+  };
 
   const handleDeleteReminder = (id: string) => {
     setRemindersWithNotificationSync((prev) => {
@@ -1646,6 +2401,7 @@ export default function AuthGate() {
       medicalEventsByPet,
       vetVisitsByPet,
       weightsByPet,
+      healthEventsByPet,
       petProfiles[activePetId],
     );
     return base.slice(0, 60).map((item) => ({
@@ -1655,7 +2411,7 @@ export default function AuthGate() {
       title: item.title || (locale === 'tr' ? 'Sağlık olayı' : 'Health event'),
       notes: item.notes,
     }));
-  }, [activePetId, locale, medicalEventsByPet, petProfiles, vetVisitsByPet, weightsByPet]);
+  }, [activePetId, healthEventsByPet, locale, medicalEventsByPet, petProfiles, vetVisitsByPet, weightsByPet]);
 
   const healthHubSummary = useMemo(() => {
     const summary = summarizeUnifiedHealthEvents(
@@ -1664,6 +2420,7 @@ export default function AuthGate() {
         medicalEventsByPet,
         vetVisitsByPet,
         weightsByPet,
+        healthEventsByPet,
         petProfiles[activePetId],
       ),
     );
@@ -1704,7 +2461,7 @@ export default function AuthGate() {
       : undefined;
 
     return { latestWeight, vaccineStatus, lastVetVisit, totalExpenses };
-  }, [activePetId, locale, medicalEventsByPet, petProfiles, vetVisitsByPet, vetVisitsBridge, weightsByPet]);
+  }, [activePetId, healthEventsByPet, locale, medicalEventsByPet, petProfiles, vetVisitsByPet, vetVisitsBridge, weightsByPet]);
 
   const healthHubDomainOverview = useMemo<HealthHubDomainOverview>(() => {
     const nowMs = Date.now();
@@ -1739,7 +2496,8 @@ export default function AuthGate() {
     const latestWeight = weightEntries[weightEntries.length - 1];
     const weightDays = daysSince(latestWeight?.date);
 
-    const documentsCount = medical.filter((event) => event.type === 'attachment' || event.type === 'test' || event.type === 'prescription').length;
+    const documentsCount = documentsVaultForActivePet.length;
+    const latestDocument = documentsVaultForActivePet[0];
 
     const countText = (count: number, trOne: string, trMany: string, enOne: string, enMany: string) => {
       if (locale === 'tr') return `${count} ${count === 1 ? trOne : trMany}`;
@@ -1792,11 +2550,15 @@ export default function AuthGate() {
       },
       documents: {
         countText: countText(documentsCount, 'belge', 'belge', 'document', 'documents'),
-        statusText: locale === 'tr' ? 'arşiv' : 'archive',
-        infoText: locale === 'tr' ? 'PDF, laboratuvar, rapor kayıtları' : 'PDF, lab, report records',
+        statusText: latestDocument
+          ? (locale === 'tr' ? 'son eklenen' : 'latest')
+          : (locale === 'tr' ? 'arşiv' : 'archive'),
+        infoText: latestDocument
+          ? `${latestDocument.title}`
+          : (locale === 'tr' ? 'PDF, laboratuvar, rapor kayıtları' : 'PDF, lab, report records'),
       },
     };
-  }, [activePetId, locale, medicalEventsByPet, remindersByPet, vetVisitsByPet, weightsByPet]);
+  }, [activePetId, documentsVaultForActivePet, locale, medicalEventsByPet, remindersByPet, vetVisitsByPet, weightsByPet]);
 
   const homeNextImportantEvent = useMemo<NextImportantEventItem | null>(() => {
     if (!activePetId) return null;
@@ -2059,6 +2821,7 @@ export default function AuthGate() {
       medicalEventsByPet,
       vetVisitsByPet,
       weightsByPet,
+      healthEventsByPet,
       petProfiles[activePetId],
     )
       .filter((event) => event.type !== 'weight')
@@ -2133,7 +2896,7 @@ export default function AuthGate() {
       if (unique.length >= 4) break;
     }
     return unique;
-  }, [activePetId, locale, medicalEventsByPet, openHealthHubWithCategory, openSubRoute, petProfiles, remindersByPet, vetVisitsByPet, weightsByPet]);
+  }, [activePetId, healthEventsByPet, locale, medicalEventsByPet, openHealthHubWithCategory, openSubRoute, petProfiles, remindersByPet, vetVisitsByPet, weightsByPet]);
 
   const homeSummaryCard = useMemo(() => {
     if (homeNextImportantEvent?.urgent) {
@@ -2214,15 +2977,6 @@ export default function AuthGate() {
       };
     });
 
-    const note = options?.note?.trim();
-    addHealthEvent(activePetId, {
-      type: 'weight',
-      title: locale === 'tr' ? 'Kilo Kaydı' : 'Weight Entry',
-      description: note || nextChange,
-      date,
-      metadata: { value: rounded, unit: 'kg', label, note },
-    });
-
     setWeightsUpdatedAt((prev) => {
       const nowIso = now.toISOString();
       return {
@@ -2273,11 +3027,7 @@ export default function AuthGate() {
           onBackHome={noop}
           onOpenPremium={noop}
           onOpenProfileEdit={noop}
-          onOpenVaccinations={noop}
-          onOpenPetProfile={noop}
           onOpenPetProfiles={noop}
-          onOpenHealthRecords={noop}
-          onOpenVetVisits={noop}
           onOpenSettings={noop}
           onOpenPetPassport={noop}
           petProfiles={petProfiles}
@@ -2402,6 +3152,7 @@ export default function AuthGate() {
         backPreview={renderBackPreview(subBackRoute)}
         createPreset={vetVisitCreatePreset}
         visits={vetVisitsBridge ?? undefined}
+        onOpenDocuments={() => openDocuments('vetVisits')}
         onCreateVisit={(payload: CreateVetVisitPayload) => {
           const reasonTitleMap: Record<VetVisitReasonCategory, string> = {
             checkup: 'General Checkup',
@@ -2412,7 +3163,7 @@ export default function AuthGate() {
             other: 'Vet Visit',
           };
 
-          const outcomes: DualWriteOutcome[] = payload.actions.map((action) => {
+          const outcomes: VetVisitOutcomeInput[] = payload.actions.map((action) => {
             const eventTypeMap: Record<typeof action.type, MedicalEventType> = {
               vaccine: 'vaccine',
               diagnosis: 'diagnosis',
@@ -2421,7 +3172,7 @@ export default function AuthGate() {
               prescription: 'prescription',
             };
 
-            const outcome: DualWriteOutcome = {
+            const outcome: VetVisitOutcomeInput = {
               type: eventTypeMap[action.type],
               title: action.title,
               eventDate: payload.date,
@@ -2467,7 +3218,7 @@ export default function AuthGate() {
             });
           }
 
-          recordVetVisitDualWrite({
+          recordVetVisitWithOutcomes({
             petId: activePetId,
             visitDate: payload.date,
             reasonCategory: payload.reason,
@@ -2479,49 +3230,6 @@ export default function AuthGate() {
             outcomes,
           });
 
-          addHealthEvent(activePetId, {
-            type: 'vet_visit',
-            title: reasonTitleMap[payload.reason] ?? 'Vet Visit',
-            description: payload.note,
-            date: payload.date,
-            metadata: {
-              clinic: payload.clinic || 'Veterinary Clinic',
-              doctor: 'Veterinarian',
-              attachments: [],
-              amount: payload.amount,
-              currency: payload.currency,
-            },
-          });
-
-          payload.actions.forEach((action) => {
-            if (action.type === 'vaccine') {
-              addHealthEvent(activePetId, {
-                type: 'vaccination',
-                title: action.title,
-                description: action.note,
-                date: payload.date,
-                metadata: { vaccineType: action.title, source: 'vet_visit_form' },
-              });
-              return;
-            }
-
-            const category =
-              action.type === 'diagnosis'
-                ? 'diagnosis'
-                : action.type === 'procedure'
-                  ? 'surgery'
-                  : action.type === 'test'
-                    ? 'lab_result'
-                    : 'prescription';
-
-            addHealthEvent(activePetId, {
-              type: 'health_note',
-              title: action.title,
-              description: action.note,
-              date: payload.date,
-              metadata: { category, source: 'vet_visit_form' },
-            });
-          });
         }}
       />
     );
@@ -2562,6 +3270,7 @@ export default function AuthGate() {
               kind: 'care_routine',
               dueAt: dueDate.toISOString(),
               status: 'pending',
+              originType: 'manual',
               sourceType: 'manual',
             }).next,
           );
@@ -2592,7 +3301,7 @@ export default function AuthGate() {
           const addedDiabetes = (nextPet.diabetesLog ?? []).filter((d) => !previousDiabetesSet.has(`${d.type}|${d.date}|${d.status}`));
 
           const nowIso = new Date().toISOString();
-          const outcomes: DualWriteOutcome[] = [
+          const outcomes: VetVisitOutcomeInput[] = [
             ...addedVaccinations.map((v) => ({
               type: 'vaccine' as const,
               title: v.name,
@@ -2635,7 +3344,7 @@ export default function AuthGate() {
               return itemMs > latestMs ? item.eventDate : latest;
             }, outcomes[0].eventDate);
 
-            recordVetVisitDualWrite({
+            recordVetVisitWithOutcomes({
               petId: nextPet.id,
               visitDate: latestDate,
               reasonCategory: 'follow_up',
@@ -2705,11 +3414,13 @@ export default function AuthGate() {
         backPreview={renderBackPreview(passportBackRoute)}
         pet={petProfiles[activePetId]}
         weightEntries={weightsByPet[activePetId] ?? []}
+        isPremiumPlan={isPremium}
         healthCardSummary={healthCardSummary}
         onOpenVaccinations={() => openSubRoute('vaccinations', 'passport')}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'passport')}
         onOpenHealthRecords={() => openHealthHubWithCategory('record')}
         onOpenWeight={() => openPetProfile(activePetId, 'passport')}
+        onExportPdf={handleExportPetPassportPdf}
       />
     );
   }
@@ -2719,7 +3430,7 @@ export default function AuthGate() {
       <DocumentsScreen
         onBack={() => setRoute(documentsBackRoute)}
         petName={petProfiles[activePetId]?.name ?? ''}
-        medicalEvents={medicalEventsByPet[activePetId] ?? []}
+        documents={documentsVaultForActivePet}
         locale={locale}
       />
     );
@@ -2729,16 +3440,12 @@ export default function AuthGate() {
     return (
       <NotificationCenterScreen
         onBack={() => setRoute(notificationsBackRoute)}
-        overdue={remindersTabGroups.overdue}
-        today={remindersTabGroups.today}
-        upcoming={remindersTabGroups.upcoming}
-        completed={remindersTabGroups.completed}
+        notifications={triggeredNotifications}
         locale={locale}
-        onMarkDone={(id) => {
-          const item = [...remindersTabGroups.today, ...remindersTabGroups.upcoming, ...remindersTabGroups.overdue].find((r) => r.id === id);
-          if (!item) return;
-          setRemindersWithNotificationSync((prev) => markReminderCompleted(prev, item.petId, id).next);
-        }}
+        onMarkRead={markNotificationRead}
+        onDone={handleNotificationDone}
+        onSnooze={handleNotificationSnooze}
+        onOpen={handleNotificationOpen}
       />
     );
   }
@@ -2761,6 +3468,7 @@ export default function AuthGate() {
         onOpenVaccines={() => openSubRoute('vaccinations', 'healthHub')}
         onOpenWeightTracking={() => openPetProfile(activePetId, 'healthHub')}
         onOpenDocuments={() => openDocuments('healthHub')}
+        documentsPreview={documentsVaultPreview}
       />,
     );
   }
@@ -2797,6 +3505,7 @@ export default function AuthGate() {
               kind: subtype === 'vaccine' ? 'vaccine_due' : subtype === 'medication' ? 'medication' : subtype === 'vet_visit' ? 'medical_followup' : 'care_routine',
               dueAt: parsedDate,
               status: 'pending',
+              originType: 'manual',
               sourceType: 'manual',
             }).next,
           );
@@ -2805,6 +3514,17 @@ export default function AuthGate() {
           const item = [...remindersTabGroups.today, ...remindersTabGroups.upcoming, ...remindersTabGroups.overdue].find((r) => r.id === id);
           if (!item) return;
           setRemindersWithNotificationSync((prev) => markReminderCompleted(prev, item.petId, id).next);
+        }}
+        onSnooze={(id) => {
+          const item = [...remindersTabGroups.today, ...remindersTabGroups.upcoming, ...remindersTabGroups.overdue].find((r) => r.id === id);
+          if (!item) return;
+          setRemindersWithNotificationSync((prev) => snoozeReminder(prev, item.petId, id, 24 * 60).next);
+        }}
+        onEdit={(id) => {
+          const item = [...remindersTabGroups.today, ...remindersTabGroups.upcoming, ...remindersTabGroups.overdue].find((r) => r.id === id);
+          if (!item) return;
+          const dueIso = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+          setRemindersWithNotificationSync((prev) => updateReminder(prev, item.petId, id, { dueDate: dueIso }).next);
         }}
       />,
     );
@@ -2850,15 +3570,13 @@ export default function AuthGate() {
         onBackHome={() => setRoute('home')}
         onOpenPremium={() => setRoute('premium')}
         onOpenProfileEdit={() => setRoute('profileEdit')}
-        onOpenVaccinations={() => openSubRoute('vaccinations', 'profile')}
-        onOpenPetProfile={() => openPetProfile(activePetId, 'profile')}
         onOpenPetProfiles={() => setRoute('petProfiles')}
-        onOpenHealthRecords={() => openHealthHubWithCategory('record')}
-        onOpenVetVisits={() => openSubRoute('vetVisits', 'profile')}
+        onOpenNotifications={() => openNotifications('profile')}
         onOpenSettings={() => setRoute('settings')}
         onOpenPetPassport={() => openPassport(activePetId, 'profile')}
         petProfiles={petProfiles}
         weightsByPet={weightsByPet}
+        isPremiumPlan={isPremium}
       />
     );
   }
@@ -2874,6 +3592,7 @@ export default function AuthGate() {
         setPrimaryTab('reminders');
         setRoute('reminders');
       }}
+      onOpenNotifications={() => openNotifications('home')}
       onOpenAddReminder={() => {
         setReminderCreateSubtypePreset(null);
         setReminderCreateNonce((prev) => prev + 1);
@@ -2941,6 +3660,7 @@ export default function AuthGate() {
             kind: 'care_routine',
             dueAt: scheduledAt,
             status: 'pending',
+            originType: 'manual',
             sourceType: 'manual',
           }).next,
         );

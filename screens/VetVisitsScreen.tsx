@@ -55,6 +55,7 @@ type VetVisitsScreenProps = {
   createPreset?: VetVisitCreatePreset | null;
   onAddVisit?: () => void;
   onCreateVisit?: (payload: CreateVetVisitPayload) => void;
+  onOpenDocuments?: () => void;
   status?: 'ready' | ScreenStateMode;
   onRetry?: () => void;
   visits?: VisitItem[];
@@ -183,7 +184,17 @@ function FeaturedCard({ item, isTr, clinicName }: { item: VisitItem; isTr: boole
   );
 }
 
-function VisitCard({ item, isTr, today }: { item: VisitItem; isTr: boolean; today: string }) {
+function VisitCard({
+  item,
+  isTr,
+  today,
+  onOpenDocuments,
+}: {
+  item: VisitItem;
+  isTr: boolean;
+  today: string;
+  onOpenDocuments?: () => void;
+}) {
   const isPlanned = item.date > today;
   const firstRecord = item.attachments[0];
   return (
@@ -237,13 +248,28 @@ function VisitCard({ item, isTr, today }: { item: VisitItem; isTr: boolean; toda
               <Text style={styles.visitRecordText}>{att}</Text>
             </View>
           ))}
+          {onOpenDocuments ? (
+            <Pressable onPress={onOpenDocuments} style={styles.viewDocumentsBtn}>
+              <Text style={styles.viewDocumentsBtnText}>{isTr ? 'Belgeleri Gör' : 'View Documents'}</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </View>
   );
 }
 
-export default function VetVisitsScreen({ onBack, backPreview, createPreset, onAddVisit, onCreateVisit, status = 'ready', onRetry, visits }: VetVisitsScreenProps) {
+export default function VetVisitsScreen({
+  onBack,
+  backPreview,
+  createPreset,
+  onAddVisit,
+  onCreateVisit,
+  onOpenDocuments,
+  status = 'ready',
+  onRetry,
+  visits,
+}: VetVisitsScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).vetVisits;
   const isTr = locale === 'tr';
@@ -294,11 +320,11 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
   const actionOrder: VisitActionType[] = ['vaccine', 'diagnosis', 'procedure', 'test', 'prescription'];
   const actionLabels: Record<VisitActionType, string> = isTr
     ? {
-      vaccine: 'Asi',
-      diagnosis: 'Tani',
-      procedure: 'Prosedur',
+      vaccine: 'Aşı',
+      diagnosis: 'Tanı',
+      procedure: 'Prosedür',
       test: 'Test',
-      prescription: 'Recete',
+      prescription: 'Reçete',
     }
     : {
       vaccine: 'Vaccine',
@@ -315,35 +341,35 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
         { value: 'dhpp', label: 'DHPP' },
         { value: 'bordetella', label: 'Bordetella' },
         { value: 'leptospirosis', label: 'Leptospirosis' },
-        { value: 'other', label: 'Diger' },
+        { value: 'other', label: 'Diğer' },
       ],
       diagnosis: [
         { value: 'allergy', label: 'Alerji' },
         { value: 'infection', label: 'Enfeksiyon' },
         { value: 'gastro', label: 'Gastrointestinal' },
         { value: 'dermatology', label: 'Dermatoloji' },
-        { value: 'other', label: 'Diger' },
+        { value: 'other', label: 'Diğer' },
       ],
       procedure: [
-        { value: 'neutering', label: 'Kisirlastirma' },
-        { value: 'dental_cleaning', label: 'Dis Temizligi' },
+        { value: 'neutering', label: 'Kısırlaştırma' },
+        { value: 'dental_cleaning', label: 'Diş Temizliği' },
         { value: 'minor_surgery', label: 'Minor Cerrahi' },
-        { value: 'wound_care', label: 'Yara Bakimi' },
-        { value: 'other', label: 'Diger' },
+        { value: 'wound_care', label: 'Yara Bakımı' },
+        { value: 'other', label: 'Diğer' },
       ],
       test: [
         { value: 'blood_test', label: 'Kan Testi' },
-        { value: 'fecal_test', label: 'Diski Testi' },
-        { value: 'xray', label: 'Rontgen' },
+        { value: 'fecal_test', label: 'Dışkı Testi' },
+        { value: 'xray', label: 'Röntgen' },
         { value: 'ultrasound', label: 'Ultrason' },
-        { value: 'other', label: 'Diger' },
+        { value: 'other', label: 'Diğer' },
       ],
       prescription: [
         { value: 'antibiotic', label: 'Antibiyotik' },
         { value: 'anti_inflammatory', label: 'Anti-inflamatuar' },
         { value: 'antiparasitic', label: 'Antiparaziter' },
         { value: 'supplement', label: 'Takviye' },
-        { value: 'other', label: 'Diger' },
+        { value: 'other', label: 'Diğer' },
       ],
     }
     : {
@@ -387,11 +413,11 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
   const reasonOptions: Array<{ value: VetVisitReasonCategory; label: string }> = isTr
     ? [
       { value: 'checkup', label: 'Kontrol' },
-      { value: 'vaccine', label: 'Asi' },
-      { value: 'illness', label: 'Hastalik' },
+      { value: 'vaccine', label: 'Aşı' },
+      { value: 'illness', label: 'Hastalık' },
       { value: 'injury', label: 'Yaralanma' },
       { value: 'follow_up', label: 'Takip' },
-      { value: 'other', label: 'Diger' },
+      { value: 'other', label: 'Diğer' },
     ]
     : [
       { value: 'checkup', label: 'Checkup' },
@@ -456,9 +482,9 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
 
   const reminderPresetOptions: Array<{ value: ReminderPreset; label: string }> = isTr
     ? [
-      { value: 'one_day_before', label: '1 gun once' },
-      { value: 'same_day', label: 'Ayni gun' },
-      { value: 'custom', label: 'Ozel tarih' },
+      { value: 'one_day_before', label: '1 gün önce' },
+      { value: 'same_day', label: 'Aynı gün' },
+      { value: 'custom', label: 'Özel tarih' },
     ]
     : [
       { value: 'one_day_before', label: '1 day before' },
@@ -714,9 +740,7 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
   const swipePanResponder = useEdgeSwipeBack({
     onBack,
     enabled: !isCreateVisible,
-    edgeWidth: 24,
-    triggerDx: 70,
-    maxDy: 30,
+    fullScreenGestureEnabled: true,
   });
 
   return (
@@ -763,7 +787,7 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
 
             <View style={styles.cardsColumn}>
               {pastVisits.map((item) => (
-                <VisitCard key={item.id} item={item} isTr={isTr} today={today} />
+                <VisitCard key={item.id} item={item} isTr={isTr} today={today} onOpenDocuments={onOpenDocuments} />
               ))}
             </View>
 
@@ -775,7 +799,7 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
                 </View>
                 <View style={styles.cardsColumn}>
                   {plannedVisits.map((item) => (
-                    <VisitCard key={item.id} item={item} isTr={isTr} today={today} />
+                    <VisitCard key={item.id} item={item} isTr={isTr} today={today} onOpenDocuments={onOpenDocuments} />
                   ))}
                 </View>
               </>
@@ -1416,6 +1440,19 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#30332e',
+  },
+  viewDocumentsBtn: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 12,
+    backgroundColor: '#edf5ea',
+  },
+  viewDocumentsBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3b5a3f',
   },
 
   // ── view all history button ────────────────────────────────────────────────

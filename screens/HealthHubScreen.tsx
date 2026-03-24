@@ -11,7 +11,6 @@ import {
 } from 'react-native';
 import {
   ChevronRight,
-  ClipboardList,
   FileText,
   Scale,
   Stethoscope,
@@ -107,8 +106,10 @@ type HealthHubScreenProps = {
   onOpenWeightTracking?: () => void;
   onOpenDocuments?: () => void;
   domainOverview?: HealthHubDomainOverview;
+  documentsPreview?: Array<{ id: string; title: string; date: string; type: string }>;
   locale?: 'en' | 'tr';
 };
+type HealthHubIconKind = 'vet' | 'records' | 'vaccines' | 'weight' | 'documents';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 function categoryLabel(c: HealthHubCategory, isTr: boolean) {
@@ -147,11 +148,37 @@ function timelineTypeAccent(type: Exclude<HealthHubCategory, 'all'>) {
   return C.accentRecord;
 }
 
+function HealthHubCategoryIcon({ kind, size = 21 }: { kind: HealthHubIconKind; size?: number }) {
+  const strokeWidth = 1.9;
+  if (kind === 'vet') return <Stethoscope size={size} strokeWidth={strokeWidth} color={C.fgVet} />;
+  if (kind === 'records') return <FileText size={size} strokeWidth={strokeWidth} color={C.fgRecords} />;
+  if (kind === 'vaccines') return <Syringe size={size} strokeWidth={strokeWidth} color={C.fgVaccines} />;
+  if (kind === 'weight') return <Scale size={size} strokeWidth={strokeWidth} color={C.fgWeight} />;
+  return <FileText size={size} strokeWidth={strokeWidth} color={C.fgDocuments} />;
+}
+
 const RECORD_TYPES: AddHealthRecordType[] = ['vaccine', 'diagnosis', 'procedure', 'prescription', 'test'];
 
 function fmtShort(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1).replace('.0', '') + 'k';
   return n.toLocaleString('tr-TR');
+}
+
+const MONTHS_SHORT_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS_SHORT_TR = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+
+function fmtVisitDate(raw: string, isTr: boolean): string {
+  // Handles ISO date "2025-02-21" → "Feb 21" / "Şub 21"
+  // Also handles already-formatted strings by returning them as-is
+  const parts = raw.split('-');
+  if (parts.length === 3) {
+    const monthIdx = parseInt(parts[1] ?? '1', 10) - 1;
+    const day = parts[2]?.replace(/^0/, '') ?? '';
+    const months = isTr ? MONTHS_SHORT_TR : MONTHS_SHORT_EN;
+    const mon = months[monthIdx];
+    if (mon && day) return `${mon} ${day}`;
+  }
+  return raw;
 }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
@@ -170,6 +197,7 @@ export default function HealthHubScreen({
   onOpenWeightTracking,
   onOpenDocuments,
   domainOverview,
+  documentsPreview,
   locale = 'en',
 }: HealthHubScreenProps) {
   const isTr = locale === 'tr';
@@ -225,7 +253,7 @@ export default function HealthHubScreen({
         key: 'vet',
         title: isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits',
         subtitle: isTr ? 'Klinik görüşmeleri ve randevular' : 'Clinic visits & appointments',
-        icon: <Stethoscope size={22} color={C.fgVet} />,
+        icon: <HealthHubCategoryIcon kind="vet" />,
         iconBg: C.iconVet,
         onPress: onOpenVetVisits,
         overview: domainOverview?.vet,
@@ -234,7 +262,7 @@ export default function HealthHubScreen({
         key: 'records',
         title: isTr ? 'Sağlık Kayıtları' : 'Health Records',
         subtitle: isTr ? 'Tanı, prosedür, test sonuçları' : 'Diagnosis, procedures & tests',
-        icon: <ClipboardList size={22} color={C.fgRecords} />,
+        icon: <HealthHubCategoryIcon kind="records" />,
         iconBg: C.iconRecords,
         onPress: onOpenHealthRecords ?? (() => setCategory('record')),
         overview: domainOverview?.records,
@@ -243,7 +271,7 @@ export default function HealthHubScreen({
         key: 'vaccines',
         title: isTr ? 'Aşılar' : 'Vaccines',
         subtitle: isTr ? 'Yapılan ve planlanan aşılar' : 'Administered & upcoming vaccines',
-        icon: <Syringe size={22} color={C.fgVaccines} />,
+        icon: <HealthHubCategoryIcon kind="vaccines" />,
         iconBg: C.iconVaccines,
         onPress: onOpenVaccines,
         overview: domainOverview?.vaccines,
@@ -252,22 +280,13 @@ export default function HealthHubScreen({
         key: 'weight',
         title: isTr ? 'Kilo Takibi' : 'Weight Tracking',
         subtitle: isTr ? 'Trend ve değişim analizi' : 'Trends & body condition',
-        icon: <Scale size={22} color={C.fgWeight} />,
+        icon: <HealthHubCategoryIcon kind="weight" />,
         iconBg: C.iconWeight,
         onPress: onOpenWeightTracking,
         overview: domainOverview?.weight,
       },
-      {
-        key: 'documents',
-        title: isTr ? 'Belgeler' : 'Documents',
-        subtitle: isTr ? 'PDF, rapor, görüntüleme' : 'Lab reports & imaging',
-        icon: <FileText size={22} color={C.fgDocuments} />,
-        iconBg: C.iconDocuments,
-        onPress: onOpenDocuments,
-        overview: domainOverview?.documents,
-      },
     ],
-    [domainOverview, isTr, onOpenDocuments, onOpenHealthRecords, onOpenVaccines, onOpenVetVisits, onOpenWeightTracking],
+    [domainOverview, isTr, onOpenHealthRecords, onOpenVaccines, onOpenVetVisits, onOpenWeightTracking],
   );
 
   // ── form helpers ──
@@ -315,7 +334,7 @@ export default function HealthHubScreen({
 
           const expHasData = !!summary.totalExpenses;
           const expVal = expHasData ? fmtShort(summary.totalExpenses!.total) : '—';
-          const expBadge = expHasData ? summary.totalExpenses!.currency : 'TL';
+          const expBadge = isTr ? 'bu yıl' : 'this year';
 
           return (
             <Animated.View style={{ opacity: fadeAnim, marginBottom: 24 }}>
@@ -328,7 +347,7 @@ export default function HealthHubScreen({
                 {/* Weight */}
                 <View style={s.summaryCard}>
                   <View style={[s.summaryCardIcon, { backgroundColor: C.iconWeight }]}>
-                    <Scale size={20} color={C.fgWeight} />
+                    <HealthHubCategoryIcon kind="weight" size={20} />
                   </View>
                   <Text style={s.summaryCardValue}>{weightNum}</Text>
                   <Text style={s.summaryCardLabel}>{isTr ? 'KİLO' : 'WEIGHT'}</Text>
@@ -340,9 +359,11 @@ export default function HealthHubScreen({
                 {/* Vaccines */}
                 <View style={s.summaryCard}>
                   <View style={[s.summaryCardIcon, { backgroundColor: C.iconVaccines }]}>
-                    <Syringe size={20} color={C.fgVaccines} />
+                    <HealthHubCategoryIcon kind="vaccines" size={20} />
                   </View>
-                  <Text style={s.summaryCardValue} numberOfLines={1}>{vHasData ? vStatus.slice(0, 6) : '—'}</Text>
+                  <Text style={[s.summaryCardValue, { fontSize: 14 }]} numberOfLines={1} adjustsFontSizeToFit>
+                    {vHasData ? vStatus : '—'}
+                  </Text>
                   <Text style={s.summaryCardLabel}>{isTr ? 'AŞI' : 'VACCINES'}</Text>
                   <View style={[s.summaryCardBadge, { backgroundColor: vHasData ? '#c4e8c0' : C.surfaceContainer }]}>
                     <Text style={[s.summaryCardBadgeText, { color: vHasData ? C.fgVaccines : C.outlineVariant }]}>{vaccineBadge}</Text>
@@ -352,9 +373,11 @@ export default function HealthHubScreen({
                 {/* Last Visit */}
                 <View style={s.summaryCard}>
                   <View style={[s.summaryCardIcon, { backgroundColor: C.iconVet }]}>
-                    <Stethoscope size={20} color={C.fgVet} />
+                    <HealthHubCategoryIcon kind="vet" size={20} />
                   </View>
-                  <Text style={s.summaryCardValue} numberOfLines={1}>{visitHasData ? visitRaw : '—'}</Text>
+                  <Text style={s.summaryCardValue} numberOfLines={1}>
+                    {visitHasData ? fmtVisitDate(visitRaw, isTr) : '—'}
+                  </Text>
                   <Text style={s.summaryCardLabel}>{isTr ? 'SON ZİYARET' : 'LAST VISIT'}</Text>
                   <View style={[s.summaryCardBadge, { backgroundColor: visitHasData ? '#eeeee8' : C.surfaceContainer }]}>
                     <Text style={[s.summaryCardBadgeText, { color: C.onSurfaceVariant }]}>{visitHasData ? visitBadge : (isTr ? 'kayıt yok' : 'no data')}</Text>
@@ -379,7 +402,7 @@ export default function HealthHubScreen({
 
         {/* ── CATEGORY SECTION HEADER ── */}
         <View style={s.sectionHeaderRow}>
-          <Text style={s.sectionLabel}>{isTr ? 'KAYIT KATEGORİLERİ' : 'RECORD CATEGORIES'}</Text>
+          <Text style={s.sectionLabel}>{isTr ? 'SAĞLIK ALANLARI' : 'HEALTH AREAS'}</Text>
         </View>
 
         {/* ── CATEGORY CARDS ── */}
@@ -421,6 +444,41 @@ export default function HealthHubScreen({
               <ChevronRight size={16} color={C.outlineVariant} />
             </Pressable>
           ))}
+        </Animated.View>
+
+        <View style={s.sectionHeaderRow}>
+          <Text style={s.sectionLabel}>{isTr ? 'BELGELER' : 'DOCUMENTS'}</Text>
+        </View>
+        <Animated.View style={[s.categoryList, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          <Pressable
+            style={s.categoryCard}
+            onPress={onOpenDocuments}
+            android_ripple={{ color: 'rgba(71,102,74,0.06)' }}
+          >
+            <View style={[s.categoryIconBox, { backgroundColor: C.iconDocuments }]}>
+              <HealthHubCategoryIcon kind="documents" size={21} />
+            </View>
+            <View style={s.categoryCardBody}>
+              <Text style={s.categoryCardTitle}>{isTr ? 'Belgeler' : 'Documents'}</Text>
+              <Text style={s.categoryCardSub} numberOfLines={1}>
+                {domainOverview?.documents?.infoText ?? (isTr ? 'Tüm kayıt ekleri tek yerde' : 'All record attachments in one place')}
+              </Text>
+              {documentsPreview && documentsPreview.length > 0 ? (
+                <Text style={s.vaultPreviewText} numberOfLines={2}>
+                  {documentsPreview.map((item) => item.title).slice(0, 2).join(' • ')}
+                </Text>
+              ) : null}
+            </View>
+            <View style={s.categoryCardRight}>
+              {domainOverview?.documents?.countText ? (
+                <View style={s.countBadge}>
+                  <Text style={s.countBadgeText}>{domainOverview.documents.countText}</Text>
+                </View>
+              ) : null}
+              <Text style={s.vaultCtaText}>{isTr ? 'Tüm Belgeler' : 'View All'}</Text>
+            </View>
+            <ChevronRight size={16} color={C.outlineVariant} />
+          </Pressable>
         </Animated.View>
 
         {/* ── EXPENSE CHART ── */}
@@ -520,6 +578,11 @@ export default function HealthHubScreen({
                 ) : null}
 
                 <View style={s.sheetActions}>
+                  {onOpenDocuments && selectedItem.type !== 'weight' ? (
+                    <Pressable style={s.sheetCloseBtn} onPress={onOpenDocuments}>
+                      <Text style={s.sheetCloseBtnText}>{isTr ? 'Belgeleri Gör' : 'View Documents'}</Text>
+                    </Pressable>
+                  ) : null}
                   <Pressable style={s.sheetCloseBtn} onPress={() => setSelectedItem(null)}>
                     <Text style={s.sheetCloseBtnText}>{isTr ? 'Kapat' : 'Close'}</Text>
                   </Pressable>
@@ -1174,12 +1237,14 @@ const s = StyleSheet.create({
     borderBottomColor: C.surfaceContainer,
   },
   categoryIconBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 14,
+    width: 46,
+    height: 46,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.03)',
   },
   categoryCardBody: {
     flex: 1,
@@ -1196,6 +1261,13 @@ const s = StyleSheet.create({
     fontWeight: '500',
     color: C.onSurfaceVariant,
     lineHeight: 16,
+  },
+  vaultPreviewText: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 16,
+    color: C.onSurface,
+    fontWeight: '600',
   },
   categoryCardRight: {
     alignItems: 'flex-end',
@@ -1218,6 +1290,11 @@ const s = StyleSheet.create({
     color: C.onSurfaceVariant,
     maxWidth: 80,
     textAlign: 'right',
+  },
+  vaultCtaText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.primaryDim,
   },
 
   // Filter chips

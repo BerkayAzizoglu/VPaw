@@ -19,17 +19,23 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
   const [draftLocale, setDraftLocale] = useState(locale);
   const [draftWeightUnit, setDraftWeightUnit] = useState<WeightUnit>(settings.weightUnit);
   const [draftDateFormat, setDraftDateFormat] = useState<DateFormat>(settings.dateFormat);
+  const [draftNotifications, setDraftNotifications] = useState<boolean>(settings.notificationsEnabled);
   const [saving, setSaving] = useState(false);
   const [confirmVisible, setConfirmVisible] = useState(false);
-  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: !confirmVisible, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
+  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: !confirmVisible });
 
   const languageValue = draftLocale === 'tr' ? t(locale, 'turkish') : t(locale, 'english');
   const weightUnitValue = draftWeightUnit === 'kg' ? t(locale, 'kilograms') : t(locale, 'pounds');
   const dateFormatValue = draftDateFormat === 'dmy' ? t(locale, 'dateFormatDmy') : t(locale, 'dateFormatMdy');
 
   const hasChanges = useMemo(() => {
-    return draftLocale !== locale || draftWeightUnit !== settings.weightUnit || draftDateFormat !== settings.dateFormat;
-  }, [draftDateFormat, draftLocale, draftWeightUnit, locale, settings.dateFormat, settings.weightUnit]);
+    return (
+      draftLocale !== locale ||
+      draftWeightUnit !== settings.weightUnit ||
+      draftDateFormat !== settings.dateFormat ||
+      draftNotifications !== settings.notificationsEnabled
+    );
+  }, [draftDateFormat, draftLocale, draftNotifications, draftWeightUnit, locale, settings.dateFormat, settings.notificationsEnabled, settings.weightUnit]);
 
   const openLanguagePicker = () => {
     Alert.alert(
@@ -67,11 +73,33 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     );
   };
 
+  const openReminderControls = () => {
+    Alert.alert(
+      locale === 'tr' ? 'Hatırlatıcı Kontrolleri' : 'Reminder Controls',
+      locale === 'tr' ? 'Bu alandan hangi hatırlatıcı türlerinin bildirim üreteceğini yöneteceksiniz. (Yakında)' : 'You will manage reminder trigger categories from here. (Coming soon)',
+    );
+  };
+
+  const openDataPrivacy = () => {
+    Alert.alert(
+      locale === 'tr' ? 'Veri ve Gizlilik' : 'Data & Privacy',
+      locale === 'tr' ? 'Gizlilik, izinler ve veri kullanım detayları yakında bu ekranda olacak.' : 'Privacy, permissions, and data usage details will be available here soon.',
+    );
+  };
+
+  const openDataDownload = () => {
+    Alert.alert(
+      locale === 'tr' ? 'Veri Dışa Aktarma' : 'Export / Data Download',
+      locale === 'tr' ? 'Hesap verisi dışa aktarma akışı yakında eklenecek.' : 'Account data export flow will be available soon.',
+    );
+  };
+
   const performSaveAndExit = async () => {
     setSaving(true);
     await setSettings({
       weightUnit: draftWeightUnit,
       dateFormat: draftDateFormat,
+      notificationsEnabled: draftNotifications,
     });
     await setLocale(draftLocale);
     setSaving(false);
@@ -104,13 +132,35 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
           </Pressable>
         </View>
 
-        <Text style={styles.sectionTitle}>{t(locale, 'preferences')}</Text>
+        <Text style={styles.sectionTitle}>{locale === 'tr' ? 'BİLDİRİMLER' : 'NOTIFICATIONS'}</Text>
+        <Text style={styles.sectionDescription}>{locale === 'tr' ? 'Hatırlatma ve alarm davranışını buradan yönet.' : 'Control reminders and alert behavior.'}</Text>
         <View style={styles.card}>
-          <Row label={t(locale, 'notifications')} value={t(locale, 'on')} />
-          <Row label={t(locale, 'theme')} value={t(locale, 'system')} />
+          <Row
+            label={locale === 'tr' ? 'Bildirimler' : 'Notifications'}
+            value={draftNotifications ? t(locale, 'on') : (locale === 'tr' ? 'Kapalı' : 'Off')}
+            onPress={() => setDraftNotifications((prev) => !prev)}
+          />
+          <Row
+            label={locale === 'tr' ? 'Hatırlatıcı kontrolleri' : 'Reminder controls'}
+            value={locale === 'tr' ? 'Yönet' : 'Manage'}
+            noBorder
+            onPress={openReminderControls}
+          />
+        </View>
+
+        <Text style={styles.sectionTitle}>{locale === 'tr' ? 'BİRİMLER VE BÖLGE' : 'UNITS & REGION'}</Text>
+        <Text style={styles.sectionDescription}>{locale === 'tr' ? 'Görüntüleme birimleri ve tarih tercihi.' : 'Display units and date formatting.'}</Text>
+        <View style={styles.card}>
           <Row label={t(locale, 'language')} value={languageValue} onPress={openLanguagePicker} />
           <Row label={t(locale, 'weightUnit')} value={weightUnitValue} onPress={openWeightUnitPicker} />
           <Row label={t(locale, 'dateFormat')} value={dateFormatValue} noBorder onPress={openDateFormatPicker} />
+        </View>
+
+        <Text style={styles.sectionTitle}>{locale === 'tr' ? 'VERİ VE GİZLİLİK' : 'DATA & PRIVACY'}</Text>
+        <Text style={styles.sectionDescription}>{locale === 'tr' ? 'Hesap verisi, dışa aktarma ve gizlilik kontrolleri.' : 'Account data, export, and privacy controls.'}</Text>
+        <View style={styles.card}>
+          <Row label={locale === 'tr' ? 'Veri ve gizlilik' : 'Data & privacy'} value={locale === 'tr' ? 'İncele' : 'Review'} onPress={openDataPrivacy} />
+          <Row label={locale === 'tr' ? 'Dışa aktar / veri indir' : 'Export / data download'} value={locale === 'tr' ? 'Aç' : 'Open'} noBorder onPress={openDataDownload} />
         </View>
 
         <Text style={styles.sectionTitle}>{t(locale, 'dataIntegrity')}</Text>
@@ -291,6 +341,15 @@ const styles = StyleSheet.create({
     color: '#787878',
     fontWeight: '800',
   },
+  sectionDescription: {
+    marginTop: -8,
+    marginLeft: 4,
+    marginBottom: 2,
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#8a8a8a',
+    fontWeight: '500',
+  },
   card: {
     borderRadius: 16,
     backgroundColor: '#fff',
@@ -340,4 +399,3 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
 });
-

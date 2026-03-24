@@ -20,9 +20,11 @@ type ReminderItem = {
   id: string;
   title: string;
   date: string;
+  dueDate?: string;
   petName?: string;
   petId?: string;
   subtype?: ReminderSubtype;
+  status?: 'pending' | 'done' | 'snoozed';
 };
 
 type RemindersScreenProps = {
@@ -37,6 +39,8 @@ type RemindersScreenProps = {
   subtypePreset?: ReminderSubtype;
   locale?: 'en' | 'tr';
   onComplete?: (id: string) => void;
+  onSnooze?: (id: string) => void;
+  onEdit?: (id: string) => void;
   onDeleteReminder?: (id: string) => void;
   onOpenNotifications?: () => void;
   onCreate?: (payload: {
@@ -144,6 +148,8 @@ function ReminderRow({
   isHistory,
   isTr,
   onComplete,
+  onSnooze,
+  onEdit,
   onDelete,
 }: {
   item: ReminderItem;
@@ -152,6 +158,8 @@ function ReminderRow({
   isHistory: boolean;
   isTr: boolean;
   onComplete?: (id: string) => void;
+  onSnooze?: (id: string) => void;
+  onEdit?: (id: string) => void;
   onDelete?: (id: string) => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -210,6 +218,16 @@ function ReminderRow({
               <Icon kind="check" size={15} color="#47664a" />
             </Pressable>
           )}
+          {onSnooze ? (
+            <Pressable style={styles.actionPill} onPress={() => onSnooze(item.id)}>
+              <Text style={styles.actionPillText}>{isTr ? 'Ertele' : 'Snooze'}</Text>
+            </Pressable>
+          ) : null}
+          {onEdit ? (
+            <Pressable style={styles.actionPill} onPress={() => onEdit(item.id)}>
+              <Text style={styles.actionPillText}>{isTr ? 'Düzenle' : 'Edit'}</Text>
+            </Pressable>
+          ) : null}
           {onDelete ? (
             <Pressable onPress={() => setConfirmDelete(true)} hitSlop={10} style={styles.deleteTrigger}>
               <Icon kind="close" size={13} color="#b1b3ab" />
@@ -230,6 +248,8 @@ function ReminderSection({
   isHistory = false,
   isTr,
   onComplete,
+  onSnooze,
+  onEdit,
   onDelete,
 }: {
   label: string;
@@ -238,6 +258,8 @@ function ReminderSection({
   isHistory?: boolean;
   isTr: boolean;
   onComplete?: (id: string) => void;
+  onSnooze?: (id: string) => void;
+  onEdit?: (id: string) => void;
   onDelete?: (id: string) => void;
 }) {
   if (items.length === 0) return null;
@@ -255,6 +277,8 @@ function ReminderSection({
             isHistory={isHistory}
             isTr={isTr}
             onComplete={onComplete}
+            onSnooze={onSnooze}
+            onEdit={onEdit}
             onDelete={onDelete}
           />
         ))}
@@ -276,6 +300,8 @@ export default function RemindersScreen({
   subtypePreset,
   locale = 'en',
   onComplete,
+  onSnooze,
+  onEdit,
   onDeleteReminder,
   onOpenNotifications,
   onCreate,
@@ -455,6 +481,8 @@ export default function RemindersScreen({
             isOverdue
             isTr={isTr}
             onComplete={onComplete}
+            onSnooze={onSnooze}
+            onEdit={onEdit}
             onDelete={onDeleteReminder}
           />
 
@@ -464,6 +492,8 @@ export default function RemindersScreen({
             items={filteredToday}
             isTr={isTr}
             onComplete={onComplete}
+            onSnooze={onSnooze}
+            onEdit={onEdit}
             onDelete={onDeleteReminder}
           />
 
@@ -473,6 +503,8 @@ export default function RemindersScreen({
             items={filteredUpcoming}
             isTr={isTr}
             onComplete={onComplete}
+            onSnooze={onSnooze}
+            onEdit={onEdit}
             onDelete={onDeleteReminder}
           />
 
@@ -869,6 +901,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
     flexShrink: 0,
+  },
+  actionPill: {
+    height: 28,
+    paddingHorizontal: 10,
+    borderRadius: 999,
+    backgroundColor: '#eeeee8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#5d605a',
   },
   doneBtn: {
     width: 32,

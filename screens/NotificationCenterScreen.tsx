@@ -1,413 +1,196 @@
 import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ChevronLeft, AlertCircle, Clock, CalendarDays, CheckCircle2 } from 'lucide-react-native';
+import { ChevronLeft, AlertCircle, BellRing, CheckCircle2, Clock3, ExternalLink } from 'lucide-react-native';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
-
-// ─── Types ─────────────────────────────────────────────────────────────────────
-type NotifItem = {
-  id: string;
-  title: string;
-  date: string;
-  petName?: string;
-  subtype?: string;
-};
+import type { HealthNotification } from '../lib/notificationInbox';
 
 type NotificationCenterScreenProps = {
   onBack: () => void;
-  overdue: NotifItem[];
-  today: NotifItem[];
-  upcoming: NotifItem[];
-  completed?: NotifItem[];
+  notifications: HealthNotification[];
   locale?: 'en' | 'tr';
-  onMarkDone?: (id: string) => void;
+  onMarkRead?: (id: string) => void;
+  onDone?: (id: string) => void;
+  onSnooze?: (id: string) => void;
+  onOpen?: (id: string) => void;
 };
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-function subtypeLabel(subtype: string | undefined, isTr: boolean): string {
-  if (subtype === 'vaccine') return isTr ? 'Aşı' : 'Vaccine';
-  if (subtype === 'vet_visit') return isTr ? 'Veteriner' : 'Vet Visit';
-  if (subtype === 'medication') return isTr ? 'İlaç' : 'Medication';
-  if (subtype === 'food') return isTr ? 'Mama' : 'Food';
-  if (subtype === 'litter') return isTr ? 'Kum' : 'Litter';
-  if (subtype === 'walk') return isTr ? 'Yürüyüş' : 'Walk';
-  return isTr ? 'Özel' : 'Custom';
+function parseMs(iso: string) {
+  const ms = new Date(iso).getTime();
+  return Number.isFinite(ms) ? ms : 0;
 }
 
-function subtypeColors(subtype: string | undefined): { bg: string; fg: string } {
-  if (subtype === 'vaccine') return { bg: '#cbebc8', fg: '#3a6a3a' };
-  if (subtype === 'vet_visit') return { bg: '#edffe3', fg: '#3a6e45' };
-  if (subtype === 'medication') return { bg: '#ede8f5', fg: '#5a4a7a' };
-  if (subtype === 'food') return { bg: '#f7f0e4', fg: '#9a8050' };
-  if (subtype === 'walk') return { bg: '#e3eef8', fg: '#3a4e7a' };
-  return { bg: '#eeeee8', fg: '#5d605a' };
+function formatDate(iso: string, locale: 'en' | 'tr') {
+  const ms = parseMs(iso);
+  if (ms <= 0) return iso;
+  return new Date(ms).toLocaleDateString(locale === 'tr' ? 'tr-TR' : 'en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
-function formatDate(iso: string, isTr: boolean): string {
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return iso;
-    return d.toLocaleDateString(isTr ? 'tr-TR' : 'en-GB', {
-      day: 'numeric', month: 'short', year: 'numeric',
-    });
-  } catch {
-    return iso;
-  }
+function priorityRank(priority: HealthNotification['priority']) {
+  if (priority === 'high') return 0;
+  if (priority === 'medium') return 1;
+  return 2;
 }
 
-// ─── Notification row ──────────────────────────────────────────────────────────
-function NotifRow({
-  item,
-  kind,
-  isTr,
-  onMarkDone,
-}: {
-  item: NotifItem;
-  kind: 'overdue' | 'today' | 'upcoming' | 'done';
-  isTr: boolean;
-  onMarkDone?: (id: string) => void;
-}) {
-  const colors = subtypeColors(item.subtype);
-  const accentColor = kind === 'overdue' ? '#c05050' : kind === 'today' ? '#c4a470' : kind === 'done' ? '#72b08a' : '#47664a';
-
-  return (
-    <View style={[styles.notifRow, kind === 'overdue' && styles.notifRowOverdue]}>
-      <View style={[styles.notifAccent, { backgroundColor: accentColor }]} />
-      <View style={[styles.notifIconBox, { backgroundColor: colors.bg }]}>
-        {kind === 'overdue'
-          ? <AlertCircle size={18} color="#c05050" strokeWidth={2.2} />
-          : kind === 'today'
-          ? <Clock size={18} color="#c4a470" strokeWidth={2.2} />
-          : kind === 'done'
-          ? <CheckCircle2 size={18} color="#72b08a" strokeWidth={2.2} />
-          : <CalendarDays size={18} color={colors.fg} strokeWidth={2.2} />}
-      </View>
-      <View style={styles.notifBody}>
-        <Text style={styles.notifTitle} numberOfLines={2}>{item.title}</Text>
-        <View style={styles.notifMeta}>
-          <Text style={[styles.notifDate, kind === 'overdue' && styles.notifDateOverdue]}>
-            {formatDate(item.date, isTr)}
-          </Text>
-          {item.petName ? (
-            <Text style={styles.notifPet}> · {item.petName}</Text>
-          ) : null}
-        </View>
-        <View style={[styles.notifTypePill, { backgroundColor: colors.bg }]}>
-          <Text style={[styles.notifTypePillText, { color: colors.fg }]}>
-            {subtypeLabel(item.subtype, isTr)}
-          </Text>
-        </View>
-      </View>
-      {onMarkDone && kind !== 'done' ? (
-        <Pressable style={styles.doneBtn} onPress={() => onMarkDone(item.id)} hitSlop={8}>
-          <CheckCircle2 size={20} color="#b1b3ab" strokeWidth={1.8} />
-        </Pressable>
-      ) : null}
-    </View>
-  );
+function colorsForType(type: HealthNotification['type']) {
+  if (type === 'overdue') return { bg: '#fdecec', fg: '#b94747' };
+  if (type === 'reminder_due') return { bg: '#fef6ea', fg: '#b37f39' };
+  if (type === 'followup') return { bg: '#e9f6ef', fg: '#3d7f5a' };
+  return { bg: '#e9edf7', fg: '#4e5f8a' };
 }
 
-// ─── Section ───────────────────────────────────────────────────────────────────
-function Section({
-  label,
-  labelColor,
-  items,
-  kind,
-  isTr,
-  onMarkDone,
-}: {
-  label: string;
-  labelColor: string;
-  items: NotifItem[];
-  kind: 'overdue' | 'today' | 'upcoming' | 'done';
-  isTr: boolean;
-  onMarkDone?: (id: string) => void;
-}) {
-  if (items.length === 0) return null;
-  return (
-    <View style={styles.section}>
-      <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionLabel, { color: labelColor }]}>{label}</Text>
-        <View style={[styles.sectionBadge, { backgroundColor: labelColor + '18' }]}>
-          <Text style={[styles.sectionBadgeText, { color: labelColor }]}>{items.length}</Text>
-        </View>
-      </View>
-      <View style={styles.sectionCard}>
-        {items.map((item, i) => (
-          <View key={item.id}>
-            {i > 0 && <View style={styles.divider} />}
-            <NotifRow item={item} kind={kind} isTr={isTr} onMarkDone={onMarkDone} />
-          </View>
-        ))}
-      </View>
-    </View>
-  );
+function iconForType(type: HealthNotification['type'], color: string) {
+  if (type === 'overdue') return <AlertCircle size={17} color={color} strokeWidth={2.2} />;
+  if (type === 'reminder_due') return <Clock3 size={17} color={color} strokeWidth={2.2} />;
+  if (type === 'followup') return <BellRing size={17} color={color} strokeWidth={2.2} />;
+  return <CheckCircle2 size={17} color={color} strokeWidth={2.2} />;
 }
 
-// ─── Main screen ───────────────────────────────────────────────────────────────
 export default function NotificationCenterScreen({
   onBack,
-  overdue,
-  today,
-  upcoming,
-  completed = [],
+  notifications,
   locale = 'en',
-  onMarkDone,
+  onMarkRead,
+  onDone,
+  onSnooze,
+  onOpen,
 }: NotificationCenterScreenProps) {
   const isTr = locale === 'tr';
-  const swipePan = useEdgeSwipeBack({ onBack, enabled: true, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
-  const total = overdue.length + today.length + upcoming.length;
+  const swipePan = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true });
+  const sorted = [...notifications].sort((a, b) => {
+    const unreadCmp = Number(a.isRead) - Number(b.isRead);
+    if (unreadCmp !== 0) return unreadCmp;
+    const priorityCmp = priorityRank(a.priority) - priorityRank(b.priority);
+    if (priorityCmp !== 0) return priorityCmp;
+    return parseMs(b.createdAt) - parseMs(a.createdAt);
+  });
+  const unreadCount = sorted.filter((item) => !item.isRead).length;
 
   return (
     <View style={styles.screen} {...swipePan.panHandlers}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-
-        {/* Header */}
         <View style={styles.headerRow}>
-          <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
+          <Pressable style={styles.backBtn} onPress={onBack}>
             <ChevronLeft size={20} color="#5d605a" strokeWidth={2.4} />
           </Pressable>
           <View style={styles.headerCenter}>
-            <Text style={styles.headerTitle}>{isTr ? 'Bildirimler' : 'Notifications'}</Text>
+            <Text style={styles.headerTitle}>{isTr ? 'Bildirim Kutusu' : 'Notification Inbox'}</Text>
+            <Text style={styles.headerSub}>{isTr ? 'Tetiklenen aksiyonlar' : 'Triggered actions'}</Text>
           </View>
-          {total > 0 ? (
+          {unreadCount > 0 ? (
             <View style={styles.totalBadge}>
-              <Text style={styles.totalBadgeText}>{total}</Text>
+              <Text style={styles.totalBadgeText}>{unreadCount}</Text>
             </View>
-          ) : (
-            <View style={styles.headerSpacer} />
-          )}
+          ) : null}
         </View>
 
-        {total === 0 && completed.length === 0 ? (
-          /* Empty state */
+        {sorted.length === 0 ? (
           <View style={styles.emptyWrap}>
             <View style={styles.emptyIconBox}>
-              <CheckCircle2 size={36} color="#b1b3ab" strokeWidth={1.6} />
+              <CheckCircle2 size={34} color="#a6b3a5" strokeWidth={1.7} />
             </View>
-            <Text style={styles.emptyTitle}>
-              {isTr ? 'Hepsi tamam!' : 'All clear!'}
-            </Text>
+            <Text style={styles.emptyTitle}>{isTr ? 'Inbox temiz' : 'Inbox is clear'}</Text>
             <Text style={styles.emptyBody}>
-              {isTr
-                ? 'Bekleyen hatırlatmanız yok. Harika iş!'
-                : 'You have no pending reminders. Great work!'}
+              {isTr ? 'Şu anda aksiyon gerektiren bildirim yok.' : 'There are no action-required notifications right now.'}
             </Text>
           </View>
         ) : (
-          <>
-            <Section
-              label={isTr ? 'GECİKMİŞ' : 'OVERDUE'}
-              labelColor="#c05050"
-              items={overdue}
-              kind="overdue"
-              isTr={isTr}
-              onMarkDone={onMarkDone}
-            />
-            <Section
-              label={isTr ? 'BUGÜN' : 'TODAY'}
-              labelColor="#c4a470"
-              items={today}
-              kind="today"
-              isTr={isTr}
-              onMarkDone={onMarkDone}
-            />
-            <Section
-              label={isTr ? 'YAKLAŞAN' : 'UPCOMING'}
-              labelColor="#47664a"
-              items={upcoming}
-              kind="upcoming"
-              isTr={isTr}
-              onMarkDone={onMarkDone}
-            />
-            {completed.length > 0 ? (
-              <Section
-                label={isTr ? 'TAMAMLANAN' : 'COMPLETED'}
-                labelColor="#72b08a"
-                items={completed.slice(0, 5)}
-                kind="done"
-                isTr={isTr}
-              />
-            ) : null}
-          </>
+          <View style={styles.listWrap}>
+            {sorted.map((item, idx) => {
+              const c = colorsForType(item.type);
+              return (
+                <Pressable
+                  key={item.id}
+                  style={[styles.itemCard, !item.isRead && styles.itemCardUnread, idx < sorted.length - 1 && styles.itemCardSpacing]}
+                  onPress={() => onMarkRead?.(item.id)}
+                >
+                  <View style={[styles.iconBox, { backgroundColor: c.bg }]}>
+                    {iconForType(item.type, c.fg)}
+                  </View>
+                  <View style={styles.itemBody}>
+                    <Text style={styles.itemTitle}>{item.title}</Text>
+                    <Text style={styles.itemMessage}>{item.message}</Text>
+                    <Text style={styles.itemDate}>{formatDate(item.createdAt, locale)}</Text>
+                    <View style={styles.actionsRow}>
+                      {onDone ? (
+                        <Pressable style={styles.actionBtn} onPress={() => onDone(item.id)}>
+                          <Text style={styles.actionText}>{isTr ? 'Tamamlandı' : 'Done'}</Text>
+                        </Pressable>
+                      ) : null}
+                      {onSnooze ? (
+                        <Pressable style={styles.actionBtn} onPress={() => onSnooze(item.id)}>
+                          <Text style={styles.actionText}>{isTr ? 'Ertele' : 'Snooze'}</Text>
+                        </Pressable>
+                      ) : null}
+                      {onOpen ? (
+                        <Pressable style={styles.actionBtnPrimary} onPress={() => onOpen(item.id)}>
+                          <ExternalLink size={12} color="#e9ffe6" strokeWidth={2.1} />
+                          <Text style={styles.actionTextPrimary}>{isTr ? 'Aç' : 'Open'}</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  </View>
+                  {!item.isRead ? <View style={styles.unreadDot} /> : null}
+                </Pressable>
+              );
+            })}
+          </View>
         )}
       </ScrollView>
     </View>
   );
 }
 
-// ─── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#f6f4f0' },
-  content: { paddingTop: 52, paddingBottom: 120 },
-
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 12,
-  },
+  content: { paddingTop: 52, paddingHorizontal: 16, paddingBottom: 120 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16, paddingHorizontal: 4 },
   backBtn: {
-    width: 36, height: 36,
-    backgroundColor: '#fff',
+    width: 36,
+    height: 36,
     borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.06)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   headerCenter: { flex: 1 },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: '#30332e',
-    letterSpacing: -0.4,
-  },
-  headerSpacer: { width: 36 },
-  totalBadge: {
-    minWidth: 28,
-    height: 28,
-    backgroundColor: '#47664a',
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  totalBadgeText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: '#e9ffe6',
-  },
-
-  section: { marginBottom: 22, paddingHorizontal: 16 },
-  sectionHeader: {
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#30332e', letterSpacing: -0.3 },
+  headerSub: { marginTop: 1, fontSize: 12, color: '#6a7068', fontWeight: '500' },
+  totalBadge: { minWidth: 28, height: 28, borderRadius: 10, backgroundColor: '#47664a', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8 },
+  totalBadgeText: { color: '#e9ffe6', fontWeight: '800', fontSize: 12 },
+  listWrap: { gap: 10 },
+  itemCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-    paddingHorizontal: 4,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
-  },
-  sectionBadge: {
-    borderRadius: 7,
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  sectionBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  sectionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    overflow: 'hidden',
-    shadowColor: '#30332e',
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-
-  notifRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 14,
     gap: 12,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    padding: 12,
     position: 'relative',
-    overflow: 'hidden',
   },
-  notifRowOverdue: {
-    backgroundColor: '#fdf5f5',
-  },
-  notifAccent: {
-    position: 'absolute',
-    left: 0, top: 10, bottom: 10,
-    width: 3,
-    borderTopRightRadius: 3,
-    borderBottomRightRadius: 3,
-  },
-  notifIconBox: {
-    width: 38, height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  notifBody: { flex: 1, gap: 3 },
-  notifTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#30332e',
-    letterSpacing: -0.1,
-  },
-  notifMeta: { flexDirection: 'row', alignItems: 'center' },
-  notifDate: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#9a9c95',
-  },
-  notifDateOverdue: { color: '#c05050', fontWeight: '600' },
-  notifPet: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#b1b3ab',
-  },
-  notifTypePill: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 7,
-    marginTop: 2,
-  },
-  notifTypePillText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  doneBtn: {
-    padding: 4,
-    flexShrink: 0,
-  },
-
-  divider: {
-    height: 1,
-    backgroundColor: 'rgba(0,0,0,0.04)',
-    marginLeft: 64,
-  },
-
-  emptyWrap: {
-    alignItems: 'center',
-    paddingTop: 60,
-    paddingHorizontal: 32,
-    gap: 10,
-  },
-  emptyIconBox: {
-    width: 72, height: 72,
-    backgroundColor: '#eeeee8',
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#30332e',
-    letterSpacing: -0.3,
-  },
-  emptyBody: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#9a9c95',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  itemCardUnread: { borderColor: '#c7d7c7' },
+  itemCardSpacing: { marginBottom: 0 },
+  iconBox: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginTop: 2 },
+  itemBody: { flex: 1, gap: 4 },
+  itemTitle: { fontSize: 14, fontWeight: '700', color: '#30332e' },
+  itemMessage: { fontSize: 12, lineHeight: 16, color: '#5d605a' },
+  itemDate: { fontSize: 11, color: '#8a8f89', fontWeight: '600' },
+  actionsRow: { marginTop: 6, flexDirection: 'row', gap: 8, alignItems: 'center' },
+  actionBtn: { height: 28, borderRadius: 14, backgroundColor: '#eeeee8', paddingHorizontal: 10, alignItems: 'center', justifyContent: 'center' },
+  actionText: { fontSize: 11, fontWeight: '700', color: '#556057' },
+  actionBtnPrimary: { height: 28, borderRadius: 14, backgroundColor: '#47664a', paddingHorizontal: 10, flexDirection: 'row', alignItems: 'center', gap: 5 },
+  actionTextPrimary: { fontSize: 11, fontWeight: '700', color: '#e9ffe6' },
+  unreadDot: { position: 'absolute', top: 10, right: 10, width: 8, height: 8, borderRadius: 4, backgroundColor: '#47664a' },
+  emptyWrap: { marginTop: 48, alignItems: 'center', paddingHorizontal: 24 },
+  emptyIconBox: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#eeeee8', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#30332e' },
+  emptyBody: { marginTop: 6, fontSize: 13, lineHeight: 19, color: '#6f736d', textAlign: 'center' },
 });
