@@ -1,4 +1,5 @@
 import React from 'react';
+import PawLottie from '../components/PawLottie';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import type { AiInsight } from '../lib/insightsEngine';
@@ -218,9 +219,7 @@ export default function InsightsScreen({
           </View>
         ) : (
           <View style={styles.emptyCard}>
-            <View style={styles.emptyIconBox}>
-              <IconSvg kind="spark" size={26} color="#a6b3a5" />
-            </View>
+            <PawLottie size={90} />
             <Text style={styles.emptyTitle}>
               {isTr ? 'Henüz içgörü yok' : 'No insights yet'}
             </Text>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import PawLottie from './PawLottie';
 
 export type ScreenStateMode = 'loading' | 'empty' | 'error';
 
@@ -19,6 +20,13 @@ export default function ScreenStateCard({ mode, title, body, actionLabel, onActi
           <ActivityIndicator size="small" color="#2d2d2d" />
         </View>
       ) : null}
+
+      {mode === 'empty' ? (
+        <View style={styles.pawWrap}>
+          <PawLottie size={80} />
+        </View>
+      ) : null}
+
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.body}>{body}</Text>
       {actionLabel && onAction ? (
@@ -43,6 +51,9 @@ const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 2,
+  },
+  pawWrap: {
+    marginBottom: 8,
   },
   loadingWrap: {
     marginBottom: 10,

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import PawLottie from '../components/PawLottie';
 import {
   Animated,
   Modal,
@@ -462,6 +463,7 @@ export default function RemindersScreen({
           {/* ── Empty state ── */}
           {isFullyEmpty && (
             <View style={styles.emptyCard}>
+              <PawLottie size={90} />
               <Text style={styles.emptyTitle}>{isTr ? 'Hatırlatma yok' : 'No reminders yet'}</Text>
               <Text style={styles.emptyBody}>
                 {isTr
