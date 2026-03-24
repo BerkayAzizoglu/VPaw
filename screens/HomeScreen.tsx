@@ -19,7 +19,7 @@ import { Nunito_600SemiBold } from '@expo-google-fonts/nunito';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
-import { ChevronRight, Mars, PawPrint, Pencil, Venus } from 'lucide-react-native';
+import { Bell, PawPrint, Pencil } from 'lucide-react-native';
 import type { PetProfile } from '../components/AuthGate';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
@@ -27,12 +27,6 @@ import { useAppSettings } from '../hooks/useAppSettings';
 import type { AiInsight } from '../lib/insightsEngine';
 
 const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
-const vaccinesCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/vaccines.svg')).uri;
-const vetVisitCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/vet-visit.svg')).uri;
-const healthCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/health-card.svg')).uri;
-const healthRecordsCardIconUri = Image.resolveAssetSource(require('../assets/home-icons/health-records.svg')).uri;
-const HOME_CARD_ICON_SIZE = 26;
-const HOME_CARD_ICON_SIZE_LARGE = 30;
 
 export type JourneyEventItem = {
   id: string;
@@ -81,6 +75,7 @@ type HomePetData = {
 type HomeScreenProps = {
   onOpenProfile?: () => void;
   onOpenReminders?: () => void;
+  onOpenNotifications?: () => void;
   onOpenAddReminder?: () => void;
   reminderBadgeCount?: number;
   userAvatarUri?: string;
@@ -112,54 +107,6 @@ type HomeScreenProps = {
   };
 };
 
-const BASE_PETS: HomePetData[] = [
-  {
-    id: 'luna',
-    name: 'Luna',
-    petType: 'Dog',
-    breed: 'Golden Retriever',
-    coatPattern: 'Solid',
-    age: '3 years old',
-    gender: 'female',
-    heroImage: 'https://www.figma.com/api/mcp/asset/6f25c37a-f633-4891-ba3b-0fab066dac17',
-    weight: '28.5 kg',
-    weightDelta: '+0.3 kg',
-    vaccines: 'Up to date',
-    vaccinesSub: 'Next: Rabies',
-    vetVisits: '2 visits',
-    vetVisitsSub: 'March 5',
-    records: '4 types',
-    recordsSub: 'Log health',
-    upcoming: [
-      { title: 'Annual checkup', date: 'March 28, 2026 ï¿½ 10:30 AM' },
-      { title: 'Flea & tick prevention', date: 'April 1, 2026' },
-      { title: 'Grooming appointment', date: 'April 15, 2026 ï¿½ 2:00 PM' },
-    ],
-  },
-  {
-    id: 'milo',
-    name: 'Milo',
-    petType: 'Cat',
-    breed: 'British Shorthair',
-    coatPattern: 'Tabby',
-    age: '2 years old',
-    gender: 'male',
-    heroImage: 'https://images.unsplash.com/photo-1511044568932-338cba0ad803?q=80&w=1200&auto=format&fit=crop',
-    weight: '5.2 kg',
-    weightDelta: '+0.1 kg',
-    vaccines: 'Due soon',
-    vaccinesSub: 'Next: DHPP',
-    vetVisits: '1 visit',
-    vetVisitsSub: 'Feb 21',
-    records: '3 types',
-    recordsSub: 'Track notes',
-    upcoming: [
-      { title: 'Weight review', date: 'March 30, 2026 ï¿½ 09:30 AM' },
-      { title: 'Dental check', date: 'April 5, 2026 ï¿½ 2:00 PM' },
-      { title: 'Vaccine reminder', date: 'April 12, 2026' },
-    ],
-  },
-];
 function formatPetAge(birthDate: string, locale: 'en' | 'tr') {
   const now = new Date();
   const [y, m, d] = birthDate.split('-').map((n) => Number(n));
@@ -193,6 +140,19 @@ function formatDeltaByUnit(deltaKg: number, unit: 'kg' | 'lb') {
   const label = unit === 'lb' ? 'lb' : 'kg';
   return `${converted >= 0 ? '+' : ''}${converted.toFixed(1)} ${label}`;
 }
+const MONTHS_SHORT_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS_SHORT_TR = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+function fmtWeightDate(raw: string | undefined, isTr: boolean): string {
+  if (!raw) return '';
+  const parts = raw.split('T')[0].split('-');
+  if (parts.length < 3) return raw;
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+  if (month < 0 || month > 11) return raw;
+  const months = isTr ? MONTHS_SHORT_TR : MONTHS_SHORT_EN;
+  return `${months[month]} ${day}`;
+}
+
 function buildSmoothPath(points: Array<{ x: number; y: number }>) {
   if (points.length === 0) return '';
   if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
@@ -210,6 +170,7 @@ function buildSmoothPath(points: Array<{ x: number; y: number }>) {
 export default function HomeScreen({
   onOpenProfile,
   onOpenReminders,
+  onOpenNotifications,
   onOpenAddReminder,
   reminderBadgeCount = 0,
   userAvatarUri,
@@ -391,11 +352,42 @@ export default function HomeScreen({
     : (isTr
       ? 'Ufuk sakin görünüyor. Planlanan acil adım yok.'
       : 'Your horizon looks clear. No urgent action is pending.'));
+  const todayPulse = useMemo(() => {
+    const todayItems = activeUpcoming.slice(0, 2).map((item) => ({
+      id: `today-${item.id}`,
+      label: isTr ? 'Bugün' : 'Today',
+      title: item.title,
+      sub: item.date,
+      urgent: false,
+    }));
+    const needsAttentionItems = journeyEvents
+      .filter((event) => !!event.urgent)
+      .slice(0, 2)
+      .map((event) => ({
+        id: `attention-${event.id}`,
+        label: isTr ? 'Dikkat' : 'Needs attention',
+        title: event.title,
+        sub: event.subtitle ?? event.date ?? '',
+        urgent: true,
+      }));
+    const upcomingItems = journeyEvents
+      .filter((event) => !event.urgent)
+      .slice(0, 2)
+      .map((event) => ({
+        id: `upcoming-${event.id}`,
+        label: isTr ? 'Yaklaşan' : 'Upcoming',
+        title: event.title,
+        sub: event.subtitle ?? event.date ?? '',
+        urgent: false,
+      }));
+    const merged = [...needsAttentionItems, ...todayItems, ...upcomingItems];
+    return merged.slice(0, 4);
+  }, [activeUpcoming, isTr, journeyEvents]);
   const weightSpark = useMemo(() => {
     const chartW = 106;
     const chartH = 42;
     const inset = 2;
-    const values = (activeWeightHistory.length > 0 ? activeWeightHistory : [{ value: Number(activePet?.weight.split(' ')[0] ?? 0) || 0 }]).map((p) => p.value);
+    const values = (activeWeightHistory.length > 0 ? activeWeightHistory : [{ value: Number(activePet?.weight?.split(' ')[0] ?? 0) || 0 }]).map((p) => p.value);
     const min = Math.min(...values);
     const max = Math.max(...values);
     const span = Math.max(0.1, max - min);
@@ -416,14 +408,27 @@ export default function HomeScreen({
       areaPath,
       latestDate: activeWeightHistory[activeWeightHistory.length - 1]?.date,
     };
-  }, [activePet.weight, activeWeightHistory]);
+  }, [activePet?.weight, activeWeightHistory]);
+
   const weightUpdatedText = hasWeightData
-    ? (weightSpark.latestDate ?? (isTr ? 'Son güncelleme bugün' : 'Last updated today'))
+    ? (fmtWeightDate(weightSpark.latestDate, isTr) || (isTr ? 'Son güncelleme bugün' : 'Last updated today'))
     : (isTr ? 'Henüz giriş yok' : 'No entries yet');
+
+  const weightStatusInfo = useMemo(() => {
+    if (!hasWeightData || activePet.weightDelta === '—') {
+      return { status: isTr ? 'Henüz giriş yok' : 'No entries yet', badgeBg: '#eeeee8', badgeFg: '#6a6a6a' };
+    }
+    const d = activePet.weightDelta;
+    const isNeg = d.startsWith('-');
+    const isZero = /^[+]?0\.0/.test(d);
+    if (isZero) return { status: isTr ? 'İdeal kilo korunuyor' : 'Ideal weight maintained', badgeBg: '#e6f3e8', badgeFg: '#4a8b56' };
+    if (isNeg) return { status: isTr ? 'Düşüş görülüyor' : 'Weight declining', badgeBg: '#fde8e3', badgeFg: '#a73b21' };
+    return { status: isTr ? 'Artış görülüyor' : 'Weight gaining', badgeBg: '#fff3e0', badgeFg: '#9a6520' };
+  }, [activePet, hasWeightData, isTr]);
 
   useEffect(() => {
     setFrontImageLoaded(false);
-  }, [activePet.id]);
+  }, [activePet?.id]);
 
   useEffect(() => {
     if (!quickWeightSaved) return;
@@ -561,16 +566,23 @@ export default function HomeScreen({
             </View>
           </View>
 
-          <Pressable onPress={onOpenProfile} style={styles.avatarBtn}>
-            {userAvatarUri ? (
-              <Image source={{ uri: userAvatarUri }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarInitials}>{userInitials}</Text>
-            )}
-            {reminderBadgeCount > 0 ? (
-              <View style={styles.avatarBadge} />
-            ) : null}
-          </Pressable>
+          <View style={styles.topActions}>
+            <Pressable onPress={onOpenNotifications ?? onOpenReminders} style={styles.notifyBtn}>
+              <Bell size={18} color="#6a6d67" strokeWidth={2} />
+              {reminderBadgeCount > 0 ? (
+                <View style={styles.notifyBadge}>
+                  <Text style={styles.notifyBadgeText}>{Math.min(reminderBadgeCount, 9)}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+            <Pressable onPress={onOpenProfile} style={styles.avatarBtn}>
+              {userAvatarUri ? (
+                <Image source={{ uri: userAvatarUri }} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarInitials}>{userInitials}</Text>
+              )}
+            </Pressable>
+          </View>
         </View>
 
         <View style={styles.heroStackWrap}>
@@ -636,14 +648,14 @@ export default function HomeScreen({
           <Pressable style={styles.weightCard} onPress={() => onOpenPetProfile?.(activePet.id)}>
             <View style={styles.weightHeader}>
               <Text style={styles.weightLabel}>{isTr ? 'AĞIRLIK PROFİLİ' : 'WEIGHT PROFILE'}</Text>
-              <View style={styles.weightDeltaBadge}>
-                <Text style={styles.weightDeltaBadgeText}>{hasWeightData ? activePet.weightDelta : '—'}</Text>
+              <View style={[styles.weightDeltaBadge, { backgroundColor: weightStatusInfo.badgeBg }]}>
+                <Text style={[styles.weightDeltaBadgeText, { color: weightStatusInfo.badgeFg }]}>{hasWeightData ? activePet.weightDelta : '—'}</Text>
               </View>
             </View>
             <View style={styles.weightMainRow}>
               <View style={styles.weightLeftCol}>
                 <Text style={styles.weightValue}>{activePet.weight}</Text>
-                <Text style={styles.weightStatusText}>{isTr ? 'İdeal kilo korunuyor' : 'Ideal weight maintained'}</Text>
+                <Text style={styles.weightStatusText}>{weightStatusInfo.status}</Text>
               </View>
               <View style={styles.sparkWrap}>
                 <Svg width={120} height={50} viewBox="0 0 106 42">
@@ -661,6 +673,33 @@ export default function HomeScreen({
             <Text style={styles.weightDateText}>{weightUpdatedText}</Text>
           </Pressable>
         </Animated.View>
+
+        <View style={styles.todayPulseCard}>
+          <View style={styles.todayPulseHeader}>
+            <Text style={styles.todayPulseTitle}>{isTr ? 'Bugün' : 'Today'}</Text>
+            <Pressable style={styles.todayPulseCta} onPress={onOpenNotifications ?? onOpenReminders}>
+              <Text style={styles.todayPulseCtaText}>{isTr ? 'Tüm alarmları gör' : 'See all alerts'}</Text>
+            </Pressable>
+          </View>
+          {todayPulse.length > 0 ? (
+            <View style={styles.todayPulseList}>
+              {todayPulse.map((item, index) => (
+                <View key={item.id} style={[styles.todayPulseRow, index !== todayPulse.length - 1 && styles.todayPulseRowBorder]}>
+                  <View style={[styles.todayPulseDot, item.urgent && styles.todayPulseDotUrgent]} />
+                  <View style={styles.todayPulseTextWrap}>
+                    <View style={styles.todayPulseLabelPill}>
+                      <Text style={styles.todayPulseLabelText}>{item.label}</Text>
+                    </View>
+                    <Text style={styles.todayPulseRowTitle} numberOfLines={1}>{item.title}</Text>
+                    {item.sub ? <Text style={styles.todayPulseRowSub} numberOfLines={1}>{item.sub}</Text> : null}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.todayPulseEmpty}>{isTr ? 'Bugün için dikkat gerektiren bir kayıt yok.' : 'No urgent or upcoming tasks for today.'}</Text>
+          )}
+        </View>
 
         {/* ── NEXT IMPORTANT EVENT ── */}
         <View style={styles.sectionHeaderRow}>
@@ -811,14 +850,6 @@ export default function HomeScreen({
   );
 }
 
-function QuickReminderChip({ label, onPress }: { label: string; onPress?: () => void }) {
-  return (
-    <Pressable style={styles.quickReminderChip} onPress={onPress}>
-      <Text style={styles.quickReminderChipText}>{label}</Text>
-    </Pressable>
-  );
-}
-
 function JourneyCard({
   eventType,
   title,
@@ -877,21 +908,6 @@ function JourneyCard({
   );
 }
 
-function EventRow({ title, date, onPress }: { title: string; date: string; onPress?: () => void }) {
-  return (
-    <Pressable style={styles.eventRow} onPress={onPress} disabled={!onPress}>
-      <View style={styles.eventDotWrap}>
-        <View style={styles.eventDotLine} />
-        <View style={styles.eventDot} />
-      </View>
-      <View style={styles.eventTextWrap}>
-        <Text style={styles.eventTitle}>{title}</Text>
-        <Text style={styles.eventDate}>{date}</Text>
-      </View>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
@@ -932,6 +948,41 @@ const styles = StyleSheet.create({
   brandSubNunito: {
     fontFamily: 'Nunito_600SemiBold',
   },
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  notifyBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.07)',
+  },
+  notifyBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: '#47664a',
+    borderWidth: 1.5,
+    borderColor: '#f6f4f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  notifyBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    lineHeight: 11,
+    fontWeight: '700',
+  },
   avatarBtn: {
     width: 36,
     height: 36,
@@ -942,17 +993,6 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.07)',
-  },
-  avatarBadge: {
-    position: 'absolute',
-    top: 1,
-    right: 1,
-    width: 9,
-    height: 9,
-    borderRadius: 999,
-    backgroundColor: '#47664a',
-    borderWidth: 1.5,
-    borderColor: '#f6f4f0',
   },
   avatarImage: {
     width: '100%',
@@ -1063,16 +1103,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: 'rgba(255,255,255,0.86)',
   },
-  heroMetaDot: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: 'rgba(255,255,255,0.72)',
-  },
-  heroGenderWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
   controlRow: {
     marginTop: 4,
     paddingHorizontal: 8,
@@ -1129,12 +1159,98 @@ const styles = StyleSheet.create({
     color: '#2d2d2d',
     fontWeight: '700',
   },
-  sectionTitle: {
-    fontSize: 36,
-    lineHeight: 38,
+  todayPulseCard: {
+    borderRadius: 18,
+    backgroundColor: '#F7F8FA',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  todayPulseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  todayPulseTitle: {
+    fontSize: 18,
+    lineHeight: 22,
     fontWeight: '700',
-    color: '#2d2d2d',
-    marginTop: 4,
+    color: '#30332e',
+    letterSpacing: -0.2,
+  },
+  todayPulseCta: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#eef1f4',
+  },
+  todayPulseCtaText: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#5f6770',
+    fontWeight: '700',
+  },
+  todayPulseList: {
+    gap: 0,
+  },
+  todayPulseRow: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 9,
+  },
+  todayPulseRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  todayPulseDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#5f8a6a',
+  },
+  todayPulseDotUrgent: {
+    backgroundColor: '#b65b4a',
+  },
+  todayPulseTextWrap: {
+    flex: 1,
+    gap: 3,
+  },
+  todayPulseLabelPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: '#eceff3',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  todayPulseLabelText: {
+    fontSize: 9,
+    lineHeight: 12,
+    color: '#6f7680',
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  todayPulseRowTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#30332e',
+    fontWeight: '600',
+  },
+  todayPulseRowSub: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#7b828b',
+    fontWeight: '500',
+  },
+  todayPulseEmpty: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#7b828b',
+    fontWeight: '500',
   },
   sectionHeaderRow: {
     flexDirection: 'row',
@@ -1320,22 +1436,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  iconCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#f1f3ee',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  weightHeaderText: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-    color: '#8d8d8d',
-    letterSpacing: 0.7,
-  },
   weightMainRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1346,11 +1446,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: 4,
   },
-  weightValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   weightValue: {
     fontSize: 48,
     lineHeight: 50,
@@ -1358,285 +1453,11 @@ const styles = StyleSheet.create({
     color: '#2d2d2d',
     letterSpacing: -0.8,
   },
-  weightPill: {
-    fontSize: 13,
-    lineHeight: 16,
-    color: '#4a8b56',
-    fontWeight: '700',
-    backgroundColor: '#e6f3e8',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
-  weightSub: {
-    marginTop: 2,
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '500',
-    color: '#4e4e4e',
-  },
   sparkWrap: {
     alignItems: 'flex-end',
     justifyContent: 'flex-end',
     paddingBottom: 6,
     width: 110,
-  },
-  weightSub2: {
-    marginTop: 1,
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#8f8f8f',
-  },
-  gridRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  miniCard: {
-    flex: 1,
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  miniTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  miniIconWrap: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  miniSvgIcon: {
-    opacity: 1,
-  },
-  miniTitle: {
-    fontSize: 11,
-    lineHeight: 14,
-    color: '#9c9c9c',
-    fontWeight: '700',
-    letterSpacing: 0.6,
-  },
-  miniValue: {
-    marginTop: 4,
-    fontSize: 16,
-    lineHeight: 21,
-    color: '#2d2d2d',
-    fontWeight: '700',
-  },
-  miniSub: {
-    marginTop: 2,
-    fontSize: 11,
-    lineHeight: 15,
-    color: '#8d8d8d',
-  },
-  upcomingHeader: {
-    marginTop: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  seeAll: {
-    fontSize: 15,
-    lineHeight: 20,
-    color: '#6f6f6f',
-    fontWeight: '500',
-  },
-  upcomingCard: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    paddingVertical: 14,
-    paddingHorizontal: 12,
-    gap: 8,
-  },
-  emptyInfoCard: {
-    marginTop: -6,
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 6,
-  },
-  emptyInfoTitle: {
-    color: '#2d2d2d',
-    fontSize: 15,
-    lineHeight: 19,
-    fontWeight: '700',
-  },
-  emptyInfoBody: {
-    color: '#868686',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
-  },
-  emptyInfoCta: {
-    alignSelf: 'flex-start',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  emptyInfoCtaText: {
-    color: '#4f6b43',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-  },
-  quickReminderRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 4,
-  },
-  quickReminderChip: {
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    backgroundColor: '#faf9f7',
-  },
-  quickReminderChipText: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#5f5f5f',
-    fontWeight: '600',
-  },
-  reminderGroupTitle: {
-    marginTop: 4,
-    fontSize: 12,
-    lineHeight: 16,
-    letterSpacing: 0.5,
-    color: '#8d8d8d',
-    fontWeight: '700',
-    textTransform: 'uppercase',
-  },
-  emptyInlineWrap: {
-    paddingTop: 6,
-    gap: 6,
-  },
-  emptyInlineTitle: {
-    color: '#2d2d2d',
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '700',
-  },
-  emptyInlineBody: {
-    color: '#888',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
-  },
-  emptyInlineCta: {
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  emptyInlineCtaText: {
-    color: '#4f6b43',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-  },
-  reminderDivider: {
-    height: 1,
-    backgroundColor: '#efefef',
-    marginVertical: 4,
-  },
-  insightPreviewRow: {
-    gap: 4,
-    paddingVertical: 4,
-  },
-  insightPreviewMeta: {
-    fontSize: 11,
-    lineHeight: 14,
-    color: '#8a8a8a',
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  insightPreviewText: {
-    fontSize: 13,
-    lineHeight: 17,
-    color: '#4f4f4f',
-    fontWeight: '600',
-  },
-  insightPreviewCta: {
-    marginTop: 6,
-    alignSelf: 'flex-start',
-    minHeight: 28,
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  insightPreviewCtaText: {
-    color: '#5a5a5a',
-    fontSize: 12,
-    lineHeight: 14,
-    fontWeight: '700',
-  },
-  eventRow: {
-    flexDirection: 'row',
-    gap: 10,
-    alignItems: 'center',
-  },
-  eventDotWrap: {
-    width: 30,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-    height: 50,
-  },
-  eventDotLine: {
-    position: 'absolute',
-    left: 14,
-    top: 0,
-    bottom: 0,
-    width: 1,
-    backgroundColor: '#ececec',
-  },
-  eventDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: '#656565',
-    backgroundColor: '#fff',
-    zIndex: 1,
-  },
-  eventTextWrap: {
-    flex: 1,
-  },
-  eventTitle: {
-    fontSize: 16,
-    lineHeight: 20,
-    color: '#2d2d2d',
-    fontWeight: '600',
-  },
-  eventDate: {
-    marginTop: 2,
-    fontSize: 13,
-    lineHeight: 17,
-    color: '#8c8c8c',
   },
   noPetWrap: {
     flex: 1,
@@ -1822,38 +1643,6 @@ const styles = StyleSheet.create({
     marginTop: 6,
   },
 
-  // ── Secondary health strip ──
-  stripContent: {
-    gap: 10,
-    paddingRight: 4,
-  },
-  stripChip: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    minWidth: 122,
-    gap: 1,
-  },
-  stripChipLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    marginBottom: 2,
-  },
-  stripChipValue: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#2d2d2d',
-  },
-  stripChipSub: {
-    fontSize: 11,
-    color: '#9a9a9a',
-    marginTop: 1,
-  },
-
   // ── Health Journey ──
   journeyHeader: {
     flexDirection: 'row',
@@ -1889,28 +1678,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
-  },
-  journeyNodeWrap: {
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 15,
-    position: 'relative',
-  },
-  journeyNodePulseRing: {
-    position: 'absolute',
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    borderWidth: 2,
-  },
-  journeyNode: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    borderWidth: 2.5,
-    borderColor: '#f6f4f0',
   },
   journeyIconBox: {
     width: 36,
@@ -2039,10 +1806,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
-
-
-
-
 
 
 
