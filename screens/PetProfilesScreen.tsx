@@ -54,7 +54,7 @@ export default function PetProfilesScreen({
   const isTr = locale === 'tr';
   const pets = Object.values(petProfiles)
     .filter((pet) => pet && typeof pet.name === 'string' && pet.name.trim().length > 0);
-  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: true, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
+  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true });
 
   return (
     <View style={styles.screen} {...swipePanResponder.panHandlers}>
@@ -294,4 +294,3 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
-

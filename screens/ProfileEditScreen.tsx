@@ -72,7 +72,7 @@ export default function ProfileEditScreen({ onBack, onSaved }: ProfileEditScreen
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(FALLBACK_AVATAR);
   const [isFormFocused, setIsFormFocused] = useState(false);
-  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: !isFormFocused, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
+  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: !isFormFocused });
 
   useEffect(() => {
     let active = true;

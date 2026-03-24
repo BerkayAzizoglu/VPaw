@@ -35,9 +35,10 @@ export type ReminderKind =
   | 'medication'
   | 'care_routine';
 
-export type ReminderStatus = 'pending' | 'done' | 'skipped';
+export type ReminderStatus = 'pending' | 'done' | 'snoozed' | 'skipped';
 export type ReminderSourceType = 'vet_visit' | 'medical_event' | 'manual';
 export type ReminderType = 'medical' | 'care';
+export type ReminderOriginType = 'manual' | 'system';
 export type ReminderSubtype =
   | 'vet_visit'
   | 'vaccine'
@@ -93,9 +94,13 @@ export type MedicalEvent = {
 export type Reminder = {
   id: string;
   petId: PetId;
+  // Reminder domain group (medical/care). Kept for backward compatibility.
   type: ReminderType;
+  // Reminder ownership source: manual user-created vs system-generated.
+  originType: ReminderOriginType;
   subtype: ReminderSubtype;
   title: string;
+  dueDate: string;
   scheduledAt: string;
   frequency: ReminderFrequency;
   interval?: number;
@@ -292,12 +297,21 @@ export function normalizeRemindersByPet(raw: unknown): ByPet<Reminder> {
           : true;
       const createdAt = asIso(i.createdAt, nowIso);
       const updatedAt = asIso(i.updatedAt, nowIso);
+      const dueDate = typeof (i as Partial<{ dueDate: string }>).dueDate === 'string'
+        ? (i as Partial<{ dueDate: string }>).dueDate as string
+        : (typeof i.dueAt === 'string' ? i.dueAt : scheduledAt);
       return {
         id: typeof i.id === 'string' ? i.id : makeId(`reminder-${petId}`),
         petId,
         type,
+        originType:
+          (i as Partial<{ originType: ReminderOriginType }>).originType === 'manual'
+          || (i as Partial<{ originType: ReminderOriginType }>).originType === 'system'
+            ? (i as Partial<{ originType: ReminderOriginType }>).originType as ReminderOriginType
+            : (typeof i.sourceType === 'string' && i.sourceType === 'manual' ? 'manual' : 'system'),
         subtype,
         title: typeof i.title === 'string' && i.title.trim() ? i.title : reminderTitleFromSubtype(subtype),
+        dueDate,
         scheduledAt,
         frequency,
         interval: typeof i.interval === 'number' && Number.isFinite(i.interval) ? i.interval : undefined,
@@ -405,6 +419,7 @@ export function createReminder(
     interval?: number;
     completedAt?: string;
     isActive?: boolean;
+    originType?: ReminderOriginType;
     sourceType?: ReminderSourceType;
     sourceId?: string;
     recurrenceRule?: string;
@@ -422,12 +437,15 @@ export function createReminder(
   const resolvedSubtype = input.subtype ?? reminderSubtypeFromKind(kind);
   const completedAt = input.completedAt ?? (input.status === 'done' ? nowIso : undefined);
   const isActive = typeof input.isActive === 'boolean' ? input.isActive : input.status !== 'skipped';
+  const dueDate = input.dueAt ?? input.scheduledAt ?? nowIso;
   const item: Reminder = {
     ...input,
     kind,
-    dueAt: input.dueAt ?? scheduledAt,
+    dueAt: dueDate,
+    dueDate,
     scheduledAt,
     type: resolvedType,
+    originType: input.originType ?? (input.sourceType === 'manual' ? 'manual' : 'system'),
     subtype: resolvedSubtype,
     title: input.title?.trim() ? input.title : reminderTitleFromSubtype(resolvedSubtype),
     frequency: input.frequency ?? 'once',
@@ -517,6 +535,7 @@ export function markReminderCompleted(
       updated = {
         ...reminder,
         scheduledAt: nextScheduledAt,
+        dueDate: nextScheduledAt,
         dueAt: nextScheduledAt,
         completedAt: undefined,
         status: 'pending',
@@ -559,6 +578,81 @@ export function toggleReminderActive(
       ...reminder,
       isActive,
       status: !isActive ? 'skipped' : reminder.completedAt ? 'done' : 'pending',
+      updatedAt: nowIso,
+    };
+    return updated;
+  });
+  return {
+    item: updated,
+    next: {
+      ...byPet,
+      [petId]: nextPet,
+    },
+  };
+}
+
+export function snoozeReminder(
+  byPet: ByPet<Reminder>,
+  petId: PetId,
+  reminderId: string,
+  minutes = 60,
+): { next: ByPet<Reminder>; item: Reminder | null } {
+  const now = Date.now();
+  const nowIso = new Date(now).toISOString();
+  let updated: Reminder | null = null;
+  const nextPet = (byPet[petId] ?? []).map((reminder) => {
+    if (reminder.id !== reminderId) return reminder;
+    if (!reminder.isActive || reminder.completedAt) return reminder;
+    const currentMs = new Date(reminder.dueDate || reminder.scheduledAt).getTime();
+    const anchorMs = Number.isFinite(currentMs) ? Math.max(currentMs, now) : now;
+    const nextMs = anchorMs + Math.max(1, minutes) * 60 * 1000;
+    const nextIso = new Date(nextMs).toISOString();
+    updated = {
+      ...reminder,
+      status: 'snoozed',
+      dueDate: nextIso,
+      scheduledAt: nextIso,
+      dueAt: nextIso,
+      updatedAt: nowIso,
+    };
+    return updated;
+  });
+  return {
+    item: updated,
+    next: {
+      ...byPet,
+      [petId]: nextPet,
+    },
+  };
+}
+
+export function updateReminder(
+  byPet: ByPet<Reminder>,
+  petId: PetId,
+  reminderId: string,
+  patch: {
+    title?: string;
+    dueDate?: string;
+    subtype?: ReminderSubtype;
+    note?: string;
+  },
+): { next: ByPet<Reminder>; item: Reminder | null } {
+  const nowIso = new Date().toISOString();
+  let updated: Reminder | null = null;
+  const nextPet = (byPet[petId] ?? []).map((reminder) => {
+    if (reminder.id !== reminderId) return reminder;
+    const dueDate = typeof patch.dueDate === 'string' && patch.dueDate.trim().length > 0
+      ? patch.dueDate
+      : reminder.dueDate;
+    updated = {
+      ...reminder,
+      title: typeof patch.title === 'string' && patch.title.trim().length > 0 ? patch.title.trim() : reminder.title,
+      dueDate,
+      scheduledAt: dueDate,
+      dueAt: dueDate,
+      subtype: patch.subtype ?? reminder.subtype,
+      note: typeof patch.note === 'string' ? patch.note : reminder.note,
+      status: reminder.completedAt ? 'done' : reminder.status === 'snoozed' ? 'snoozed' : 'pending',
       updatedAt: nowIso,
     };
     return updated;

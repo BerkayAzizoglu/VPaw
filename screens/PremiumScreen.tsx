@@ -129,16 +129,20 @@ function CheckPill() {
 export default function PremiumScreen({ onBack }: PremiumScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).premium;
+  const normalizeCardText = (value: string) =>
+    value
+      .replace(/Passport/gi, 'Health Card')
+      .replace(/Pasaport/gi, 'Saglik Karti');
 
   const features: Array<{ title: string; desc: string; icon: FeatureIcon; tall?: boolean }> = [
     { title: copy.features.unlimitedPetsTitle, desc: copy.features.unlimitedPetsDesc, icon: 'pets' },
     { title: copy.features.fullHealthTitle, desc: copy.features.fullHealthDesc, icon: 'shield' },
-    { title: copy.features.pdfPassportTitle, desc: copy.features.pdfPassportDesc, icon: 'passport' },
+    { title: normalizeCardText(copy.features.pdfPassportTitle), desc: normalizeCardText(copy.features.pdfPassportDesc), icon: 'passport' },
     { title: copy.features.aiTitle, desc: copy.features.aiDesc, icon: 'ai', tall: true },
     { title: copy.features.remindersTitle, desc: copy.features.remindersDesc, icon: 'reminder' },
   ];
 
-  const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: true, edgeWidth: 24, triggerDx: 70, maxDy: 30 });
+  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true });
 
   const comparisonRows: CompareRow[] = [
     { label: copy.table.petProfiles, free: copy.table.one, pro: copy.table.unlimited, proAccent: true },
