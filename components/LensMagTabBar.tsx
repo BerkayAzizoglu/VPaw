@@ -1,22 +1,19 @@
 /**
- * LensMagTabBar — fluid sliding-pill tab bar.
+ * LensMagTabBar — sliding pill tab bar.
  *
- * Interaction:
- *  • Tap          → navigate instantly
- *  • Hold + drag  → pill and active color follow finger in real-time,
- *                   icons swell with Gaussian magnification; release = navigate
+ * • Tap   → Pressable onPress → instant navigate  (reliable)
+ * • Drag  → PanResponder claims after 6 px movement → pill follows,
+ *           icons magnify, release → navigate  (smooth)
  *
- * Per-tab accent colors:
- *  • Home      → forest green  #3e6e47
- *  • Health    → warm red      #be3b2c
- *  • Reminders → amber         #b07812
- *  • Insights  → teal          #1a7ea6
+ * Alignment fix: uses gestureState.moveX − barPageX (measured absolute
+ * position) instead of locationX which is unreliable in nested views.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   PanResponder,
+  Pressable,
   StyleSheet,
   Text,
   View,
@@ -40,14 +37,9 @@ type IconComponent = React.ComponentType<{
   color: string;
   strokeWidth: number;
 }>;
-type TabDef = {
-  key: TabKey;
-  labelTr: string;
-  labelEn: string;
-  Icon: IconComponent;
-};
+type TabDef = { key: TabKey; labelTr: string; labelEn: string; Icon: IconComponent };
 
-// ─── Tab config ───────────────────────────────────────────────────────────────
+// ─── Config ───────────────────────────────────────────────────────────────────
 
 const TABS: TabDef[] = [
   { key: 'home',      labelTr: 'Ana Sayfa', labelEn: 'Home',      Icon: Home        },
@@ -56,38 +48,32 @@ const TABS: TabDef[] = [
   { key: 'insights',  labelTr: 'Analiz',    labelEn: 'Insights',  Icon: ChartSpline },
 ];
 
-// Per-tab accent: active icon color, inactive (muted), pill background
-const ACCENT: Record<TabKey, { active: string; inactive: string; pill: string }> = {
-  home:      { active: '#3e6e47', inactive: '#9db8a0', pill: '#e8f2ea' },
-  healthHub: { active: '#be3b2c', inactive: '#d4a09a', pill: '#fceeed' },
-  reminders: { active: '#b07812', inactive: '#c9a558', pill: '#fdf4e0' },
-  insights:  { active: '#1a7ea6', inactive: '#7ab4c8', pill: '#e6f3f8' },
-};
+const COLOR_ACTIVE   = '#47664a';
+const COLOR_INACTIVE = '#9a9c95';
+const PILL_BG        = '#e8f2ea';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+const BAR_HEIGHT  = 66;
+const BAR_MARGIN  = 16;
+const PILL_HEIGHT = 50;
+const PILL_RADIUS = 16;
+const PILL_INSET  = 6;
+const DRAG_THRESH = 6;
 
-const BAR_HEIGHT   = 66;
-const BAR_MARGIN   = 16;
-const PILL_HEIGHT  = 50;
-const PILL_RADIUS  = 16;
-const PILL_INSET   = 6;   // horizontal padding inside each tab slot
-const DRAG_THRESH  = 6;   // px before drag mode activates
-
-// ─── Module helpers ───────────────────────────────────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function getTabIndex(key: TabKey): number {
   return TABS.findIndex((t) => t.key === key);
+}
+
+function getPillX(tabIdx: number, tabSlot: number): number {
+  return tabIdx * tabSlot + PILL_INSET;
 }
 
 function gaussianScale(fingerX: number, tabIdx: number, tabSlot: number): number {
   const center = tabSlot * (tabIdx + 0.5);
   const dist   = Math.abs(fingerX - center);
   const sigma  = tabSlot * 0.60;
-  return 1 + 0.48 * Math.exp(-(dist * dist) / (2 * sigma * sigma));
-}
-
-function pillX(tabIdx: number, tabSlot: number): number {
-  return tabIdx * tabSlot + PILL_INSET;
+  return 1 + 0.45 * Math.exp(-(dist * dist) / (2 * sigma * sigma));
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -98,37 +84,28 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
   const tabSlot  = barWidth / TABS.length;
 
   // ── Animated values ─────────────────────────────────────────────────────────
-
-  // Pill X: JS-driven so toValue can depend on runtime tabSlot
-  const pillXAnim = useRef(
-    new Animated.Value(pillX(getTabIndex(activeTab), tabSlot)),
-  ).current;
-
-  // Per-tab icon scale: native-driver (pure transform)
+  const pillXAnim     = useRef(new Animated.Value(getPillX(getTabIndex(activeTab), tabSlot))).current;
   const tabScaleAnims = useRef(TABS.map(() => new Animated.Value(1))).current;
 
   // ── State ────────────────────────────────────────────────────────────────────
-
-  // Null while idle; set to dragged-over tab during live drag preview
+  // Null = idle (show activeTab). Non-null = dragging preview.
   const [previewTab, setPreviewTab] = useState<TabKey | null>(null);
   const displayTab = previewTab ?? activeTab;
 
-  // ── Mutable refs ─────────────────────────────────────────────────────────────
-
+  // ── Refs ─────────────────────────────────────────────────────────────────────
   const isDragging       = useRef(false);
-  const hasMoved         = useRef(false);
   const prevHoveredIdx   = useRef(-1);
+  const barPageX         = useRef(BAR_MARGIN); // measured absolute X of bar on screen
 
-  // Always-fresh values for use inside PanResponder callbacks
-  const latestRef = useRef({ tabSlot, barWidth, onTabPress, activeTab });
-  latestRef.current = { tabSlot, barWidth, onTabPress, activeTab };
+  // Always-fresh values for PanResponder closures
+  const latestRef = useRef({ tabSlot, barWidth, onTabPress, activeTab, barPageX });
+  latestRef.current = { tabSlot, barWidth, onTabPress, activeTab, barPageX };
 
-  // ── Pill sync when parent navigates ─────────────────────────────────────────
-
+  // ── Pill sync when activeTab changes externally ──────────────────────────────
   useEffect(() => {
     if (isDragging.current) return;
     Animated.spring(pillXAnim, {
-      toValue: pillX(getTabIndex(activeTab), tabSlot),
+      toValue: getPillX(getTabIndex(activeTab), tabSlot),
       useNativeDriver: false,
       tension: 260,
       friction: 24,
@@ -136,12 +113,12 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, tabSlot]);
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
+  // ── Internal helpers ─────────────────────────────────────────────────────────
 
-  function snapPillTo(idx: number, fast: boolean) {
+  function snapPill(tabIdx: number, fast: boolean) {
     const { tabSlot: ts } = latestRef.current;
     Animated.spring(pillXAnim, {
-      toValue: pillX(idx, ts),
+      toValue: getPillX(tabIdx, ts),
       useNativeDriver: false,
       tension: fast ? 380 : 260,
       friction: fast ? 28 : 24,
@@ -166,46 +143,50 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
     });
   }
 
-  // ── PanResponder (created once) ───────────────────────────────────────────────
+  // ── PanResponder ─────────────────────────────────────────────────────────────
+  // Uses onMoveShouldSetPanResponder so taps fall through to Pressable children.
+  // Uses gestureState.moveX − barPageX for correct absolute-to-relative mapping.
 
   const panResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => true,
+      onStartShouldSetPanResponder:        () => false,  // let taps reach Pressable
+      onMoveShouldSetPanResponder:         (_, gs) => Math.abs(gs.dx) > DRAG_THRESH,
+      onMoveShouldSetPanResponderCapture:  (_, gs) => Math.abs(gs.dx) > DRAG_THRESH,
 
-      onPanResponderGrant: () => {
-        isDragging.current     = false;
-        hasMoved.current       = false;
+      onPanResponderGrant: (_, gestureState) => {
+        isDragging.current     = true;
         prevHoveredIdx.current = -1;
+
+        // Initialise scales at where the gesture STARTED
+        const { barPageX: bpx, barWidth: bw, tabSlot: ts } = latestRef.current;
+        const startX = Math.max(0, Math.min(gestureState.x0 - bpx.current, bw));
+        applyScales(startX);
+
+        const startIdx = Math.min(Math.floor(startX / ts), TABS.length - 1);
+        prevHoveredIdx.current = startIdx;
+        setPreviewTab(TABS[startIdx].key);
+        snapPill(startIdx, true);
       },
 
-      onPanResponderMove: (evt, gestureState) => {
-        const { barWidth: bw, tabSlot: ts } = latestRef.current;
-        const x   = Math.max(0, Math.min(evt.nativeEvent.locationX, bw));
+      onPanResponderMove: (_, gestureState) => {
+        const { barPageX: bpx, barWidth: bw, tabSlot: ts } = latestRef.current;
+        const x   = Math.max(0, Math.min(gestureState.moveX - bpx.current, bw));
         const idx = Math.min(Math.floor(x / ts), TABS.length - 1);
 
-        // Activate drag mode after threshold
-        if (!hasMoved.current && Math.abs(gestureState.dx) > DRAG_THRESH) {
-          hasMoved.current   = true;
-          isDragging.current = true;
-        }
+        applyScales(x);
 
-        if (isDragging.current) {
-          applyScales(x);
-
-          if (idx !== prevHoveredIdx.current) {
-            prevHoveredIdx.current = idx;
-            setPreviewTab(TABS[idx].key);
-            snapPillTo(idx, true);
-            hap.select(); // discrete tick per tab crossing
-          }
+        if (idx !== prevHoveredIdx.current) {
+          prevHoveredIdx.current = idx;
+          setPreviewTab(TABS[idx].key);
+          snapPill(idx, true);
+          hap.select();
         }
       },
 
-      onPanResponderRelease: (evt) => {
-        const { barWidth: bw, tabSlot: ts, onTabPress: press, activeTab: active } =
+      onPanResponderRelease: (_, gestureState) => {
+        const { barPageX: bpx, barWidth: bw, tabSlot: ts, onTabPress: press, activeTab: active } =
           latestRef.current;
-        const x   = Math.max(0, Math.min(evt.nativeEvent.locationX, bw));
+        const x   = Math.max(0, Math.min(gestureState.moveX - bpx.current, bw));
         const idx = Math.min(Math.floor(x / ts), TABS.length - 1);
         const tab = TABS[idx]?.key ?? active;
 
@@ -213,10 +194,9 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
         setPreviewTab(null);
         prevHoveredIdx.current = -1;
         isDragging.current     = false;
-        hasMoved.current       = false;
 
-        snapPillTo(getTabIndex(tab), false);
-        hap.light(); // confirm navigation
+        snapPill(getTabIndex(tab), false);
+        hap.light();
         press(tab);
       },
 
@@ -225,9 +205,8 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
         setPreviewTab(null);
         prevHoveredIdx.current = -1;
         isDragging.current     = false;
-        hasMoved.current       = false;
         const { activeTab: active } = latestRef.current;
-        snapPillTo(getTabIndex(active), false);
+        snapPill(getTabIndex(active), false);
       },
     }),
   ).current;
@@ -237,8 +216,16 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
   const pillW = tabSlot - PILL_INSET * 2;
 
   return (
-    <View style={styles.tabBar} {...panResponder.panHandlers}>
-
+    <View
+      style={styles.tabBar}
+      onLayout={(e) => {
+        // Measure absolute screen X so PanResponder can convert moveX → relative
+        e.target.measure((_x, _y, _w, _h, pageX) => {
+          barPageX.current = pageX;
+        });
+      }}
+      {...panResponder.panHandlers}
+    >
       {/* ── Sliding pill (behind icons) ──────────────────────────────────── */}
       <Animated.View
         pointerEvents="none"
@@ -246,7 +233,6 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
           styles.pill,
           {
             width: pillW,
-            backgroundColor: ACCENT[displayTab].pill,
             transform: [{ translateX: pillXAnim }],
           },
         ]}
@@ -255,7 +241,7 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
       {/* ── Tab items ────────────────────────────────────────────────────── */}
       {TABS.map((tab, i) => {
         const isActive = displayTab === tab.key;
-        const color    = isActive ? ACCENT[tab.key].active : ACCENT[tab.key].inactive;
+        const color    = isActive ? COLOR_ACTIVE : COLOR_INACTIVE;
         const Icon     = tab.Icon;
 
         return (
@@ -263,16 +249,24 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
             key={tab.key}
             style={[styles.tabItem, { transform: [{ scale: tabScaleAnims[i] }] }]}
           >
-            <Icon size={22} color={color} strokeWidth={isActive ? 2.5 : 2} />
-            <Text style={[styles.tabText, { color }, isActive && styles.tabTextBold]}>
-              {locale === 'tr' ? tab.labelTr : tab.labelEn}
-            </Text>
-            <View
-              style={[
-                styles.tabDot,
-                { backgroundColor: isActive ? ACCENT[tab.key].active : 'transparent' },
-              ]}
-            />
+            <Pressable
+              style={styles.tabPressable}
+              onPress={() => {
+                hap.light();
+                onTabPress(tab.key);
+              }}
+            >
+              <Icon size={22} color={color} strokeWidth={isActive ? 2.5 : 2} />
+              <Text style={[styles.tabText, { color }, isActive && styles.tabTextBold]}>
+                {locale === 'tr' ? tab.labelTr : tab.labelEn}
+              </Text>
+              <View
+                style={[
+                  styles.tabDot,
+                  { backgroundColor: isActive ? COLOR_ACTIVE : 'transparent' },
+                ]}
+              />
+            </Pressable>
           </Animated.View>
         );
       })}
@@ -299,7 +293,6 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
-    overflow: 'hidden',  // pill stays within rounded bar
   },
 
   pill: {
@@ -308,15 +301,23 @@ const styles = StyleSheet.create({
     left: 0,
     height: PILL_HEIGHT,
     borderRadius: PILL_RADIUS,
+    backgroundColor: PILL_BG,
   },
 
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+    zIndex: 1,
+  },
+
+  tabPressable: {
+    alignItems: 'center',
+    justifyContent: 'center',
     gap: 3,
     paddingTop: 6,
-    zIndex: 1,  // above pill
+    paddingBottom: 2,
+    paddingHorizontal: 8,
   },
 
   tabText: {
