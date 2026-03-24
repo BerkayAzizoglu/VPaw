@@ -27,6 +27,7 @@ import HealthHubScreen, {
   type HealthHubDomainOverview,
 } from '../screens/HealthHubScreen';
 import LensMagTabBar from './LensMagTabBar';
+import SuccessOverlay, { type SuccessOverlayHandle } from './SuccessOverlay';
 import { fetchPetProfilesFromCloud, savePetProfilesToCloud } from '../lib/petProfilesRepo';
 import {
   isSameMedicalEvent,
@@ -693,6 +694,7 @@ export default function AuthGate() {
   const [notificationReadById, setNotificationReadById] = useState<Record<string, boolean>>({});
   const [notificationInbox, setNotificationInbox] = useState<HealthNotification[]>([]);
   const [notificationLastTriggeredByKey, setNotificationLastTriggeredByKey] = useState<NotificationLastTriggeredByKey>({});
+  const successOverlayRef = useRef<SuccessOverlayHandle>(null);
   const activePetRef = useRef<string>('');
   const petLockRef = useRef(false);
   const reminderSyncInFlightRef = useRef(false);
@@ -2630,6 +2632,7 @@ export default function AuthGate() {
     const markReminderDone = (petId: string, reminderId: string) => {
       hap.success();
       setRemindersWithNotificationSync((prev) => markReminderCompleted(prev, petId, reminderId).next);
+      successOverlayRef.current?.show();
     };
 
     const completedWithoutOutcomes = [...vetVisits]
@@ -3094,6 +3097,8 @@ export default function AuthGate() {
         locale={locale}
         onTabPress={(tab) => { setPrimaryTab(tab); setRoute(tab); }}
       />
+
+      <SuccessOverlay ref={successOverlayRef} />
     </View>
   );
   if (loading || !petHydrated || !petLockHydrated) {
