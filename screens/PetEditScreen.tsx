@@ -1,8 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { useFonts } from 'expo-font';
-import { Nunito_600SemiBold } from '@expo-google-fonts/nunito';
-import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import {
   Alert,
   Image,
@@ -368,7 +365,6 @@ function sortAlpha(items: string[]) {
 }
 
 export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, onCreated }: PetEditScreenProps) {
-  const [fontsLoaded] = useFonts({ Nunito_600SemiBold, Montserrat_700Bold });
   const { locale } = useLocale();
   const isTr = locale === 'tr';
   const [draft, setDraft] = useState<PetProfile>(pet);
@@ -547,8 +543,8 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
           <View style={styles.brandWrap}>
             <SvgUri uri={logoUri} width={24} height={24} />
             <View>
-              <Text style={[styles.brandTitle, fontsLoaded && styles.brandTitleNunito]}>V-Paw</Text>
-              <Text style={[styles.brandSub, fontsLoaded && styles.brandSubNunito]}>BY VIRNELO</Text>
+              <Text style={styles.brandTitle}>V-Paw</Text>
+              <Text style={styles.brandSub}>BY VIRNELO</Text>
             </View>
           </View>
 
@@ -842,18 +838,12 @@ const styles = StyleSheet.create({
     color: '#2d2d2d',
     fontWeight: '700',
   },
-  brandTitleNunito: {
-    fontFamily: 'Montserrat_700Bold',
-  },
   brandSub: {
     fontSize: 10,
     lineHeight: 12,
     color: '#8d8d8d',
     letterSpacing: 1.7,
     fontWeight: '600',
-  },
-  brandSubNunito: {
-    fontFamily: 'Nunito_600SemiBold',
   },
   backBtn: {
     height: 32,

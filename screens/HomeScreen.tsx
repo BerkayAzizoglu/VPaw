@@ -14,9 +14,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { useFonts } from 'expo-font';
-import { Nunito_600SemiBold } from '@expo-google-fonts/nunito';
-import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import { Bell, PawPrint, Pencil } from 'lucide-react-native';
@@ -201,10 +198,6 @@ export default function HomeScreen({
   const { locale } = useLocale();
   const { settings } = useAppSettings();
   const isTr = locale === 'tr';
-  const [fontsLoaded] = useFonts({
-    Nunito_600SemiBold,
-    Montserrat_700Bold,
-  });
 
   const enterOpacity = useRef(new Animated.Value(0)).current;
   const enterTranslateY = useRef(new Animated.Value(14)).current;
@@ -561,8 +554,8 @@ export default function HomeScreen({
           <View style={styles.brandWrap}>
             <SvgUri uri={logoUri} width={24} height={24} />
             <View>
-              <Text style={[styles.brandTitle, fontsLoaded && styles.brandTitleNunito]}>V-Paw</Text>
-              <Text style={[styles.brandSub, fontsLoaded && styles.brandSubNunito]}>BY VIRNELO</Text>
+              <Text style={styles.brandTitle}>V-Paw</Text>
+              <Text style={styles.brandSub}>BY VIRNELO</Text>
             </View>
           </View>
 
@@ -935,18 +928,12 @@ const styles = StyleSheet.create({
     color: '#2d2d2d',
     fontWeight: '700',
   },
-  brandTitleNunito: {
-    fontFamily: 'Montserrat_700Bold',
-  },
   brandSub: {
     fontSize: 10,
     lineHeight: 12,
     color: '#8d8d8d',
     letterSpacing: 1.7,
     fontWeight: '600',
-  },
-  brandSubNunito: {
-    fontFamily: 'Nunito_600SemiBold',
   },
   topActions: {
     flexDirection: 'row',
