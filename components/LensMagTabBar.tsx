@@ -50,7 +50,11 @@ const TABS: TabDef[] = [
 
 const COLOR_ACTIVE   = '#47664a';
 const COLOR_INACTIVE = '#9a9c95';
-const PILL_BG        = '#e8f2ea';
+
+// Glass lens appearance
+const BAR_BG         = '#f2efeb';   // warm cream — gives "tray" feel
+const PILL_BG        = 'rgba(255, 255, 255, 0.92)'; // frosted white lens
+const PILL_BORDER    = 'rgba(0, 0, 0, 0.09)';       // hairline border
 
 const BAR_HEIGHT  = 66;
 const BAR_MARGIN  = 16;
@@ -284,13 +288,13 @@ const styles = StyleSheet.create({
     bottom: 20,
     height: BAR_HEIGHT,
     borderRadius: 24,
-    backgroundColor: '#ffffff',
+    backgroundColor: BAR_BG,           // cream tray
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     shadowColor: '#30332e',
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
+    shadowOpacity: 0.13,
+    shadowRadius: 22,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
   },
@@ -301,7 +305,15 @@ const styles = StyleSheet.create({
     left: 0,
     height: PILL_HEIGHT,
     borderRadius: PILL_RADIUS,
-    backgroundColor: PILL_BG,
+    backgroundColor: PILL_BG,          // frosted white glass
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: PILL_BORDER,
+    // Subtle elevation so the lens "floats" over the tray
+    shadowColor: '#000',
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
   },
 
   tabItem: {
