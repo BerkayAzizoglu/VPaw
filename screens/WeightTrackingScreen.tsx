@@ -251,6 +251,18 @@ export default function WeightTrackingScreen({
 
   const safeEntries = entries.length > 0 ? entries : [{ label: copy.todayFallback, value: reference.min, date: copy.todayFallback, change: copy.stableFallback }];
 
+  const MAX_X_LABELS = 5;
+  const visibleLabelIndices = useMemo(() => {
+    const n = safeEntries.length;
+    if (n <= MAX_X_LABELS) return new Set(Array.from({ length: n }, (_, i) => i));
+    const result = new Set<number>();
+    result.add(0);
+    result.add(n - 1);
+    const step = (n - 1) / (MAX_X_LABELS - 1);
+    for (let i = 1; i < MAX_X_LABELS - 1; i++) result.add(Math.round(i * step));
+    return result;
+  }, [safeEntries.length]);
+
   const yBounds = useMemo(() => {
     const values = safeEntries.map((e) => e.value);
     values.push(reference.min, reference.max);
@@ -780,7 +792,9 @@ export default function WeightTrackingScreen({
             <View style={styles.xLabelsRow}>
               {safeEntries.map((point, idx) => (
                 <Pressable key={`${point.label}-${idx}`} onPress={() => setSelectedIndex(idx)} style={styles.xLabelBtn}>
-                  <Text style={[styles.xLabel, selectedIndex === idx && styles.xLabelActive]}>{point.label}</Text>
+                  <Text style={[styles.xLabel, selectedIndex === idx && styles.xLabelActive]}>
+                    {visibleLabelIndices.has(idx) || selectedIndex === idx ? point.label : ''}
+                  </Text>
                 </Pressable>
               ))}
             </View>

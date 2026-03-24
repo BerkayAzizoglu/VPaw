@@ -129,15 +129,10 @@ function CheckPill() {
 export default function PremiumScreen({ onBack }: PremiumScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).premium;
-  const normalizeCardText = (value: string) =>
-    value
-      .replace(/Passport/gi, 'Health Card')
-      .replace(/Pasaport/gi, 'Saglik Karti');
-
   const features: Array<{ title: string; desc: string; icon: FeatureIcon; tall?: boolean }> = [
     { title: copy.features.unlimitedPetsTitle, desc: copy.features.unlimitedPetsDesc, icon: 'pets' },
     { title: copy.features.fullHealthTitle, desc: copy.features.fullHealthDesc, icon: 'shield' },
-    { title: normalizeCardText(copy.features.pdfPassportTitle), desc: normalizeCardText(copy.features.pdfPassportDesc), icon: 'passport' },
+    { title: copy.features.pdfPassportTitle, desc: copy.features.pdfPassportDesc, icon: 'passport' },
     { title: copy.features.aiTitle, desc: copy.features.aiDesc, icon: 'ai', tall: true },
     { title: copy.features.remindersTitle, desc: copy.features.remindersDesc, icon: 'reminder' },
   ];

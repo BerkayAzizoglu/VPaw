@@ -19,6 +19,7 @@ import RemindersScreen from '../screens/RemindersScreen';
 import InsightsScreen from '../screens/InsightsScreen';
 import DocumentsScreen from '../screens/DocumentsScreen';
 import NotificationCenterScreen from '../screens/NotificationCenterScreen';
+import HealthRecordsScreen from '../screens/HealthRecordsScreen';
 import HealthHubScreen, {
   type AddHealthRecordPayload,
   type AddHealthRecordType,
@@ -36,7 +37,7 @@ import {
   toVetVisitStatus,
   toWeightPointFromLegacyEvent,
 } from '../lib/healthEventDedup';
-import { getHealthCardSummary, getVaccinesForUI, getVetVisitsForUI } from '../lib/healthEventAdapters';
+import { getHealthCardSummary, getHealthRecordsForUI, getVaccinesForUI, getVetVisitsForUI } from '../lib/healthEventAdapters';
 import { getAllDocumentsForPet } from '../lib/healthDocumentsVault';
 import {
   buildTriggeredNotifications,
@@ -811,13 +812,6 @@ export default function AuthGate() {
     }
   }, [route]);
 
-  useEffect(() => {
-    if (route !== 'healthRecords') return;
-    setPrimaryTab('healthHub');
-    setHealthHubInitialCategory('record');
-    setHealthHubCategoryResetKey((prev) => prev + 1);
-    setRoute('healthHub');
-  }, [route]);
 
   const setPetProfilesWithPersist = (updater: Record<string, PetProfile> | ((prev: Record<string, PetProfile>) => Record<string, PetProfile>)) => {
     setPetProfiles((prev) => {
@@ -1671,14 +1665,6 @@ export default function AuthGate() {
   }, [activePetId, petLockEnabled]);
 
   const openSubRoute = (target: 'vaccinations' | 'healthRecords' | 'vetVisits', backTo: AppRoute) => {
-    if (target === 'healthRecords') {
-      setPrimaryTab('healthHub');
-      setHealthHubInitialCategory('record');
-      setHealthHubCategoryResetKey((prev) => prev + 1);
-      setHealthHubCreatePreset(null);
-      setRoute('healthHub');
-      return;
-    }
     setSubBackRoute(backTo);
     setVetVisitCreatePreset(null);
     setRoute(target);
@@ -1942,6 +1928,10 @@ export default function AuthGate() {
   const vetVisitsBridge = useMemo(
     () => getVetVisitsForUI(activePetId, vetVisitsByPet, medicalEventsByPet, healthEventsByPet, petProfiles[activePetId]),
     [activePetId, vetVisitsByPet, medicalEventsByPet, healthEventsByPet, petProfiles],
+  );
+  const healthRecordsForUI = useMemo(
+    () => getHealthRecordsForUI(activePetId, medicalEventsByPet, healthEventsByPet, petProfiles[activePetId]),
+    [activePetId, medicalEventsByPet, healthEventsByPet, petProfiles],
   );
   const healthCardSummary = useMemo(
     () => getHealthCardSummary(
@@ -3242,7 +3232,7 @@ export default function AuthGate() {
       <WeightTrackingScreen
         onBack={() => setRoute(petProfileBackRoute)}
         backPreview={renderBackPreview(petProfileBackRoute)}
-        onOpenHealthRecords={() => openHealthHubWithCategory('record')}
+        onOpenHealthRecords={() => openSubRoute('healthRecords', 'home')}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'petProfile')}
         petName={activePet.name}
         petType={activePet.petType}
@@ -3418,7 +3408,7 @@ export default function AuthGate() {
         healthCardSummary={healthCardSummary}
         onOpenVaccinations={() => openSubRoute('vaccinations', 'passport')}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'passport')}
-        onOpenHealthRecords={() => openHealthHubWithCategory('record')}
+        onOpenHealthRecords={() => openSubRoute('healthRecords', 'home')}
         onOpenWeight={() => openPetProfile(activePetId, 'passport')}
         onOpenPremium={() => setRoute('premium')}
         onExportPdf={handleExportPetPassportPdf}
@@ -3465,12 +3455,24 @@ export default function AuthGate() {
         onAddRecord={handleAddHealthRecord}
         onDeleteRecord={handleDeleteHealthRecord}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'healthHub')}
-        onOpenHealthRecords={() => openHealthHubWithCategory('record')}
+        onOpenHealthRecords={() => openSubRoute('healthRecords', 'healthHub')}
         onOpenVaccines={() => openSubRoute('vaccinations', 'healthHub')}
         onOpenWeightTracking={() => openPetProfile(activePetId, 'healthHub')}
         onOpenDocuments={() => openDocuments('healthHub')}
         documentsPreview={documentsVaultPreview}
       />,
+    );
+  }
+
+  if (route === 'healthRecords') {
+    return (
+      <HealthRecordsScreen
+        onBack={() => setRoute(subBackRoute ?? 'healthHub')}
+        backPreview={renderBackPreview(subBackRoute ?? 'healthHub')}
+        recordsData={healthRecordsForUI ?? undefined}
+        status="ready"
+        onAddRecord={() => openHealthHubCreate('diagnosis', 'record')}
+      />
     );
   }
 
@@ -3612,7 +3614,7 @@ export default function AuthGate() {
       }}
       onOpenHealthRecords={(petId) => {
         if (petId) setActivePetWithPersist(petId);
-        openHealthHubWithCategory('record');
+        openSubRoute('healthRecords', 'home');
       }}
       onOpenVetVisits={(petId) => {
         if (petId) setActivePetWithPersist(petId);
