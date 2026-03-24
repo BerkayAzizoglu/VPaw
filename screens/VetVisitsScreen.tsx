@@ -583,8 +583,8 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
     const visitDateIso = parseInputDate(visitDate);
     if (!visitDateIso) {
       Alert.alert(
-        isTr ? 'Gecersiz tarih' : 'Invalid date',
-        isTr ? 'Tarihi YYYY-AA-GG formatinda girin.' : 'Please enter date as YYYY-MM-DD.',
+        isTr ? 'Geçersiz tarih' : 'Invalid date',
+        isTr ? 'Tarihi YYYY-AA-GG formatında girin.' : 'Please enter date as YYYY-MM-DD.',
       );
       return;
     }
@@ -615,8 +615,8 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
     });
     if (hasInvalidStructuredSelection) {
       Alert.alert(
-        isTr ? 'Eksik secim' : 'Missing selection',
-        isTr ? 'Secili islemler icin kategori secin. Diger sectiyseniz kisa bir baslik yazin.' : 'Select a category for each chosen action. If you picked Other, add a short title.',
+        isTr ? 'Eksik seçim' : 'Missing selection',
+        isTr ? 'Seçili işlemler için kategori seçin. Diğer seçtiyseniz kısa bir başlık yazın.' : 'Select a category for each chosen action. If you picked Other, add a short title.',
       );
       return;
     }
@@ -672,24 +672,44 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
   const plannedVisits = useMemo(() => visitsData.filter((v) => v.date > today), [visitsData, today]);
   const nextVisit = plannedVisits[0] ?? null;
 
-  const totalAmount = visitsData.reduce((sum, item) => sum + (item.amount ?? 0), 0);
   const totalCurrency = visitsData.find((v) => v.currency)?.currency ?? 'TL';
   const visitsCountText = isTr ? `${visitsData.length} Ziyaret` : `${visitsData.length} Visits`;
-  const totalCostText = totalAmount > 0 ? `${totalAmount.toLocaleString('tr-TR')} ${totalCurrency}` : copy.totalCost;
+
+  const currentYear = new Date().getFullYear();
+  const prevYear = currentYear - 1;
+  const annualAmount = visitsData
+    .filter((v) => v.date.startsWith(String(currentYear)))
+    .reduce((sum, v) => sum + (v.amount ?? 0), 0);
+  const prevYearAmount = visitsData
+    .filter((v) => v.date.startsWith(String(prevYear)))
+    .reduce((sum, v) => sum + (v.amount ?? 0), 0);
+  const totalAmount = visitsData.reduce((sum, item) => sum + (item.amount ?? 0), 0);
+
+  const yearChangeLabel = (() => {
+    if (prevYearAmount <= 0 && annualAmount <= 0) return isTr ? `BU YIL` : 'THIS YEAR';
+    if (prevYearAmount <= 0) return isTr ? `${currentYear}` : String(currentYear);
+    const pct = Math.round(((annualAmount - prevYearAmount) / prevYearAmount) * 100);
+    const arrow = pct >= 0 ? '↑' : '↓';
+    return isTr
+      ? `${arrow} %${Math.abs(pct)} GEÇEN YILA GÖRE`
+      : `${arrow} ${Math.abs(pct)}% VS LAST YEAR`;
+  })();
+
+  const totalCostText = annualAmount > 0 ? `${annualAmount.toLocaleString('tr-TR')} ${totalCurrency}` : copy.totalCost;
 
   const screenState = status;
   const showMainContent = screenState === 'ready';
   const showAddButton = screenState !== 'loading' && screenState !== 'error';
   const stateTitle = screenState === 'loading'
-    ? (isTr ? 'Ziyaretler yukleniyor' : 'Loading vet visits')
+    ? (isTr ? 'Ziyaretler yükleniyor' : 'Loading vet visits')
     : screenState === 'empty'
-      ? (isTr ? 'Henuz ziyaret kaydi yok' : 'No vet visits yet')
-      : (isTr ? 'Ziyaret kayitlari alinamadi' : 'Could not load vet visits');
+      ? (isTr ? 'Henüz ziyaret kaydı yok' : 'No vet visits yet')
+      : (isTr ? 'Ziyaret kayıtları alınamadı' : 'Could not load vet visits');
   const stateBody = screenState === 'loading'
-    ? (isTr ? 'Gecmis kayitlar hazirlaniyor, lutfen bekleyin.' : 'Preparing your medical history, please wait.')
+    ? (isTr ? 'Geçmiş kayıtlar hazırlanıyor, lütfen bekleyin.' : 'Preparing your medical history, please wait.')
     : screenState === 'empty'
-      ? (isTr ? 'Ilk veteriner ziyaretinizi eklediginizde bu alan otomatik olarak dolacaktir.' : 'This area will fill automatically once your first visit is added.')
-      : (isTr ? 'Baglantiyi kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
+      ? (isTr ? 'İlk veteriner ziyaretinizi eklediğinizde bu alan otomatik olarak dolacaktır.' : 'This area will fill automatically once your first visit is added.')
+      : (isTr ? 'Bağlantıyı kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
 
   const swipePanResponder = useEdgeSwipeBack({
     onBack,
@@ -773,8 +793,8 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
               <View style={styles.statsGrid}>
                 <View style={styles.statGridCard}>
                   <Text style={styles.statGridLabel}>{isTr ? 'YILLIK HARCAMA' : 'ANNUAL SPEND'}</Text>
-                  <Text style={styles.statGridValue}>{totalAmount > 0 ? `${totalAmount.toLocaleString('tr-TR')} ${totalCurrency}` : copy.totalCost}</Text>
-                  <Text style={[styles.statGridSub, styles.statGridSubGreen]}>{isTr ? '↑ %12 GEÇEN YILA GÖRE' : '↑ 12% VS LAST YEAR'}</Text>
+                  <Text style={styles.statGridValue}>{totalCostText}</Text>
+                  <Text style={[styles.statGridSub, annualAmount !== prevYearAmount && prevYearAmount > 0 ? styles.statGridSubGreen : null]}>{yearChangeLabel}</Text>
                 </View>
                 <View style={styles.statGridCard}>
                   <Text style={styles.statGridLabel}>{isTr ? 'TOPLAM ZİYARET' : 'TOTAL VISITS'}</Text>
@@ -811,7 +831,7 @@ export default function VetVisitsScreen({ onBack, backPreview, createPreset, onA
                 <View style={styles.modalSection}>
                   <Text style={styles.modalSectionTitle}>{isTr ? 'Ziyaret Bilgisi' : 'Visit info'}</Text>
                   <Text style={styles.modalHelperText}>
-                    {isTr ? 'Veteriner gorusmesinin tarihini ve ana nedenini secin.' : 'Set the encounter date and the primary reason for this visit.'}
+                    {isTr ? 'Veteriner görüşmesinin tarihini ve ana nedenini seçin.' : 'Set the encounter date and the primary reason for this visit.'}
                   </Text>
 
                   <Text style={styles.modalLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>

@@ -38,6 +38,7 @@ type RemindersScreenProps = {
   locale?: 'en' | 'tr';
   onComplete?: (id: string) => void;
   onDeleteReminder?: (id: string) => void;
+  onOpenNotifications?: () => void;
   onCreate?: (payload: {
     petId: string;
     subtype: ReminderSubtype;
@@ -276,6 +277,7 @@ export default function RemindersScreen({
   locale = 'en',
   onComplete,
   onDeleteReminder,
+  onOpenNotifications,
   onCreate,
 }: RemindersScreenProps) {
   const isTr = locale === 'tr';
@@ -366,14 +368,27 @@ export default function RemindersScreen({
 
         {/* ── Header ── */}
         <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <View>
+          <View style={{ flex: 1 }}>
             <Text style={styles.headerLabel}>{isTr ? 'PLANLAMA' : 'PLANNING'}</Text>
             <Text style={styles.headerTitle}>{isTr ? 'Hatırlatmalar' : 'Reminders'}</Text>
           </View>
-          <Pressable style={styles.addPill} onPress={openCreate}>
-            <Icon kind="add" size={15} color="#fff" />
-            <Text style={styles.addPillText}>{isTr ? 'Ekle' : 'Add'}</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            {onOpenNotifications ? (
+              <Pressable style={styles.notifBtn} onPress={onOpenNotifications} hitSlop={8}>
+                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+                  <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="#5d605a" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d="M13.73 21a2 2 0 01-3.46 0" stroke="#5d605a" strokeWidth={1.9} strokeLinecap="round" />
+                </Svg>
+                {overdue.length > 0 ? (
+                  <View style={styles.notifDot} />
+                ) : null}
+              </Pressable>
+            ) : null}
+            <Pressable style={styles.addPill} onPress={openCreate}>
+              <Icon kind="add" size={15} color="#fff" />
+              <Text style={styles.addPillText}>{isTr ? 'Ekle' : 'Add'}</Text>
+            </Pressable>
+          </View>
         </Animated.View>
 
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
@@ -613,6 +628,30 @@ const styles = StyleSheet.create({
     color: '#30332e',
     letterSpacing: -0.8,
     lineHeight: 34,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  notifBtn: {
+    width: 38, height: 38,
+    backgroundColor: '#fff',
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.07)',
+    position: 'relative',
+  },
+  notifDot: {
+    position: 'absolute',
+    top: 7, right: 7,
+    width: 7, height: 7,
+    borderRadius: 4,
+    backgroundColor: '#c05050',
+    borderWidth: 1.5,
+    borderColor: '#fff',
   },
   addPill: {
     height: 38,

@@ -10,13 +10,13 @@ import {
   View,
 } from 'react-native';
 import {
-  Bell,
   ChevronRight,
   ClipboardList,
   FileText,
   Scale,
   Stethoscope,
   Syringe,
+  TrendingUp,
 } from 'lucide-react-native';
 
 // ─── Colour palette (matches reference design system) ────────────────────────
@@ -36,14 +36,12 @@ const C = {
   iconVet: '#edffe3',
   iconRecords: '#ede8f5',
   iconVaccines: '#cbebc8',
-  iconReminders: '#dff0e8',
   iconWeight: '#e3eef8',
   iconDocuments: '#f5ede3',
   // category icon foregrounds
   fgVet: '#3a6e45',
   fgRecords: '#5a4a7a',
   fgVaccines: '#3a6a3a',
-  fgReminders: '#3a6a56',
   fgWeight: '#3a4e7a',
   fgDocuments: '#7a5a3a',
   // timeline type accents
@@ -106,7 +104,6 @@ type HealthHubScreenProps = {
   onOpenVetVisits?: () => void;
   onOpenHealthRecords?: () => void;
   onOpenVaccines?: () => void;
-  onOpenReminders?: () => void;
   onOpenWeightTracking?: () => void;
   onOpenDocuments?: () => void;
   domainOverview?: HealthHubDomainOverview;
@@ -152,6 +149,11 @@ function timelineTypeAccent(type: Exclude<HealthHubCategory, 'all'>) {
 
 const RECORD_TYPES: AddHealthRecordType[] = ['vaccine', 'diagnosis', 'procedure', 'prescription', 'test'];
 
+function fmtShort(n: number): string {
+  if (n >= 1000) return (n / 1000).toFixed(1).replace('.0', '') + 'k';
+  return n.toLocaleString('tr-TR');
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function HealthHubScreen({
   summary,
@@ -165,7 +167,6 @@ export default function HealthHubScreen({
   onOpenVetVisits,
   onOpenHealthRecords,
   onOpenVaccines,
-  onOpenReminders,
   onOpenWeightTracking,
   onOpenDocuments,
   domainOverview,
@@ -248,15 +249,6 @@ export default function HealthHubScreen({
         overview: domainOverview?.vaccines,
       },
       {
-        key: 'reminders',
-        title: isTr ? 'Hatırlatıcılar' : 'Reminders',
-        subtitle: isTr ? 'Bir sonraki aksiyonlar' : 'Upcoming tasks & alerts',
-        icon: <Bell size={22} color={C.fgReminders} />,
-        iconBg: C.iconReminders,
-        onPress: onOpenReminders,
-        overview: domainOverview?.reminders,
-      },
-      {
         key: 'weight',
         title: isTr ? 'Kilo Takibi' : 'Weight Tracking',
         subtitle: isTr ? 'Trend ve değişim analizi' : 'Trends & body condition',
@@ -275,7 +267,7 @@ export default function HealthHubScreen({
         overview: domainOverview?.documents,
       },
     ],
-    [domainOverview, isTr, onOpenDocuments, onOpenHealthRecords, onOpenReminders, onOpenVaccines, onOpenVetVisits, onOpenWeightTracking],
+    [domainOverview, isTr, onOpenDocuments, onOpenHealthRecords, onOpenVaccines, onOpenVetVisits, onOpenWeightTracking],
   );
 
   // ── form helpers ──
@@ -302,81 +294,88 @@ export default function HealthHubScreen({
 
         {/* ── HEADER ── */}
         <Animated.View style={[s.headerRow, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <View>
-            <Text style={s.headerLabel}>{isTr ? 'SAĞLIK KAYITLARI' : 'CARE RECORDS'}</Text>
-            <Text style={s.headerTitle}>{isTr ? 'Sağlık Merkezi' : 'Health Hub'}</Text>
-          </View>
-          {summary.totalExpenses ? (
-            <View style={s.headerExpensesBadge}>
-              <Text style={s.headerExpensesLabel}>{isTr ? 'TOPLAM HARCAMA' : 'TOTAL SPEND'}</Text>
-              <Text style={s.headerExpensesAmount}>
-                {summary.totalExpenses.total.toLocaleString('tr-TR')}
-                <Text style={s.headerExpensesCurrency}> {summary.totalExpenses.currency}</Text>
-              </Text>
-              {summary.totalExpenses.breakdown.length > 0 ? (
-                <View style={s.headerExpensesBreakRow}>
-                  {summary.totalExpenses.breakdown.map((item) => (
-                    <View key={item.label} style={s.headerExpensesBreakItem}>
-                      <View style={[s.headerExpensesDot, { backgroundColor: item.color }]} />
-                      <Text style={s.headerExpensesBreakText}>{item.label}</Text>
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-          ) : null}
+          <Text style={s.headerLabel}>{isTr ? 'SAĞLIK KAYITLARI' : 'CARE RECORDS'}</Text>
+          <Text style={s.headerTitle}>{isTr ? 'Sağlık Merkezi' : 'Health Hub'}</Text>
         </Animated.View>
 
-        {/* ── QUICK STATS STRIP ── */}
-        <Animated.View style={[s.statsStrip, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <View style={s.statItem}>
-            <Text style={s.statLabel}>{isTr ? 'KİLO' : 'WEIGHT'}</Text>
-            <Text style={s.statValue} numberOfLines={1}>{summary.latestWeight || '—'}</Text>
-          </View>
-          <View style={s.statDivider} />
-          <View style={s.statItem}>
-            <Text style={s.statLabel}>{isTr ? 'AŞI' : 'VACCINES'}</Text>
-            <Text style={s.statValue} numberOfLines={1}>{summary.vaccineStatus || '—'}</Text>
-          </View>
-          <View style={s.statDivider} />
-          <View style={s.statItem}>
-            <Text style={s.statLabel}>{isTr ? 'SON ZİYARET' : 'LAST VISIT'}</Text>
-            <Text style={s.statValue} numberOfLines={1}>{summary.lastVetVisit || '—'}</Text>
-          </View>
-        </Animated.View>
+        {/* ── SUMMARY CARDS STRIP ── */}
+        {(() => {
+          const wRaw = summary.latestWeight;
+          const wHasData = /^\d/.test(wRaw);
+          const weightNum = wHasData ? wRaw.split(' ')[0] : '—';
+          const weightBadge = wHasData ? (wRaw.split(' ')[1] ?? 'kg') : (isTr ? 'kayıt yok' : 'no data');
 
-        {/* ── TOTAL EXPENSES CARD ── */}
-        {summary.totalExpenses ? (
-          <Animated.View style={[s.expensesCard, { opacity: fadeAnim }]}>
-            {/* accent bar */}
-            <View style={s.expensesAccentBar} />
-            <View style={s.expensesInner}>
-              <View style={s.expensesTopRow}>
-                <Text style={s.expensesLabel}>{isTr ? 'TOPLAM HARCAMA' : 'TOTAL EXPENSES'}</Text>
-                <View style={s.expensesYearPill}>
-                  <Text style={s.expensesYearText}>{new Date().getFullYear()}</Text>
+          const vStatus = summary.vaccineStatus;
+          const vHasData = !!vStatus && vStatus !== 'No data' && vStatus !== 'Kayıt yok';
+          const vaccineBadge = vHasData ? (isTr ? 'güncel' : 'up to date') : (isTr ? 'kayıt yok' : 'no data');
+
+          const visitRaw = summary.lastVetVisit;
+          const visitHasData = !!visitRaw && visitRaw !== 'No data' && visitRaw !== 'Kayıt yok';
+          const visitBadge = isTr ? 'Kontrol' : 'Visit';
+
+          const expHasData = !!summary.totalExpenses;
+          const expVal = expHasData ? fmtShort(summary.totalExpenses!.total) : '—';
+          const expBadge = expHasData ? summary.totalExpenses!.currency : 'TL';
+
+          return (
+            <Animated.View style={{ opacity: fadeAnim, marginBottom: 24 }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={s.summaryScrollContent}
+                style={s.summaryScroll}
+              >
+                {/* Weight */}
+                <View style={s.summaryCard}>
+                  <View style={[s.summaryCardIcon, { backgroundColor: C.iconWeight }]}>
+                    <Scale size={20} color={C.fgWeight} />
+                  </View>
+                  <Text style={s.summaryCardValue}>{weightNum}</Text>
+                  <Text style={s.summaryCardLabel}>{isTr ? 'KİLO' : 'WEIGHT'}</Text>
+                  <View style={[s.summaryCardBadge, { backgroundColor: wHasData ? '#dceaf7' : C.surfaceContainer }]}>
+                    <Text style={[s.summaryCardBadgeText, { color: wHasData ? C.fgWeight : C.outlineVariant }]}>{weightBadge}</Text>
+                  </View>
                 </View>
-              </View>
-              <View style={s.expensesTotalRow}>
-                <Text style={s.expensesTotal}>
-                  {summary.totalExpenses.total.toLocaleString('tr-TR')}
-                </Text>
-                <Text style={s.expensesCurrency}>{summary.totalExpenses.currency}</Text>
-              </View>
-              {summary.totalExpenses.breakdown.length > 0 ? (
-                <View style={s.expensesBreakRow}>
-                  {summary.totalExpenses.breakdown.map((item) => (
-                    <View key={item.label} style={s.expensesBreakItem}>
-                      <View style={[s.expensesDot, { backgroundColor: item.color }]} />
-                      <Text style={s.expensesBreakLabel}>{item.label}</Text>
-                      <Text style={s.expensesBreakAmt}>{item.amount.toLocaleString('tr-TR')}</Text>
-                    </View>
-                  ))}
+
+                {/* Vaccines */}
+                <View style={s.summaryCard}>
+                  <View style={[s.summaryCardIcon, { backgroundColor: C.iconVaccines }]}>
+                    <Syringe size={20} color={C.fgVaccines} />
+                  </View>
+                  <Text style={s.summaryCardValue} numberOfLines={1}>{vHasData ? vStatus.slice(0, 6) : '—'}</Text>
+                  <Text style={s.summaryCardLabel}>{isTr ? 'AŞI' : 'VACCINES'}</Text>
+                  <View style={[s.summaryCardBadge, { backgroundColor: vHasData ? '#c4e8c0' : C.surfaceContainer }]}>
+                    <Text style={[s.summaryCardBadgeText, { color: vHasData ? C.fgVaccines : C.outlineVariant }]}>{vaccineBadge}</Text>
+                  </View>
                 </View>
-              ) : null}
-            </View>
-          </Animated.View>
-        ) : null}
+
+                {/* Last Visit */}
+                <View style={s.summaryCard}>
+                  <View style={[s.summaryCardIcon, { backgroundColor: C.iconVet }]}>
+                    <Stethoscope size={20} color={C.fgVet} />
+                  </View>
+                  <Text style={s.summaryCardValue} numberOfLines={1}>{visitHasData ? visitRaw : '—'}</Text>
+                  <Text style={s.summaryCardLabel}>{isTr ? 'SON ZİYARET' : 'LAST VISIT'}</Text>
+                  <View style={[s.summaryCardBadge, { backgroundColor: visitHasData ? '#eeeee8' : C.surfaceContainer }]}>
+                    <Text style={[s.summaryCardBadgeText, { color: C.onSurfaceVariant }]}>{visitHasData ? visitBadge : (isTr ? 'kayıt yok' : 'no data')}</Text>
+                  </View>
+                </View>
+
+                {/* Expenses */}
+                <View style={s.summaryCard}>
+                  <View style={[s.summaryCardIcon, { backgroundColor: C.iconRecords }]}>
+                    <TrendingUp size={20} color={C.fgRecords} />
+                  </View>
+                  <Text style={s.summaryCardValue}>{expVal}</Text>
+                  <Text style={s.summaryCardLabel}>{isTr ? 'BU YIL' : 'THIS YEAR'}</Text>
+                  <View style={[s.summaryCardBadge, { backgroundColor: expHasData ? '#e8e4f2' : C.surfaceContainer }]}>
+                    <Text style={[s.summaryCardBadgeText, { color: expHasData ? C.fgRecords : C.outlineVariant }]}>{expBadge}</Text>
+                  </View>
+                </View>
+              </ScrollView>
+            </Animated.View>
+          );
+        })()}
 
         {/* ── CATEGORY SECTION HEADER ── */}
         <View style={s.sectionHeaderRow}>
@@ -425,58 +424,68 @@ export default function HealthHubScreen({
         </Animated.View>
 
         {/* ── EXPENSE CHART ── */}
-        {summary.totalExpenses && summary.totalExpenses.breakdown.length > 0 ? (() => {
-          const { total, currency, breakdown } = summary.totalExpenses;
-          return (
-            <Animated.View style={[s.expenseChartCard, { opacity: fadeAnim }]}>
-              <View style={s.expenseChartHeader}>
-                <Text style={s.expenseChartTitle}>{isTr ? 'Harcama Analizi' : 'Expense Breakdown'}</Text>
-                <View style={s.expenseChartYearPill}>
-                  <Text style={s.expenseChartYearText}>{new Date().getFullYear()}</Text>
+        <Animated.View style={[s.expenseChartCard, { opacity: fadeAnim }]}>
+          <View style={s.expenseChartHeader}>
+            <Text style={s.expenseChartTitle}>{isTr ? 'Harcama Analizi' : 'Expense Breakdown'}</Text>
+            <View style={s.expenseChartYearPill}>
+              <Text style={s.expenseChartYearText}>{new Date().getFullYear()}</Text>
+            </View>
+          </View>
+
+          {summary.totalExpenses && summary.totalExpenses.breakdown.length > 0 ? (() => {
+            const { total, currency, breakdown } = summary.totalExpenses;
+            return (
+              <>
+                {/* Stacked proportional bar */}
+                <View style={s.expenseStackBar}>
+                  {breakdown.map((item, i) => (
+                    <View
+                      key={item.label}
+                      style={[
+                        s.expenseStackSegment,
+                        { flex: item.amount / total, backgroundColor: item.color },
+                        i === 0 && s.expenseStackFirst,
+                        i === breakdown.length - 1 && s.expenseStackLast,
+                      ]}
+                    />
+                  ))}
                 </View>
-              </View>
 
-              {/* Stacked proportional bar */}
-              <View style={s.expenseStackBar}>
-                {breakdown.map((item, i) => (
-                  <View
-                    key={item.label}
-                    style={[
-                      s.expenseStackSegment,
-                      { flex: item.amount / total, backgroundColor: item.color },
-                      i === 0 && s.expenseStackFirst,
-                      i === breakdown.length - 1 && s.expenseStackLast,
-                    ]}
-                  />
-                ))}
-              </View>
-
-              {/* Per-category rows */}
-              <View style={s.expenseChartRows}>
-                {breakdown.map((item) => {
-                  const pct = Math.round((item.amount / total) * 100);
-                  return (
-                    <View key={item.label} style={s.expenseChartRow}>
-                      <View style={[s.expenseChartDot, { backgroundColor: item.color }]} />
-                      <Text style={s.expenseChartLabel}>{item.label}</Text>
-                      <View style={s.expenseChartBarWrap}>
-                        <View style={[s.expenseChartBarFill, { flex: item.amount / total, backgroundColor: item.color + '40' }]} />
-                        <View style={{ flex: 1 - item.amount / total }} />
+                {/* Per-category rows */}
+                <View style={s.expenseChartRows}>
+                  {breakdown.map((item) => {
+                    const pct = Math.round((item.amount / total) * 100);
+                    return (
+                      <View key={item.label} style={s.expenseChartRow}>
+                        <View style={[s.expenseChartDot, { backgroundColor: item.color }]} />
+                        <Text style={s.expenseChartLabel}>{item.label}</Text>
+                        <View style={s.expenseChartBarWrap}>
+                          <View style={[s.expenseChartBarFill, { flex: item.amount / total, backgroundColor: item.color + '40' }]} />
+                          <View style={{ flex: 1 - item.amount / total }} />
+                        </View>
+                        <Text style={s.expenseChartPct}>{pct}%</Text>
+                        <Text style={s.expenseChartAmt}>{item.amount.toLocaleString('tr-TR')} {currency}</Text>
                       </View>
-                      <Text style={s.expenseChartPct}>{pct}%</Text>
-                      <Text style={s.expenseChartAmt}>{item.amount.toLocaleString('tr-TR')} {currency}</Text>
-                    </View>
-                  );
-                })}
-              </View>
+                    );
+                  })}
+                </View>
 
-              <View style={s.expenseChartFooter}>
-                <Text style={s.expenseChartFooterLabel}>{isTr ? 'Toplam' : 'Total'}</Text>
-                <Text style={s.expenseChartFooterValue}>{total.toLocaleString('tr-TR')} {currency}</Text>
-              </View>
-            </Animated.View>
-          );
-        })() : null}
+                <View style={s.expenseChartFooter}>
+                  <Text style={s.expenseChartFooterLabel}>{isTr ? 'Toplam' : 'Total'}</Text>
+                  <Text style={s.expenseChartFooterValue}>{total.toLocaleString('tr-TR')} {currency}</Text>
+                </View>
+              </>
+            );
+          })() : (
+            <View style={s.expenseChartEmpty}>
+              <Text style={s.expenseChartEmptyText}>
+                {isTr
+                  ? 'Veteriner ziyareti ekleyince harcama özeti burada görünür.'
+                  : 'Add a vet visit with a cost to see your expense breakdown here.'}
+              </Text>
+            </View>
+          )}
+        </Animated.View>
 
       </ScrollView>
 
@@ -655,9 +664,6 @@ const s = StyleSheet.create({
 
   // Header
   headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
     marginBottom: 20,
   },
   headerLabel: {
@@ -693,6 +699,66 @@ const s = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.2,
+  },
+
+  // Summary cards strip
+  summaryScroll: {
+    marginHorizontal: -22,
+  },
+  summaryScrollContent: {
+    paddingHorizontal: 22,
+    gap: 10,
+    paddingBottom: 4,
+  },
+  summaryCard: {
+    width: 112,
+    backgroundColor: C.surface,
+    borderRadius: 20,
+    paddingTop: 16,
+    paddingBottom: 14,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    shadowColor: C.onSurface,
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  summaryCardIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+  },
+  summaryCardValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.onSurface,
+    letterSpacing: -0.3,
+    textAlign: 'center',
+  },
+  summaryCardLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: C.outlineVariant,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: 3,
+    textAlign: 'center',
+  },
+  summaryCardBadge: {
+    marginTop: 7,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
+    borderRadius: 8,
+  },
+  summaryCardBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+    textAlign: 'center',
   },
 
   // Stats strip
@@ -737,26 +803,50 @@ const s = StyleSheet.create({
   // Header expense badge
   headerExpensesBadge: {
     backgroundColor: '#eef6ef',
-    borderRadius: 16,
+    borderRadius: 18,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     alignItems: 'flex-end',
     borderWidth: 1,
     borderColor: '#d4e8d6',
+    shadowColor: '#47664a',
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
+    maxWidth: 156,
+  },
+  headerExpensesTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 4,
+  },
+  headerExpensesYearPill: {
+    backgroundColor: '#d4e8d6',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  headerExpensesYearText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#2e4230',
   },
   headerExpensesLabel: {
     fontSize: 9,
     fontWeight: '700',
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     color: '#5d7c60',
     textTransform: 'uppercase',
-    marginBottom: 2,
   },
   headerExpensesAmount: {
-    fontSize: 17,
+    fontSize: 20,
     fontWeight: '800',
     color: '#2e4230',
-    letterSpacing: -0.5,
+    letterSpacing: -0.8,
+    lineHeight: 24,
+    marginBottom: 6,
   },
   headerExpensesCurrency: {
     fontSize: 12,
@@ -864,37 +954,57 @@ const s = StyleSheet.create({
 
   // Header expense badge extras
   headerExpensesBreakRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 5,
-    flexWrap: 'wrap',
+    flexDirection: 'column',
+    gap: 3,
+    alignSelf: 'stretch',
   },
   headerExpensesBreakItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 5,
   },
   headerExpensesDot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    flexShrink: 0,
   },
   headerExpensesBreakText: {
     fontSize: 9,
     fontWeight: '600',
-    color: '#3d5a40',
+    color: '#5d7c60',
+    flex: 1,
+  },
+  headerExpensesBreakAmt: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#2e4230',
+  },
+  headerExpensesEmpty: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#2e4230',
+    letterSpacing: -0.5,
+    marginBottom: 2,
+    opacity: 0.35,
+  },
+  headerExpensesEmptyHint: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#5d7c60',
+    opacity: 0.7,
   },
 
   // Expense chart card
   expenseChartCard: {
     borderRadius: 22,
-    backgroundColor: '#fff',
+    backgroundColor: '#eef6ef',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
+    borderColor: '#d4e8d6',
     padding: 18,
     gap: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
+    shadowColor: '#47664a',
+    shadowOpacity: 0.10,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
@@ -926,7 +1036,7 @@ const s = StyleSheet.create({
     height: 10,
     borderRadius: 6,
     overflow: 'hidden',
-    backgroundColor: '#eeeee8',
+    backgroundColor: '#cde5cf',
     gap: 2,
   },
   expenseStackSegment: {
@@ -967,7 +1077,7 @@ const s = StyleSheet.create({
     height: 6,
     borderRadius: 3,
     overflow: 'hidden',
-    backgroundColor: '#f0f0ea',
+    backgroundColor: '#cde5cf',
   },
   expenseChartBarFill: {
     height: '100%',
@@ -994,7 +1104,7 @@ const s = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    borderTopColor: '#c8deca',
     paddingTop: 10,
   },
   expenseChartFooterLabel: {
@@ -1006,6 +1116,18 @@ const s = StyleSheet.create({
     fontSize: 15,
     fontWeight: '800',
     color: '#30332e',
+  },
+  expenseChartEmpty: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  expenseChartEmptyText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#5d7c60',
+    textAlign: 'center',
+    lineHeight: 19,
+    opacity: 0.75,
   },
 
   // Section headers

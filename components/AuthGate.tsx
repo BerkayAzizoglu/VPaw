@@ -18,6 +18,7 @@ import PetProfilesScreen from '../screens/PetProfilesScreen';
 import RemindersScreen from '../screens/RemindersScreen';
 import InsightsScreen from '../screens/InsightsScreen';
 import DocumentsScreen from '../screens/DocumentsScreen';
+import NotificationCenterScreen from '../screens/NotificationCenterScreen';
 import HealthHubScreen, {
   type AddHealthRecordPayload,
   type AddHealthRecordType,
@@ -78,7 +79,8 @@ type AppRoute =
   | 'settings'
   | 'passport'
   | 'petProfiles'
-  | 'documents';
+  | 'documents'
+  | 'notifications';
 
 type PrimaryTab = 'home' | 'healthHub' | 'reminders' | 'insights';
 export type VaccinationRecord = {
@@ -437,6 +439,7 @@ export default function AuthGate() {
   const [petProfileBackRoute, setPetProfileBackRoute] = useState<AppRoute>('home');
   const [passportBackRoute, setPassportBackRoute] = useState<AppRoute>('home');
   const [documentsBackRoute, setDocumentsBackRoute] = useState<AppRoute>('healthHub');
+  const [notificationsBackRoute, setNotificationsBackRoute] = useState<AppRoute>('reminders');
   const [vetVisitCreatePreset, setVetVisitCreatePreset] = useState<VetVisitCreatePreset | null>(null);
   const [petList, setPetList] = useState<string[]>([]);
   const [newPetTemplate, setNewPetTemplate] = useState<PetProfile | null>(null);
@@ -1189,6 +1192,11 @@ export default function AuthGate() {
   const openDocuments = (from: AppRoute = 'healthHub') => {
     setDocumentsBackRoute(from);
     setRoute('documents');
+  };
+
+  const openNotifications = (from: AppRoute = 'reminders') => {
+    setNotificationsBackRoute(from);
+    setRoute('notifications');
   };
 
   type DualWriteOutcome = {
@@ -2717,6 +2725,24 @@ export default function AuthGate() {
     );
   }
 
+  if (route === 'notifications') {
+    return (
+      <NotificationCenterScreen
+        onBack={() => setRoute(notificationsBackRoute)}
+        overdue={remindersTabGroups.overdue}
+        today={remindersTabGroups.today}
+        upcoming={remindersTabGroups.upcoming}
+        completed={remindersTabGroups.completed}
+        locale={locale}
+        onMarkDone={(id) => {
+          const item = [...remindersTabGroups.today, ...remindersTabGroups.upcoming, ...remindersTabGroups.overdue].find((r) => r.id === id);
+          if (!item) return;
+          setRemindersWithNotificationSync((prev) => markReminderCompleted(prev, item.petId, id).next);
+        }}
+      />
+    );
+  }
+
   if (route === 'healthHub') {
     return renderPrimaryChrome(
       <HealthHubScreen
@@ -2733,7 +2759,6 @@ export default function AuthGate() {
         onOpenVetVisits={() => openSubRoute('vetVisits', 'healthHub')}
         onOpenHealthRecords={() => openHealthHubWithCategory('record')}
         onOpenVaccines={() => openSubRoute('vaccinations', 'healthHub')}
-        onOpenReminders={() => { setPrimaryTab('reminders'); setRoute('reminders'); }}
         onOpenWeightTracking={() => openPetProfile(activePetId, 'healthHub')}
         onOpenDocuments={() => openDocuments('healthHub')}
       />,
@@ -2749,6 +2774,7 @@ export default function AuthGate() {
         completed={remindersTabGroups.completed}
         locale={locale}
         activePetId={activePetId}
+        onOpenNotifications={() => openNotifications('reminders')}
         activePetType={petProfiles[activePetId]?.petType}
         openCreateNonce={reminderCreateNonce}
         subtypePreset={reminderCreateSubtypePreset ?? undefined}

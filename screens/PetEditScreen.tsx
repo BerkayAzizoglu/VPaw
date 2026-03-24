@@ -482,24 +482,24 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
 
     if (requiresConfirm) {
       const confirmTitle = field === 'name'
-        ? (isTr ? '�smi g�ncelle?' : 'Apply name update?')
+        ? (isTr ? 'İsmi güncelle?' : 'Apply name update?')
         : field === 'microchip'
-          ? (isTr ? 'Mikro�ipi g�ncelle?' : 'Apply microchip update?')
+          ? (isTr ? 'Mikroçipi güncelle?' : 'Apply microchip update?')
           : field === 'birthDate'
-          ? (isTr ? 'Do�um tarihini g�ncelle?' : 'Apply birth date change?')
-          : (isTr ? 'Temel bilgiyi g�ncelle?' : 'Apply this basic info change?');
+          ? (isTr ? 'Doğum tarihini güncelle?' : 'Apply birth date change?')
+          : (isTr ? 'Temel bilgiyi güncelle?' : 'Apply this basic info change?');
       const confirmMessage = field === 'name'
-        ? (isTr ? '�sim de�i�ikli�i ge�mi� kay�tlarla e�le�meyi etkileyebilir. Devam edilsin mi?' : 'Changing the pet name can affect how past records are matched. Continue?')
+        ? (isTr ? 'İsim değişikliği geçmiş kayıtlarla eşleşmeyi etkileyebilir. Devam edilsin mi?' : 'Changing the pet name can affect how past records are matched. Continue?')
         : field === 'microchip'
-          ? (isTr ? 'Mikro�ip de�i�ikli�i resmi kay�t e�le�mesini etkileyebilir. Devam edilsin mi?' : 'Changing the microchip can affect official record matching. Continue?')
+          ? (isTr ? 'Mikroçip değişikliği resmi kayıt eşleşmesini etkileyebilir. Devam edilsin mi?' : 'Changing the microchip can affect official record matching. Continue?')
           : field === 'birthDate'
-          ? (isTr ? 'Do�um tarihi de�i�ikli�i ya� hesab�n� ve �zetleri etkileyebilir. Devam edilsin mi?' : 'Changing birth date updates age calculations and can affect summaries/insights for this pet profile. Continue?')
-          : (isTr ? 'Bu de�i�iklik bu profilin �zet ve i�g�r�lerini etkileyebilir. Devam edilsin mi?' : 'This update can affect summaries and insights for this pet profile. Continue?');
+          ? (isTr ? 'Doğum tarihi değişikliği yaş hesabını ve özetleri etkileyebilir. Devam edilsin mi?' : 'Changing birth date updates age calculations and can affect summaries/insights for this pet profile. Continue?')
+          : (isTr ? 'Bu değişiklik bu profilin özet ve içgörülerini etkileyebilir. Devam edilsin mi?' : 'This update can affect summaries and insights for this pet profile. Continue?');
       Alert.alert(
         confirmTitle,
         confirmMessage,
         [
-          { text: isTr ? '�ptal' : 'Cancel', style: 'cancel' },
+          { text: isTr ? 'İptal' : 'Cancel', style: 'cancel' },
           { text: isTr ? 'Uygula' : 'Apply', style: 'destructive', onPress: () => setDraft(next) },
         ],
       );
@@ -567,24 +567,24 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
 
           <Text style={styles.sectionTitle}>{isTr ? 'Temel Bilgiler' : 'Basic Info'}</Text>
           <View style={styles.sectionCard}>
-            <InfoRow label={isTr ? '�sim' : 'Name'} value={draft.name} onPress={() => { setNameDraft(draft.name); setPickerField('name'); }} />
-            <InfoRow label={isTr ? 'Hayvan T�r�' : 'Pet Type'} value={draft.petType} onPress={() => setPickerField('petType')} />
-            <InfoRow label={isTr ? 'Cinsiyet' : 'Gender'} value={draft.gender === 'female' ? 'Female' : 'Male'} onPress={() => setPickerField('gender')} />
+            <InfoRow label={isTr ? 'İsim' : 'Name'} value={draft.name} onPress={() => { setNameDraft(draft.name); setPickerField('name'); }} />
+            <InfoRow label={isTr ? 'Hayvan Türü' : 'Pet Type'} value={draft.petType} onPress={() => setPickerField('petType')} />
+            <InfoRow label={isTr ? 'Cinsiyet' : 'Gender'} value={draft.gender === 'female' ? (isTr ? 'Dişi' : 'Female') : (isTr ? 'Erkek' : 'Male')} onPress={() => setPickerField('gender')} />
             <InfoRow label={isTr ? 'Irk' : 'Breed'} value={draft.breed} onPress={() => setPickerField('breed')} />
-            <InfoRow label={isTr ? 'Pattern' : 'Coat Pattern'} value={draft.coatPattern} onPress={() => setPickerField('coatPattern')} />
-            <InfoRow label={isTr ? 'Ya�' : 'Age'} value={formatAgeLabel(draft.birthDate)} onPress={() => { setBirthPicker(parseBirthDate(draft.birthDate)); setPickerField('birthDate'); }} />
-            <InfoRow label={isTr ? 'Mikro�ip' : 'Microchip'} value={draft.microchip || '-'} onPress={() => { setMicrochipDraft(draft.microchip || ''); setPickerField('microchip'); }} noBorder />
+            <InfoRow label={isTr ? 'Tüy Deseni' : 'Coat Pattern'} value={draft.coatPattern} onPress={() => setPickerField('coatPattern')} />
+            <InfoRow label={isTr ? 'Yaş' : 'Age'} value={formatAgeLabel(draft.birthDate)} onPress={() => { setBirthPicker(parseBirthDate(draft.birthDate)); setPickerField('birthDate'); }} />
+            <InfoRow label={isTr ? 'Mikroçip' : 'Microchip'} value={draft.microchip || '-'} onPress={() => { setMicrochipDraft(draft.microchip || ''); setPickerField('microchip'); }} noBorder />
           </View>
 
-          <Text style={styles.sectionTitle}>{isTr ? 'T�bbi Ge�mi�' : 'Medical History'}</Text>
+          <Text style={styles.sectionTitle}>{isTr ? 'Tıbbi Geçmiş' : 'Medical History'}</Text>
           <View style={styles.sectionCard}>
-            <InfoRow label={isTr ? 'A��lar' : 'Vaccinations'} value={vaccineSummary} onPress={() => setPickerField('vaccines')} />
+            <InfoRow label={isTr ? 'Aşılar' : 'Vaccinations'} value={vaccineSummary} onPress={() => setPickerField('vaccines')} />
             <InfoRow label={isTr ? 'Ameliyatlar' : 'Surgeries'} value={surgerySummary} onPress={() => setPickerField('surgeries')} />
             <InfoRow label={isTr ? 'Alerjiler' : 'Allergies'} value={allergySummary} onPress={() => setPickerField('allergies')} />
-            <InfoRow label={isTr ? '�eker' : 'Diabetes'} value={diabetesSummary} onPress={() => setPickerField('diabetes')} />
+            <InfoRow label={isTr ? 'Şeker' : 'Diabetes'} value={diabetesSummary} onPress={() => setPickerField('diabetes')} />
 
             <View style={styles.toggleRow}>
-              <Text style={styles.label}>{isTr ? 'Ic parazit rutini' : 'Internal parasite routine'}</Text>
+              <Text style={styles.label}>{isTr ? 'İç Parazit Rutini' : 'Internal parasite routine'}</Text>
               <PawSwitch
                 value={draft.routineCare.internalParasite.enabled}
                 onValueChange={(v) =>
@@ -597,7 +597,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
             </View>
 
             <View style={[styles.toggleRow, styles.noBorder]}>
-              <Text style={styles.label}>{isTr ? 'Dis parazit rutini' : 'External parasite routine'}</Text>
+              <Text style={styles.label}>{isTr ? 'Dış Parazit Rutini' : 'External parasite routine'}</Text>
               <PawSwitch
                 value={draft.routineCare.externalParasite.enabled}
                 onValueChange={(v) =>
@@ -632,32 +632,32 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>
               {pickerField === 'name'
-                ? (isTr ? '�sim D�zenle' : 'Edit Name')
+                ? (isTr ? 'İsim Düzenle' : 'Edit Name')
                 : pickerField === 'microchip'
-                  ? (isTr ? 'Mikro�ip D�zenle' : 'Edit Microchip')
+                  ? (isTr ? 'Mikroçip Düzenle' : 'Edit Microchip')
                 : pickerField === 'birthDate'
-                  ? (isTr ? 'Do�um Tarihi' : 'Birth Date')
+                  ? (isTr ? 'Doğum Tarihi' : 'Birth Date')
                   : pickerField === 'photo'
-                    ? (isTr ? 'Foto�raf' : 'Photo')
+                    ? (isTr ? 'Fotoğraf' : 'Photo')
                     : pickerField === 'coatPattern'
-                      ? (isTr ? 'T�y Deseni' : 'Coat Pattern')
+                      ? (isTr ? 'Tüy Deseni' : 'Coat Pattern')
                       : pickerField === 'vaccines'
-                        ? (isTr ? 'A��lar' : 'Vaccinations')
+                        ? (isTr ? 'Aşılar' : 'Vaccinations')
                         : pickerField === 'surgeries'
                           ? (isTr ? 'Ameliyatlar' : 'Surgeries')
                           : pickerField === 'allergies'
                             ? (isTr ? 'Alerjiler' : 'Allergies')
                             : pickerField === 'diabetes'
                               ? (isTr ? 'Diyabet' : 'Diabetes')
-                              : (isTr ? 'Se�im' : 'Option')}
+                              : (isTr ? 'Seçim' : 'Option')}
             </Text>
             {pickerField === 'name' ? (
               <View style={styles.nameEditorWrap}>
-                <Text style={styles.nameEditorHint}>{isTr ? 'Evcil dostunun ad�n� g�ncelle.' : "Update your pet's display name."}</Text>
+                <Text style={styles.nameEditorHint}>{isTr ? 'Evcil dostunun adını güncelle.' : "Update your pet's display name."}</Text>
                 <TextInput
                   value={nameDraft}
                   onChangeText={setNameDraft}
-                  placeholder={isTr ? '�rn. Milo' : 'e.g. Milo'}
+                  placeholder={isTr ? 'Örn. Milo' : 'e.g. Milo'}
                   placeholderTextColor="rgba(45,45,45,0.35)"
                   autoFocus
                   maxLength={24}
@@ -666,16 +666,16 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
                   style={styles.nameEditorInput}
                 />
                 <Pressable style={styles.applyDateBtn} onPress={() => applySelection(nameDraft)}>
-                  <Text style={styles.applyDateBtnText}>{isTr ? '�smi Uygula' : 'Apply Name'}</Text>
+                  <Text style={styles.applyDateBtnText}>{isTr ? 'İsmi Uygula' : 'Apply Name'}</Text>
                 </Pressable>
               </View>
             ) : pickerField === 'microchip' ? (
               <View style={styles.nameEditorWrap}>
-                <Text style={styles.nameEditorHint}>{isTr ? 'Mikro�ip numaras�n� g�ncelle.' : 'Update the microchip number.'}</Text>
+                <Text style={styles.nameEditorHint}>{isTr ? 'Mikroçip numarasını güncelle.' : 'Update the microchip number.'}</Text>
                 <TextInput
                   value={microchipDraft}
                   onChangeText={setMicrochipDraft}
-                  placeholder={isTr ? '�rn. 985 112 004 883' : 'e.g. 985 112 004 883'}
+                  placeholder={isTr ? 'Örn. 985 112 004 883' : 'e.g. 985 112 004 883'}
                   placeholderTextColor="rgba(45,45,45,0.35)"
                   autoFocus
                   maxLength={32}
@@ -685,15 +685,15 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
                   style={styles.nameEditorInput}
                 />
                 <Pressable style={styles.applyDateBtn} onPress={() => applySelection(microchipDraft)}>
-                  <Text style={styles.applyDateBtnText}>{isTr ? 'Mikro�ipi Uygula' : 'Apply Microchip'}</Text>
+                  <Text style={styles.applyDateBtnText}>{isTr ? 'Mikroçipi Uygula' : 'Apply Microchip'}</Text>
                 </Pressable>
               </View>
             ) : pickerField === 'birthDate' ? (
               <View>
                 <View style={styles.dateHeadRow}>
-                  <Text style={styles.dateHeadLabel}>{isTr ? 'G�n' : 'Day'}</Text>
+                  <Text style={styles.dateHeadLabel}>{isTr ? 'Gün' : 'Day'}</Text>
                   <Text style={styles.dateHeadLabel}>{isTr ? 'Ay' : 'Month'}</Text>
-                  <Text style={styles.dateHeadLabel}>{isTr ? 'Y�l' : 'Year'}</Text>
+                  <Text style={styles.dateHeadLabel}>{isTr ? 'Yıl' : 'Year'}</Text>
                 </View>
 
                 <View style={styles.datePickerRow}>
@@ -735,7 +735,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
                 </View>
 
                 <Pressable style={styles.applyDateBtn} onPress={() => applySelection(toBirthDateIso(birthPicker))}>
-                  <Text style={styles.applyDateBtnText}>{isTr ? 'Do�um Tarihini Uygula' : 'Apply Birth Date'}</Text>
+                  <Text style={styles.applyDateBtnText}>{isTr ? 'Doğum Tarihini Uygula' : 'Apply Birth Date'}</Text>
                 </Pressable>
               </View>
             ) : (

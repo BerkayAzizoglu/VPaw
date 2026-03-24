@@ -383,6 +383,118 @@ export default function WeightTrackingScreen({
       ? formatTemplate(copy.trendBelow, { name: petName, target: targetName })
       : formatTemplate(copy.trendAbove, { name: petName, target: targetName });
 
+  // ─── Trend insight (real data-driven) ──────────────────────────────────────
+  const trendInsight = useMemo(() => {
+    if (entries.length < 2) {
+      return {
+        title: isTr ? 'Veri Toplanıyor' : 'Building Your Data',
+        body: isTr
+          ? `${petName} için daha fazla kilo kaydı ekledikçe haftalık trend analizi burada görünecek.`
+          : `Add more weight entries for ${petName} to see weekly trend analysis here.`,
+        kind: 'neutral' as const,
+      };
+    }
+
+    const sorted = [...entries].sort((a, b) => {
+      const da = parseEntryDate(a.date);
+      const db = parseEntryDate(b.date);
+      if (!da || !db) return 0;
+      return da.getTime() - db.getTime();
+    });
+
+    const newest = sorted[sorted.length - 1];
+    const newestDate = parseEntryDate(newest.date);
+
+    // Find a comparison entry ~30 days back (or oldest available)
+    let compEntry = sorted[0];
+    if (newestDate) {
+      const thirtyDaysAgo = newestDate.getTime() - 30 * 24 * 60 * 60 * 1000;
+      const candidates = sorted.filter((e) => {
+        const d = parseEntryDate(e.date);
+        return d && d.getTime() <= thirtyDaysAgo;
+      });
+      if (candidates.length > 0) compEntry = candidates[candidates.length - 1];
+    }
+
+    const compDate = parseEntryDate(compEntry.date);
+    const deltaKg = newest.value - compEntry.value;
+    const daysDiff = newestDate && compDate
+      ? Math.max(1, (newestDate.getTime() - compDate.getTime()) / (24 * 60 * 60 * 1000))
+      : 30;
+    const weeklyRate = (deltaKg / daysDiff) * 7;
+    const absWeekly = Math.abs(weeklyRate);
+    const direction = deltaKg > 0.05 ? 'up' : deltaKg < -0.05 ? 'down' : 'stable';
+    const days = Math.round(daysDiff);
+    const rateStr = absWeekly < 0.1
+      ? isTr ? '< 0.1 kg/hafta' : '< 0.1 kg/week'
+      : `${absWeekly.toFixed(1)} kg/${isTr ? 'hafta' : 'week'}`;
+
+    if (direction === 'stable') {
+      return {
+        title: isTr ? 'Stabil Kilo' : 'Stable Weight',
+        body: isTr
+          ? `${petName}'in kilosu son ${days} günde sabit kaldı. Tutarlı bir seyir izliyor.`
+          : `${petName}'s weight has been stable over the last ${days} days. Consistent trend.`,
+        kind: rangeStatus === 'within' ? 'positive' as const : 'neutral' as const,
+      };
+    }
+
+    if (direction === 'down') {
+      if (rangeStatus === 'above') {
+        return {
+          title: isTr ? 'Olumlu İlerleme' : 'Positive Progress',
+          body: isTr
+            ? `${petName} sağlıklı aralığa doğru ilerliyor — ${rateStr} hızında azalma.`
+            : `${petName} is trending toward the healthy range at ${rateStr}.`,
+          kind: 'positive' as const,
+        };
+      }
+      if (rangeStatus === 'below') {
+        return {
+          title: isTr ? 'Dikkat: Kilo Kaybı' : 'Attention: Weight Loss',
+          body: isTr
+            ? `${petName} zaten sağlıklı aralığın altında ve kilo kaybı devam ediyor (${rateStr}). Veterinere danışın.`
+            : `${petName} is already below range and losing weight (${rateStr}). Consult your vet.`,
+          kind: 'warning' as const,
+        };
+      }
+      return {
+        title: isTr ? 'Kilo Azalıyor' : 'Weight Decreasing',
+        body: isTr
+          ? `${petName}'in kilosu ${rateStr} hızında azalıyor; sağlıklı aralık içinde seyrediyor.`
+          : `${petName}'s weight is decreasing at ${rateStr}, still within the healthy range.`,
+        kind: 'neutral' as const,
+      };
+    }
+
+    // direction === 'up'
+    if (rangeStatus === 'below') {
+      return {
+        title: isTr ? 'İyileşiyor' : 'Recovering Well',
+        body: isTr
+          ? `${petName} sağlıklı aralığa doğru kilo alıyor — ${rateStr} hızında artış.`
+          : `${petName} is gaining toward the healthy range at ${rateStr}.`,
+        kind: 'positive' as const,
+      };
+    }
+    if (rangeStatus === 'above') {
+      return {
+        title: isTr ? 'Kilo Artışı Sürüyor' : 'Weight Still Rising',
+        body: isTr
+          ? `${petName} sağlıklı aralığın üzerinde ve kilo artışı devam ediyor (${rateStr}). Porsiyon kontrolü önerilir.`
+          : `${petName} is above the healthy range and still gaining (${rateStr}). Consider portion control.`,
+        kind: 'warning' as const,
+      };
+    }
+    return {
+      title: isTr ? 'Kilo Artıyor' : 'Weight Increasing',
+      body: isTr
+        ? `${petName}'in kilosu ${rateStr} hızında artıyor; sağlıklı aralık içinde takip ediliyor.`
+        : `${petName}'s weight is increasing at ${rateStr}, tracking within the healthy range.`,
+      kind: 'neutral' as const,
+    };
+  }, [entries, isTr, petName, rangeStatus]);
+
   // ─── Goal progress ──────────────────────────────────────────────────────────
   const currentWeightForGoal = latestWeight?.value ?? 0;
   const goalProgress = weightGoal && weightGoal > 0
@@ -664,12 +776,21 @@ export default function WeightTrackingScreen({
           </Pressable>
 
           <Pressable style={styles.insightCard} onPress={onOpenVetVisits}>
-            <View style={styles.insightIconBox}>
-              <Icon kind="left" size={20} color="#5d605a" />
+            <View style={[
+              styles.insightIconBox,
+              trendInsight.kind === 'positive' ? styles.insightIconGood
+              : trendInsight.kind === 'warning' ? styles.insightIconWarn
+              : styles.insightIconNeutral,
+            ]}>
+              <Icon
+                kind={trendInsight.kind === 'positive' ? 'check' : trendInsight.kind === 'warning' ? 'up' : 'spark'}
+                size={20}
+                color={trendInsight.kind === 'positive' ? '#47664a' : trendInsight.kind === 'warning' ? '#c48d42' : '#5d605a'}
+              />
             </View>
             <View style={styles.insightBody}>
-              <Text style={styles.insightTitle}>{copy.referenceAwareTitle}</Text>
-              <Text style={styles.insightText}>{copy.referenceAwareBody}</Text>
+              <Text style={styles.insightTitle}>{trendInsight.title}</Text>
+              <Text style={styles.insightText}>{trendInsight.body}</Text>
             </View>
           </Pressable>
 
@@ -1133,6 +1254,9 @@ const styles = StyleSheet.create({
   },
   insightIconWarn: {
     backgroundColor: '#fef6ea',
+  },
+  insightIconNeutral: {
+    backgroundColor: '#eeeee8',
   },
   insightBody: {
     flex: 1,
