@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, Animated, AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, AppState, StyleSheet, Text, View } from 'react-native';
 import { getLocalItem, setLocalItem } from '../lib/localStore';
 import { useAuth } from '../hooks/useAuth';
 import { useLocale } from '../hooks/useLocale';
@@ -26,7 +26,7 @@ import HealthHubScreen, {
   type HealthHubCategory,
   type HealthHubDomainOverview,
 } from '../screens/HealthHubScreen';
-import { Bell, ChartSpline, HeartPulse, Home } from 'lucide-react-native';
+import LensMagTabBar from './LensMagTabBar';
 import { fetchPetProfilesFromCloud, savePetProfilesToCloud } from '../lib/petProfilesRepo';
 import {
   isSameMedicalEvent,
@@ -3081,28 +3081,11 @@ export default function AuthGate() {
     <View style={styles.primaryShell}>
       {content}
 
-      <View style={styles.tabBar}>
-        <Pressable style={styles.tabItem} onPress={() => { setPrimaryTab('home'); setRoute('home'); }}>
-          <Home size={22} color={primaryTab === 'home' ? '#47664a' : '#9a9c95'} strokeWidth={primaryTab === 'home' ? 2.5 : 2} />
-          <Text style={[styles.tabText, primaryTab === 'home' && styles.tabTextActive]}>{locale === 'tr' ? 'Ana Sayfa' : 'Home'}</Text>
-          {primaryTab === 'home' ? <View style={styles.tabDot} /> : <View style={styles.tabDotHidden} />}
-        </Pressable>
-        <Pressable style={styles.tabItem} onPress={() => { setPrimaryTab('healthHub'); setRoute('healthHub'); }}>
-          <HeartPulse size={22} color={primaryTab === 'healthHub' ? '#47664a' : '#9a9c95'} strokeWidth={primaryTab === 'healthHub' ? 2.5 : 2} />
-          <Text style={[styles.tabText, primaryTab === 'healthHub' && styles.tabTextActive]}>{locale === 'tr' ? 'Sağlık' : 'Health'}</Text>
-          {primaryTab === 'healthHub' ? <View style={styles.tabDot} /> : <View style={styles.tabDotHidden} />}
-        </Pressable>
-        <Pressable style={styles.tabItem} onPress={() => { setPrimaryTab('reminders'); setRoute('reminders'); }}>
-          <Bell size={22} color={primaryTab === 'reminders' ? '#47664a' : '#9a9c95'} strokeWidth={primaryTab === 'reminders' ? 2.5 : 2} />
-          <Text style={[styles.tabText, primaryTab === 'reminders' && styles.tabTextActive]}>{locale === 'tr' ? 'Takip' : 'Reminders'}</Text>
-          {primaryTab === 'reminders' ? <View style={styles.tabDot} /> : <View style={styles.tabDotHidden} />}
-        </Pressable>
-        <Pressable style={styles.tabItem} onPress={() => { setPrimaryTab('insights'); setRoute('insights'); }}>
-          <ChartSpline size={22} color={primaryTab === 'insights' ? '#47664a' : '#9a9c95'} strokeWidth={primaryTab === 'insights' ? 2.5 : 2} />
-          <Text style={[styles.tabText, primaryTab === 'insights' && styles.tabTextActive]}>{locale === 'tr' ? 'Analiz' : 'Insights'}</Text>
-          {primaryTab === 'insights' ? <View style={styles.tabDot} /> : <View style={styles.tabDotHidden} />}
-        </Pressable>
-      </View>
+      <LensMagTabBar
+        activeTab={primaryTab}
+        locale={locale}
+        onTabPress={(tab) => { setPrimaryTab(tab); setRoute(tab); }}
+      />
     </View>
   );
   if (loading || !petHydrated || !petLockHydrated) {
@@ -3775,53 +3758,6 @@ const styles = StyleSheet.create({
   },
   menuToggleRow: {
     justifyContent: 'space-between',
-  },
-  tabBar: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    bottom: 20,
-    height: 66,
-    borderRadius: 24,
-    backgroundColor: '#ffffff',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    shadowColor: '#30332e',
-    shadowOpacity: 0.12,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
-  },
-  tabItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    paddingTop: 6,
-  },
-  tabText: {
-    color: '#9a9c95',
-    fontSize: 10,
-    lineHeight: 12,
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  tabTextActive: {
-    color: '#47664a',
-    fontWeight: '700',
-  },
-  tabDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: '#47664a',
-    marginTop: 1,
-  },
-  tabDotHidden: {
-    width: 5,
-    height: 5,
-    marginTop: 1,
   },
 });
 
