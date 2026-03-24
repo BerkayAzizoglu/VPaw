@@ -1,18 +1,19 @@
 /**
- * LensMagTabBar — Apple Clock-inspired magnifier lens tab bar.
+ * LensMagTabBar — fluid sliding-pill tab bar.
  *
  * Interaction:
- *  • Tap → navigate (instant, no bubble)
- *  • Hold + drag → a circular bubble rises above the bar, icons under the
- *    lens swell with a Gaussian bell-curve scale, release to navigate.
+ *  • Tap          → navigate instantly
+ *  • Hold + drag  → pill and active color follow finger in real-time,
+ *                   icons swell with Gaussian magnification; release = navigate
  *
- * Visual language (VPaw):
- *  • White pill bar (unchanged from old bar)
- *  • Bubble: white circle, soft green border, green icon + label inside
- *  • Active icon/text: #47664a  •  Inactive: #9a9c95
+ * Per-tab accent colors:
+ *  • Home      → forest green  #3e6e47
+ *  • Health    → warm red      #be3b2c
+ *  • Reminders → amber         #b07812
+ *  • Insights  → teal          #1a7ea6
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   PanResponder,
@@ -33,38 +34,59 @@ interface Props {
   onTabPress: (tab: TabKey) => void;
 }
 
-// ─── Tab definitions ──────────────────────────────────────────────────────────
-
 type IconComponent = React.ComponentType<{
   size: number;
   color: string;
   strokeWidth: number;
 }>;
+type TabDef = {
+  key: TabKey;
+  labelTr: string;
+  labelEn: string;
+  Icon: IconComponent;
+};
 
-type TabDef = { key: TabKey; labelTr: string; labelEn: string; Icon: IconComponent };
+// ─── Tab config ───────────────────────────────────────────────────────────────
 
 const TABS: TabDef[] = [
-  { key: 'home',       labelTr: 'Ana Sayfa', labelEn: 'Home',      Icon: Home        },
-  { key: 'healthHub',  labelTr: 'Sağlık',    labelEn: 'Health',    Icon: HeartPulse  },
-  { key: 'reminders',  labelTr: 'Takip',     labelEn: 'Reminders', Icon: Bell        },
-  { key: 'insights',   labelTr: 'Analiz',    labelEn: 'Insights',  Icon: ChartSpline },
+  { key: 'home',      labelTr: 'Ana Sayfa', labelEn: 'Home',      Icon: Home        },
+  { key: 'healthHub', labelTr: 'Sağlık',    labelEn: 'Health',    Icon: HeartPulse  },
+  { key: 'reminders', labelTr: 'Takip',     labelEn: 'Reminders', Icon: Bell        },
+  { key: 'insights',  labelTr: 'Analiz',    labelEn: 'Insights',  Icon: ChartSpline },
 ];
+
+// Per-tab accent: active icon color, inactive (muted), pill background
+const ACCENT: Record<TabKey, { active: string; inactive: string; pill: string }> = {
+  home:      { active: '#3e6e47', inactive: '#9db8a0', pill: '#e8f2ea' },
+  healthHub: { active: '#be3b2c', inactive: '#d4a09a', pill: '#fceeed' },
+  reminders: { active: '#b07812', inactive: '#c9a558', pill: '#fdf4e0' },
+  insights:  { active: '#1a7ea6', inactive: '#7ab4c8', pill: '#e6f3f8' },
+};
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const BAR_HEIGHT     = 66;
-const BAR_MARGIN     = 16;   // left & right margin (matches original)
-const BUBBLE_SIZE    = 62;   // diameter of the floating bubble
-const BUBBLE_GAP     = 10;   // gap between bubble bottom and bar top
-const DRAG_THRESHOLD = 8;    // px of horizontal movement before bubble appears
+const BAR_HEIGHT   = 66;
+const BAR_MARGIN   = 16;
+const PILL_HEIGHT  = 50;
+const PILL_RADIUS  = 16;
+const PILL_INSET   = 6;   // horizontal padding inside each tab slot
+const DRAG_THRESH  = 6;   // px before drag mode activates
 
-// ─── Helper: Gaussian scale ───────────────────────────────────────────────────
+// ─── Module helpers ───────────────────────────────────────────────────────────
 
-function gaussianScale(fingerX: number, tabIndex: number, tabSlot: number): number {
-  const center = tabSlot * (tabIndex + 0.5);
+function getTabIndex(key: TabKey): number {
+  return TABS.findIndex((t) => t.key === key);
+}
+
+function gaussianScale(fingerX: number, tabIdx: number, tabSlot: number): number {
+  const center = tabSlot * (tabIdx + 0.5);
   const dist   = Math.abs(fingerX - center);
-  const sigma  = tabSlot * 0.65;
-  return 1 + 0.58 * Math.exp(-(dist * dist) / (2 * sigma * sigma));
+  const sigma  = tabSlot * 0.60;
+  return 1 + 0.48 * Math.exp(-(dist * dist) / (2 * sigma * sigma));
+}
+
+function pillX(tabIdx: number, tabSlot: number): number {
+  return tabIdx * tabSlot + PILL_INSET;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -74,31 +96,61 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
   const barWidth = screenWidth - BAR_MARGIN * 2;
   const tabSlot  = barWidth / TABS.length;
 
-  // ── Animated values (stable refs, never recreated) ──────────────────────────
-  const tabScaleAnims  = useRef(TABS.map(() => new Animated.Value(1))).current;
-  const bubbleOpacity  = useRef(new Animated.Value(0)).current;
-  const bubbleScale    = useRef(new Animated.Value(0.8)).current;
-  const bubbleTranslX  = useRef(new Animated.Value(0)).current;
+  // ── Animated values ─────────────────────────────────────────────────────────
 
-  // ── Mutable state (refs, not re-render-safe state) ──────────────────────────
-  const isDragging          = useRef(false);
-  const hasMoved            = useRef(false);
-  const hoveredTabKeyRef    = useRef<TabKey | null>(null);
+  // Pill X: JS-driven so toValue can depend on runtime tabSlot
+  const pillXAnim = useRef(
+    new Animated.Value(pillX(getTabIndex(activeTab), tabSlot)),
+  ).current;
 
-  // ── React state (only what's needed for render) ─────────────────────────────
-  const [hoveredTabKey, setHoveredTabKey] = useState<TabKey | null>(null);
+  // Per-tab icon scale: native-driver (pure transform)
+  const tabScaleAnims = useRef(TABS.map(() => new Animated.Value(1))).current;
 
-  // ── Latest values ref (avoids stale closures inside PanResponder) ───────────
-  const latestRef = useRef({ tabSlot, barWidth, onTabPress });
-  latestRef.current.tabSlot    = tabSlot;
-  latestRef.current.barWidth   = barWidth;
-  latestRef.current.onTabPress = onTabPress;
+  // ── State ────────────────────────────────────────────────────────────────────
 
-  // ── Internal helpers (stable closures over Animated.Value refs) ──────────────
+  // Null while idle; set to dragged-over tab during live drag preview
+  const [previewTab, setPreviewTab] = useState<TabKey | null>(null);
+  const displayTab = previewTab ?? activeTab;
+
+  // ── Mutable refs ─────────────────────────────────────────────────────────────
+
+  const isDragging       = useRef(false);
+  const hasMoved         = useRef(false);
+  const prevHoveredIdx   = useRef(-1);
+
+  // Always-fresh values for use inside PanResponder callbacks
+  const latestRef = useRef({ tabSlot, barWidth, onTabPress, activeTab });
+  latestRef.current = { tabSlot, barWidth, onTabPress, activeTab };
+
+  // ── Pill sync when parent navigates ─────────────────────────────────────────
+
+  useEffect(() => {
+    if (isDragging.current) return;
+    Animated.spring(pillXAnim, {
+      toValue: pillX(getTabIndex(activeTab), tabSlot),
+      useNativeDriver: false,
+      tension: 260,
+      friction: 24,
+    }).start();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, tabSlot]);
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  function snapPillTo(idx: number, fast: boolean) {
+    const { tabSlot: ts } = latestRef.current;
+    Animated.spring(pillXAnim, {
+      toValue: pillX(idx, ts),
+      useNativeDriver: false,
+      tension: fast ? 380 : 260,
+      friction: fast ? 28 : 24,
+    }).start();
+  }
 
   function applyScales(fingerX: number) {
+    const { tabSlot: ts } = latestRef.current;
     tabScaleAnims.forEach((anim, i) => {
-      anim.setValue(gaussianScale(fingerX, i, latestRef.current.tabSlot));
+      anim.setValue(gaussianScale(fingerX, i, ts));
     });
   }
 
@@ -107,33 +159,10 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
       Animated.spring(anim, {
         toValue: 1,
         useNativeDriver: true,
-        tension: 120,
+        tension: 130,
         friction: 10,
       }).start();
     });
-  }
-
-  function showBubble() {
-    Animated.parallel([
-      Animated.timing(bubbleOpacity, { toValue: 1, duration: 130, useNativeDriver: true }),
-      Animated.spring(bubbleScale,   { toValue: 1, tension: 180, friction: 12, useNativeDriver: true }),
-    ]).start();
-  }
-
-  function hideBubble(onDone?: () => void) {
-    Animated.parallel([
-      Animated.timing(bubbleOpacity, { toValue: 0, duration: 140, useNativeDriver: true }),
-      Animated.timing(bubbleScale,   { toValue: 0.8, duration: 140, useNativeDriver: true }),
-    ]).start(() => {
-      hoveredTabKeyRef.current = null;
-      setHoveredTabKey(null);
-      onDone?.();
-    });
-  }
-
-  function getTabAt(x: number): TabKey | null {
-    const idx = Math.floor(x / latestRef.current.tabSlot);
-    return TABS[idx]?.key ?? null;
   }
 
   // ── PanResponder (created once) ───────────────────────────────────────────────
@@ -143,177 +172,119 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder:  () => true,
 
-      onPanResponderGrant: (evt) => {
-        isDragging.current = false;
-        hasMoved.current   = false;
-        applyScales(evt.nativeEvent.locationX);
+      onPanResponderGrant: () => {
+        isDragging.current     = false;
+        hasMoved.current       = false;
+        prevHoveredIdx.current = -1;
       },
 
       onPanResponderMove: (evt, gestureState) => {
-        const { barWidth: bw } = latestRef.current;
-        const x = Math.max(0, Math.min(evt.nativeEvent.locationX, bw));
+        const { barWidth: bw, tabSlot: ts } = latestRef.current;
+        const x   = Math.max(0, Math.min(evt.nativeEvent.locationX, bw));
+        const idx = Math.min(Math.floor(x / ts), TABS.length - 1);
 
-        // Update scales every frame
-        applyScales(x);
-
-        // Update bubble X position
-        bubbleTranslX.setValue(x - BUBBLE_SIZE / 2);
-
-        // Update hovered tab label
-        const tab = getTabAt(x);
-        if (tab !== hoveredTabKeyRef.current) {
-          hoveredTabKeyRef.current = tab;
-          setHoveredTabKey(tab);
-        }
-
-        // Show bubble only after meaningful horizontal movement
-        if (!hasMoved.current && Math.abs(gestureState.dx) > DRAG_THRESHOLD) {
+        // Activate drag mode after threshold
+        if (!hasMoved.current && Math.abs(gestureState.dx) > DRAG_THRESH) {
           hasMoved.current   = true;
           isDragging.current = true;
-          bubbleTranslX.setValue(x - BUBBLE_SIZE / 2);
-          showBubble();
+        }
+
+        if (isDragging.current) {
+          applyScales(x);
+
+          if (idx !== prevHoveredIdx.current) {
+            prevHoveredIdx.current = idx;
+            setPreviewTab(TABS[idx].key);
+            snapPillTo(idx, true);
+          }
         }
       },
 
       onPanResponderRelease: (evt) => {
-        const { barWidth: bw, onTabPress: press } = latestRef.current;
+        const { barWidth: bw, tabSlot: ts, onTabPress: press, activeTab: active } =
+          latestRef.current;
         const x   = Math.max(0, Math.min(evt.nativeEvent.locationX, bw));
-        const tab = getTabAt(x);
+        const idx = Math.min(Math.floor(x / ts), TABS.length - 1);
+        const tab = TABS[idx]?.key ?? active;
 
         springResetScales();
+        setPreviewTab(null);
+        prevHoveredIdx.current = -1;
+        isDragging.current     = false;
+        hasMoved.current       = false;
 
-        if (isDragging.current) {
-          hideBubble();
-        } else {
-          // Plain tap — no bubble was shown
-          hoveredTabKeyRef.current = null;
-          setHoveredTabKey(null);
-        }
-
-        isDragging.current = false;
-        hasMoved.current   = false;
-
-        if (tab) press(tab);
+        snapPillTo(getTabIndex(tab), false);
+        press(tab);
       },
 
       onPanResponderTerminate: () => {
         springResetScales();
-        hideBubble();
-        isDragging.current = false;
-        hasMoved.current   = false;
+        setPreviewTab(null);
+        prevHoveredIdx.current = -1;
+        isDragging.current     = false;
+        hasMoved.current       = false;
+        const { activeTab: active } = latestRef.current;
+        snapPillTo(getTabIndex(active), false);
       },
     }),
   ).current;
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
+  // ─── Render ──────────────────────────────────────────────────────────────────
+
+  const pillW = tabSlot - PILL_INSET * 2;
 
   return (
-    // Container is taller than the bar so the bubble can live inside it
-    // without needing overflow:visible on an absolute-positioned element.
-    <View style={styles.container} pointerEvents="box-none">
+    <View style={styles.tabBar} {...panResponder.panHandlers}>
 
-      {/* ── Floating bubble ─────────────────────────────────────────────── */}
+      {/* ── Sliding pill (behind icons) ──────────────────────────────────── */}
       <Animated.View
         pointerEvents="none"
         style={[
-          styles.bubble,
+          styles.pill,
           {
-            opacity: bubbleOpacity,
-            transform: [
-              { translateX: bubbleTranslX },
-              { scale: bubbleScale },
-            ],
+            width: pillW,
+            backgroundColor: ACCENT[displayTab].pill,
+            transform: [{ translateX: pillXAnim }],
           },
         ]}
-      >
-        {hoveredTabKey != null && (() => {
-          const tab  = TABS.find((t) => t.key === hoveredTabKey)!;
-          const Icon = tab.Icon;
-          return (
-            <>
-              <Icon size={26} color="#47664a" strokeWidth={2.2} />
-              <Text style={styles.bubbleLabel}>
-                {locale === 'tr' ? tab.labelTr : tab.labelEn}
-              </Text>
-            </>
-          );
-        })()}
-      </Animated.View>
+      />
 
-      {/* ── Tab bar ─────────────────────────────────────────────────────── */}
-      <View style={styles.tabBar} {...panResponder.panHandlers}>
-        {TABS.map((tab, i) => {
-          const isActive = activeTab === tab.key;
-          const Icon     = tab.Icon;
-          return (
-            <Animated.View
-              key={tab.key}
-              style={[styles.tabItem, { transform: [{ scale: tabScaleAnims[i] }] }]}
-            >
-              <Icon
-                size={22}
-                color={isActive ? '#47664a' : '#9a9c95'}
-                strokeWidth={isActive ? 2.5 : 2}
-              />
-              <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                {locale === 'tr' ? tab.labelTr : tab.labelEn}
-              </Text>
-              {isActive
-                ? <View style={styles.tabDot} />
-                : <View style={styles.tabDotHidden} />
-              }
-            </Animated.View>
-          );
-        })}
-      </View>
+      {/* ── Tab items ────────────────────────────────────────────────────── */}
+      {TABS.map((tab, i) => {
+        const isActive = displayTab === tab.key;
+        const color    = isActive ? ACCENT[tab.key].active : ACCENT[tab.key].inactive;
+        const Icon     = tab.Icon;
+
+        return (
+          <Animated.View
+            key={tab.key}
+            style={[styles.tabItem, { transform: [{ scale: tabScaleAnims[i] }] }]}
+          >
+            <Icon size={22} color={color} strokeWidth={isActive ? 2.5 : 2} />
+            <Text style={[styles.tabText, { color }, isActive && styles.tabTextBold]}>
+              {locale === 'tr' ? tab.labelTr : tab.labelEn}
+            </Text>
+            <View
+              style={[
+                styles.tabDot,
+                { backgroundColor: isActive ? ACCENT[tab.key].active : 'transparent' },
+              ]}
+            />
+          </Animated.View>
+        );
+      })}
     </View>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
-const CONTAINER_HEIGHT = BAR_HEIGHT + BUBBLE_SIZE + BUBBLE_GAP + 8;
-
 const styles = StyleSheet.create({
-  container: {
+  tabBar: {
     position: 'absolute',
-    bottom: 20,
     left: BAR_MARGIN,
     right: BAR_MARGIN,
-    height: CONTAINER_HEIGHT,
-    justifyContent: 'flex-end',  // tab bar pinned to bottom of container
-  },
-
-  // ── Floating bubble ─────────────────────────────────────────────────────────
-  bubble: {
-    position: 'absolute',
-    bottom: BAR_HEIGHT + BUBBLE_GAP,
-    left: 0,
-    width: BUBBLE_SIZE,
-    height: BUBBLE_SIZE,
-    borderRadius: BUBBLE_SIZE / 2,
-    backgroundColor: '#ffffff',
-    borderWidth: 1.5,
-    borderColor: '#c8deca',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 3,
-    shadowColor: '#2a4a2e',
-    shadowOpacity: 0.22,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: -4 },
-    elevation: 14,
-  },
-
-  bubbleLabel: {
-    color: '#47664a',
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0.1,
-  },
-
-  // ── Tab bar ─────────────────────────────────────────────────────────────────
-  tabBar: {
+    bottom: 20,
     height: BAR_HEIGHT,
     borderRadius: 24,
     backgroundColor: '#ffffff',
@@ -325,6 +296,15 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 6 },
     elevation: 8,
+    overflow: 'hidden',  // pill stays within rounded bar
+  },
+
+  pill: {
+    position: 'absolute',
+    top: (BAR_HEIGHT - PILL_HEIGHT) / 2,
+    left: 0,
+    height: PILL_HEIGHT,
+    borderRadius: PILL_RADIUS,
   },
 
   tabItem: {
@@ -333,18 +313,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 3,
     paddingTop: 6,
+    zIndex: 1,  // above pill
   },
 
   tabText: {
-    color: '#9a9c95',
     fontSize: 10,
     lineHeight: 12,
     fontWeight: '600',
     letterSpacing: 0.2,
   },
 
-  tabTextActive: {
-    color: '#47664a',
+  tabTextBold: {
     fontWeight: '700',
   },
 
@@ -352,13 +331,6 @@ const styles = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: '#47664a',
-    marginTop: 1,
-  },
-
-  tabDotHidden: {
-    width: 5,
-    height: 5,
     marginTop: 1,
   },
 });
