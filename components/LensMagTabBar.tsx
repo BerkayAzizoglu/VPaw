@@ -23,6 +23,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { Bell, ChartSpline, HeartPulse, Home } from 'lucide-react-native';
+import { hap } from '../lib/haptics';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -196,6 +197,7 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
             prevHoveredIdx.current = idx;
             setPreviewTab(TABS[idx].key);
             snapPillTo(idx, true);
+            hap.select(); // discrete tick per tab crossing
           }
         }
       },
@@ -214,6 +216,7 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
         hasMoved.current       = false;
 
         snapPillTo(getTabIndex(tab), false);
+        hap.light(); // confirm navigation
         press(tab);
       },
 

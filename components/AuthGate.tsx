@@ -54,6 +54,7 @@ import {
   type CloudHealthPayload,
 } from '../lib/healthSyncRepo';
 import { reconcileReminderNotifications } from '../lib/reminderNotifications';
+import { hap } from '../lib/haptics';
 import { buildAiInsights, type AiInsight } from '../lib/insightsEngine';
 import { buildUnifiedHealthEventsForPet, summarizeUnifiedHealthEvents } from '../lib/unifiedHealthEvents';
 import { buildPetHealthPassportData, generatePetPassportPDF, type PetPassportExportSelection } from '../lib/petHealthPassportPdf';
@@ -1796,6 +1797,7 @@ export default function AuthGate() {
   };
 
   const recordVetVisitWithOutcomes = (input: VetVisitCreateInput) => {
+    hap.medium();
     let createdVisit: VetVisit | null = null;
     setVetVisitsByPet((prev) => {
       const created = createVetVisit(prev, {
@@ -1883,6 +1885,7 @@ export default function AuthGate() {
   };
 
   const handleDeleteHealthRecord = (timelineItemId: string) => {
+    hap.heavy();
     if (timelineItemId.startsWith('med-')) {
       const eventId = timelineItemId.slice(4);
       setMedicalEventsByPet((prev) => {
@@ -1896,6 +1899,7 @@ export default function AuthGate() {
   };
 
   const handleAddHealthRecord = (payload: AddHealthRecordPayload) => {
+    hap.medium();
     const eventDate = payload.date;
     const nowIso = new Date().toISOString();
 
@@ -2349,6 +2353,7 @@ export default function AuthGate() {
   };
 
   const handleNotificationSnooze = (notificationId: string) => {
+    hap.light();
     const item = triggeredNotifications.find((entry) => entry.id === notificationId);
     if (!item) return;
     markNotificationRead(notificationId);
@@ -2376,6 +2381,7 @@ export default function AuthGate() {
   };
 
   const handleDeleteReminder = (id: string) => {
+    hap.heavy();
     setRemindersWithNotificationSync((prev) => {
       const next: ByPet<Reminder> = {};
       for (const petId of Object.keys(prev)) {
@@ -2622,6 +2628,7 @@ export default function AuthGate() {
     };
 
     const markReminderDone = (petId: string, reminderId: string) => {
+      hap.success();
       setRemindersWithNotificationSync((prev) => markReminderCompleted(prev, petId, reminderId).next);
     };
 
@@ -2939,6 +2946,7 @@ export default function AuthGate() {
   }, [activePetId, homeNextImportantEvent?.title, homeNextImportantEvent?.urgent, locale, medicalEventsByPet, petProfiles, remindersByPet, vetVisitsByPet]);
 
   const addWeightEntryForActivePet = (value: number, options?: { date?: string; note?: string }) => {
+    hap.medium();
     const now = new Date();
     const selectedDateMs = options?.date ? new Date(options.date).getTime() : Number.NaN;
     const entryDate = Number.isFinite(selectedDateMs) ? new Date(selectedDateMs) : now;
@@ -3259,6 +3267,7 @@ export default function AuthGate() {
         pet={petProfiles[activePetId]}
         onBack={() => setRoute('home')}
         onSaved={(nextPet) => {
+          hap.medium();
           const previousPet = petProfiles[nextPet.id];
 
           const previousVaccinationSet = new Set((previousPet?.vaccinations ?? []).map((v) => `${v.name}|${v.date}`));
@@ -3372,6 +3381,7 @@ export default function AuthGate() {
         onBack={() => setRoute('petProfiles')}
         onSaved={() => setRoute('petProfiles')}
         onCreated={(pet) => {
+          hap.success();
           addPet(pet);
           setActivePetWithPersist(pet.id);
           setRoute('petProfiles');
