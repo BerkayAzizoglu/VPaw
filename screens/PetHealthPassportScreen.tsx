@@ -19,6 +19,7 @@ type PetHealthPassportScreenProps = {
   onOpenVetVisits?: () => void;
   onOpenHealthRecords?: () => void;
   onOpenWeight?: () => void;
+  onOpenPremium?: () => void;
   isPremiumPlan?: boolean;
   healthCardSummary?: HealthCardSummary;
   onExportPdf?: (selection: PetPassportExportSelection) => Promise<void> | void;
@@ -34,8 +35,9 @@ type ExportRowMeta = {
   priority?: 'high' | 'normal';
 };
 
-function Icon({ kind, size = 20, color = '#6f6f6f' }: { kind: 'back' | 'vaccine' | 'pulse' | 'health' | 'weight' | 'download'; size?: number; color?: string }) {
+function Icon({ kind, size = 20, color = '#6f6f6f' }: { kind: 'back' | 'vaccine' | 'pulse' | 'health' | 'weight' | 'download' | 'lock'; size?: number; color?: string }) {
   if (kind === 'back') return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Path d="M15 6L9 12L15 18" stroke={color} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" /></Svg>;
+  if (kind === 'lock') return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Path d="M8 11V7.5C8 5.57 9.57 4 11.5 4S15 5.57 15 7.5V11" stroke={color} strokeWidth={1.8} strokeLinecap="round" /><Path d="M6 11H17C17.55 11 18 11.45 18 12V19C18 19.55 17.55 20 17 20H6C5.45 20 5 19.55 5 19V12C5 11.45 5.45 11 6 11Z" stroke={color} strokeWidth={1.8} strokeLinejoin="round" /></Svg>;
   if (kind === 'vaccine') return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Path d="M14.5 5.5L18.5 9.5" stroke={color} strokeWidth={1.9} strokeLinecap="round" /><Path d="M6 18L14.7 9.3L17.7 12.3L9 21H6V18Z" stroke={color} strokeWidth={1.9} strokeLinejoin="round" /></Svg>;
   if (kind === 'pulse') return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Path d="M3.5 12H8L10 8L13 16L15.2 11.5H20.5" stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" /></Svg>;
   if (kind === 'health') return <Svg width={size} height={size} viewBox="0 0 24 24" fill="none"><Path d="M12 20.3C8.7 17.8 5 14.9 5 11.1C5 8.9 6.8 7.2 9 7.2C10.4 7.2 11.6 7.9 12.2 9C12.8 7.9 14 7.2 15.4 7.2C17.6 7.2 19.4 8.9 19.4 11.1C19.4 14.9 15.7 17.8 12.4 20.3" stroke={color} strokeWidth={1.8} strokeLinejoin="round" /></Svg>;
@@ -74,6 +76,7 @@ export default function PetHealthPassportScreen({
   onOpenVetVisits,
   onOpenHealthRecords,
   onOpenWeight,
+  onOpenPremium,
   isPremiumPlan = false,
   healthCardSummary,
   onExportPdf,
@@ -203,10 +206,14 @@ export default function PetHealthPassportScreen({
 
   const ensurePremium = () => {
     if (isPremiumPlan) return true;
-    Alert.alert(
-      isTr ? 'Premium Özellik' : 'Premium Feature',
-      isTr ? 'Free planda PDF dışa aktarmada yalnızca Aşı Kayıtları kullanılabilir.' : 'On Free plan, PDF export includes only Vaccination Records.',
-    );
+    if (onOpenPremium) {
+      onOpenPremium();
+    } else {
+      Alert.alert(
+        isTr ? 'Premium Özellik' : 'Premium Feature',
+        isTr ? 'Free planda PDF dışa aktarmada yalnızca Aşı Kayıtları kullanılabilir.' : 'On Free plan, PDF export includes only Vaccination Records.',
+      );
+    }
     return false;
   };
 
@@ -267,10 +274,11 @@ export default function PetHealthPassportScreen({
           </View>
         ) : null}
 
-        <Text style={styles.groupTitle}>{isTr ? 'INCLUDE IN REPORT' : 'INCLUDE IN REPORT'}</Text>
+        <Text style={styles.groupTitle}>{isTr ? 'RAPORA EKLE' : 'INCLUDE IN REPORT'}</Text>
         <View style={styles.exportCard}>
           {includeRows.map((key, idx) => {
             const meta = rowMeta[key];
+            const isLocked = !isPremiumPlan && key !== 'vaccines';
             return (
               <View key={key} style={[styles.scopeRow, idx !== includeRows.length - 1 && styles.exportRowBorder, meta.priority === 'high' && styles.scopeRowPrimary]}>
                 <View style={styles.exportLeft}>
@@ -278,21 +286,24 @@ export default function PetHealthPassportScreen({
                     <Icon kind={meta.icon} size={18} color={meta.priority === 'high' ? '#3e5b45' : '#6f7f67'} />
                   </View>
                   <View style={styles.exportTextWrap}>
-                    <Text style={[styles.exportTitle, meta.priority === 'high' && styles.exportTitlePrimary]}>{meta.title}</Text>
+                    <View style={styles.exportTitleRow}>
+                      <Text style={[styles.exportTitle, meta.priority === 'high' && styles.exportTitlePrimary]}>{meta.title}</Text>
+                      {isLocked ? <Icon kind="lock" size={13} color="#c48d42" /> : null}
+                    </View>
                     <Text style={styles.exportSub}>{meta.helper}</Text>
                   </View>
                 </View>
                 <PawSwitch
                   value={sectionIncluded[key]}
                   onValueChange={() => toggleSection(key)}
-                  disabled={!isPremiumPlan && key !== 'vaccines'}
+                  disabled={isLocked}
                 />
               </View>
             );
           })}
         </View>
 
-        <Text style={styles.groupTitle}>{isTr ? 'ATTACHMENTS' : 'ATTACHMENTS'}</Text>
+        <Text style={styles.groupTitle}>{isTr ? 'EKLER' : 'ATTACHMENTS'}</Text>
         <View style={styles.exportCard}>
           <View style={styles.scopeRow}>
             <View style={styles.exportLeft}>
@@ -300,7 +311,10 @@ export default function PetHealthPassportScreen({
                 <Icon kind="download" size={18} color="#6f7f67" />
               </View>
               <View style={styles.exportTextWrap}>
-                <Text style={styles.exportTitle}>{rowMeta.documents.title}</Text>
+                <View style={styles.exportTitleRow}>
+                  <Text style={styles.exportTitle}>{rowMeta.documents.title}</Text>
+                  {!isPremiumPlan ? <Icon kind="lock" size={13} color="#c48d42" /> : null}
+                </View>
                 <Text style={styles.exportSub}>{rowMeta.documents.helper}</Text>
               </View>
             </View>
@@ -317,7 +331,7 @@ export default function PetHealthPassportScreen({
         <Icon kind="download" size={18} color="#faf8f5" />
         <Text style={styles.exportBtnText}>
           {isExporting
-            ? (isTr ? 'PDF olusturuluyor...' : 'Generating PDF...')
+            ? (isTr ? 'PDF oluşturuluyor...' : 'Generating PDF...')
             : isPremiumPlan
             ? (isTr ? `PDF Dışa Aktar (${selectedCount})` : `Export PDF (${selectedCount})`)
             : (isTr ? 'PDF Dışa Aktar (Demo)' : 'Export PDF (Demo)')}
@@ -375,6 +389,7 @@ const styles = StyleSheet.create({
   exportRowBorder: { borderBottomWidth: 1, borderBottomColor: 'rgba(0,0,0,0.05)' },
   exportLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
   exportTextWrap: { flex: 1 },
+  exportTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   exportIcon: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#f2f3f0', alignItems: 'center', justifyContent: 'center' },
   exportIconPrimary: { backgroundColor: '#eaf0ee' },
   exportTitle: { fontSize: 16, lineHeight: 20, color: '#2d2d2d', fontWeight: '700' },

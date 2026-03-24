@@ -237,9 +237,6 @@ export default function WeightTrackingScreen({
   const edgeSwipeResponder = useEdgeSwipeBack({
     onBack,
     enabled: !previewMode && !isScrubbing && !focusedField,
-    edgeWidth: 24,
-    triggerDx: 70,
-    maxDy: 30,
   });
 
   // ─── Derived / memoized ─────────────────────────────────────────────────────
@@ -494,6 +491,50 @@ export default function WeightTrackingScreen({
       kind: 'neutral' as const,
     };
   }, [entries, isTr, petName, rangeStatus]);
+
+  // ─── Recency insight (last measurement timing) ─────────────────────────────
+  const recencyInsight = useMemo(() => {
+    if (entries.length === 0) return null;
+
+    const sorted = [...entries].sort((a, b) => {
+      const da = parseEntryDate(a.date);
+      const db = parseEntryDate(b.date);
+      if (!da || !db) return 0;
+      return da.getTime() - db.getTime();
+    });
+
+    const lastEntry = sorted[sorted.length - 1];
+    const lastDate = parseEntryDate(lastEntry.date);
+    if (!lastDate) return null;
+
+    const daysSince = Math.floor((Date.now() - lastDate.getTime()) / (24 * 60 * 60 * 1000));
+
+    if (daysSince <= 7) {
+      return {
+        title: isTr ? 'Düzenli Takip' : 'Tracking Regularly',
+        body: isTr
+          ? `Son kayıt ${daysSince === 0 ? 'bugün' : `${daysSince} gün önce`}. Harika gidiyor!`
+          : `Last entry ${daysSince === 0 ? 'today' : `${daysSince} day${daysSince !== 1 ? 's' : ''} ago`}. Great consistency!`,
+        kind: 'positive' as const,
+      };
+    }
+    if (daysSince <= 21) {
+      return {
+        title: isTr ? 'Düzenli Takip Önerilir' : 'Regular Tracking Suggested',
+        body: isTr
+          ? `Son kayıt ${daysSince} gün önce. Haftada bir ölçüm ideal takip sağlar.`
+          : `Last entry was ${daysSince} days ago. Weekly measurements provide the best trend data.`,
+        kind: 'neutral' as const,
+      };
+    }
+    return {
+      title: isTr ? 'Ölçüm Zamanı' : 'Time to Measure',
+      body: isTr
+        ? `Son kayıt ${daysSince} gün önce. Düzenli ölçüm sağlık trendlerini daha net ortaya koyar.`
+        : `It's been ${daysSince} days since the last entry. Regular measurements help spot health trends early.`,
+      kind: 'warning' as const,
+    };
+  }, [entries, isTr]);
 
   // ─── Goal progress ──────────────────────────────────────────────────────────
   const currentWeightForGoal = latestWeight?.value ?? 0;
@@ -793,6 +834,27 @@ export default function WeightTrackingScreen({
               <Text style={styles.insightText}>{trendInsight.body}</Text>
             </View>
           </Pressable>
+
+          {recencyInsight ? (
+            <View style={styles.insightCard}>
+              <View style={[
+                styles.insightIconBox,
+                recencyInsight.kind === 'positive' ? styles.insightIconGood
+                : recencyInsight.kind === 'warning' ? styles.insightIconWarn
+                : styles.insightIconNeutral,
+              ]}>
+                <Icon
+                  kind="calendar"
+                  size={20}
+                  color={recencyInsight.kind === 'positive' ? '#47664a' : recencyInsight.kind === 'warning' ? '#c48d42' : '#5d605a'}
+                />
+              </View>
+              <View style={styles.insightBody}>
+                <Text style={styles.insightTitle}>{recencyInsight.title}</Text>
+                <Text style={styles.insightText}>{recencyInsight.body}</Text>
+              </View>
+            </View>
+          ) : null}
 
           {/* ── History ─────────────────────────────────────────────────────── */}
           <Text style={styles.sectionTitle}>{copy.history}</Text>

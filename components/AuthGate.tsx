@@ -3420,6 +3420,7 @@ export default function AuthGate() {
         onOpenVetVisits={() => openSubRoute('vetVisits', 'passport')}
         onOpenHealthRecords={() => openHealthHubWithCategory('record')}
         onOpenWeight={() => openPetProfile(activePetId, 'passport')}
+        onOpenPremium={() => setRoute('premium')}
         onExportPdf={handleExportPetPassportPdf}
       />
     );
