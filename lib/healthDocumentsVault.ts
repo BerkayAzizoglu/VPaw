@@ -1,5 +1,4 @@
-import type { WeightPoint } from '../screens/WeightTrackingScreen';
-import type { ByPet, MedicalEvent, VetVisit } from './healthMvpModel';
+import type { WeightPoint, ByPet, MedicalEvent, VetVisit } from './healthMvpModel';
 
 export type HealthDocumentSourceType = 'vet_visit' | 'medical_event';
 export type HealthDocumentType = 'lab' | 'prescription' | 'document' | 'image' | 'other';

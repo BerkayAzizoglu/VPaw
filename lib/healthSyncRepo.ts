@@ -1,4 +1,3 @@
-import type { WeightPoint } from '../screens/WeightTrackingScreen';
 import { supabase } from './supabase';
 import {
   normalizeMedicalEventsByPet,
@@ -10,6 +9,7 @@ import {
   type MedicationCourse,
   type Reminder,
   type VetVisit,
+  type WeightPoint,
 } from './healthMvpModel';
 
 export type CloudHealthPayload = {

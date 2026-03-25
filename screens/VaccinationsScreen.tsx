@@ -13,6 +13,7 @@ import Svg, { Circle, Path, Rect } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
+import { localizeVaccine } from '../lib/vaccineI18n';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -132,7 +133,8 @@ function Icon({
 
 // ─── Featured (Next Up) Card ─────────────────────────────────────────────────
 
-function FeaturedVaccineCard({ data }: { data: VaccinationsNextUpData }) {
+function FeaturedVaccineCard({ data, locale }: { data: VaccinationsNextUpData; locale: 'en' | 'tr' }) {
+  const localized = localizeVaccine(data.name, data.subtitle, locale);
   // Parse a simple "Apr 18" or "18.04.2025" display date for the date box
   const parts = data.date.split(/[.\-\/\s]/);
   const dayStr = parts[0] ?? '—';
@@ -148,8 +150,8 @@ function FeaturedVaccineCard({ data }: { data: VaccinationsNextUpData }) {
           <View style={styles.glassTag}>
             <Text style={styles.glassTagText}>UPCOMING</Text>
           </View>
-          <Text style={styles.featuredTitle}>{data.name}</Text>
-          <Text style={styles.featuredSub}>{data.subtitle}</Text>
+          <Text style={styles.featuredTitle}>{localized.name}</Text>
+          <Text style={styles.featuredSub}>{localized.subtitle}</Text>
         </View>
         {/* date box */}
         <View style={styles.featuredDateBox}>
@@ -165,7 +167,7 @@ function FeaturedVaccineCard({ data }: { data: VaccinationsNextUpData }) {
         </View>
         <View style={styles.featuredMetaItem}>
           <Icon kind="shield" size={14} color="rgba(255,255,255,0.8)" />
-          <Text style={styles.featuredMetaText}>{data.subtitle}</Text>
+          <Text style={styles.featuredMetaText}>{localized.subtitle}</Text>
         </View>
       </View>
     </View>
@@ -178,11 +180,14 @@ function VaccineCard({
   item,
   statusLabels,
   dueDateLabel,
+  locale,
 }: {
   item: VaccinationsHistoryItem;
   statusLabels: { overdue: string; dueSoon: string; upToDate: string };
   dueDateLabel: string;
+  locale: 'en' | 'tr';
 }) {
+  const localized = localizeVaccine(item.name, item.subtitle, locale);
   const isOverdue = item.status === 'overdue';
   const isDueSoon = item.status === 'dueSoon';
   const isUpToDate = item.status === 'upToDate';
@@ -213,9 +218,9 @@ function VaccineCard({
 
       {/* main text */}
       <View style={styles.vaccineMain}>
-        <Text style={styles.vaccineName}>{item.name}</Text>
+        <Text style={styles.vaccineName}>{localized.name}</Text>
         <View style={styles.vaccineMetaRow}>
-          <Text style={styles.vaccineSub}>{item.subtitle}</Text>
+          <Text style={styles.vaccineSub}>{localized.subtitle}</Text>
           <View style={styles.vaccineDot} />
           <Text style={styles.vaccineDueText}>{item.dueDate}</Text>
         </View>
@@ -373,7 +378,7 @@ export default function VaccinationsScreen({
 
               {/* ── Next Up featured card ── */}
               <Text style={styles.sectionLabel}>{copy.nextUp}</Text>
-              <FeaturedVaccineCard data={nextCard} />
+              <FeaturedVaccineCard data={nextCard} locale={locale} />
 
               {/* ── Vaccine history ── */}
               <Text style={[styles.sectionLabel, { marginTop: 28 }]}>{copy.vaccineHistory}</Text>
@@ -384,6 +389,7 @@ export default function VaccinationsScreen({
                     item={item}
                     statusLabels={copy.statuses}
                     dueDateLabel={copy.dueDate}
+                    locale={locale}
                   />
                 ))}
               </View>

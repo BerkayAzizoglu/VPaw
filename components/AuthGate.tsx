@@ -9,13 +9,14 @@ import HomeScreen, { type JourneyEventItem as HomeJourneyEventItem, type NextImp
 import PremiumScreen from '../screens/PremiumScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
 import VaccinationsScreen from '../screens/VaccinationsScreen';
-import WeightTrackingScreen, { WeightPoint } from '../screens/WeightTrackingScreen';
+import WeightTrackingScreen from '../screens/WeightTrackingScreen';
 import VetVisitsScreen, { type CreateVetVisitPayload, type VetVisitCreatePreset } from '../screens/VetVisitsScreen';
 import PetEditScreen from '../screens/PetEditScreen';
+import PetDetailScreen from '../screens/PetDetailScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import PetHealthPassportScreen from '../screens/PetHealthPassportScreen';
 import PetProfilesScreen from '../screens/PetProfilesScreen';
-import RemindersScreen from '../screens/RemindersScreen';
+import RemindersScreen, { type ReminderSuggestion } from '../screens/RemindersScreen';
 import InsightsScreen from '../screens/InsightsScreen';
 import DocumentsScreen from '../screens/DocumentsScreen';
 import NotificationCenterScreen from '../screens/NotificationCenterScreen';
@@ -54,7 +55,7 @@ import {
   type CloudHealthDomainUpdatedAt,
   type CloudHealthPayload,
 } from '../lib/healthSyncRepo';
-import { reconcileReminderNotifications } from '../lib/reminderNotifications';
+import { cancelReminderNotification, reconcileReminderNotifications } from '../lib/reminderNotifications';
 import { hap } from '../lib/haptics';
 import { buildAiInsights, type AiInsight } from '../lib/insightsEngine';
 import { buildUnifiedHealthEventsForPet, summarizeUnifiedHealthEvents } from '../lib/unifiedHealthEvents';
@@ -90,6 +91,7 @@ import {
   type VetVisit,
   type VetVisitReasonCategory,
   type VetVisitStatus,
+  type WeightPoint,
 } from '../lib/healthMvpModel';
 
 type AppRoute =
@@ -110,7 +112,8 @@ type AppRoute =
   | 'passport'
   | 'petProfiles'
   | 'documents'
-  | 'notifications';
+  | 'notifications'
+  | 'weightTracking';
 
 type PrimaryTab = 'home' | 'healthHub' | 'reminders' | 'insights';
 export type VaccinationRecord = {
@@ -663,6 +666,7 @@ export default function AuthGate() {
   const [darkModeEnabled, setDarkModeEnabled] = useState(false);
   const [subBackRoute, setSubBackRoute] = useState<AppRoute>('home');
   const [petProfileBackRoute, setPetProfileBackRoute] = useState<AppRoute>('home');
+  const [petEditBackRoute, setPetEditBackRoute] = useState<AppRoute>('home');
   const [passportBackRoute, setPassportBackRoute] = useState<AppRoute>('home');
   const [documentsBackRoute, setDocumentsBackRoute] = useState<AppRoute>('healthHub');
   const [notificationsBackRoute, setNotificationsBackRoute] = useState<AppRoute>('reminders');
@@ -1720,8 +1724,7 @@ export default function AuthGate() {
       return;
     }
     if (insight.actionType === 'logWeight') {
-      setPetProfileBackRoute(route);
-      setRoute('petProfile');
+      openWeightTracking(activePetId, route);
     }
   };
 
@@ -1854,7 +1857,6 @@ export default function AuthGate() {
           scheduledAt: outcome.reminder.scheduledAt,
           isActive: true,
           kind: outcome.reminder.kind,
-          dueAt: outcome.reminder.dueAt ?? outcome.reminder.scheduledAt,
           status: 'pending',
           originType: 'system',
           sourceType: 'vet_visit',
@@ -1917,6 +1919,32 @@ export default function AuthGate() {
       }).next,
     );
 
+    // Auto-create a booster reminder 1 year from vaccine date
+    if (payload.type === 'vaccine') {
+      const boosterDate = new Date(eventDate);
+      boosterDate.setFullYear(boosterDate.getFullYear() + 1);
+      const boosterDateStr = boosterDate.toISOString().slice(0, 10);
+      const boosterTitle = locale === 'tr'
+        ? `${payload.title} - Hatırlatma`
+        : `${payload.title} - Booster`;
+      setRemindersWithNotificationSync((prev) =>
+        createReminder(prev, {
+          petId: activePetId,
+          type: 'medical',
+          subtype: 'vaccine',
+          title: boosterTitle,
+          frequency: 'once',
+          scheduledAt: `${boosterDateStr}T09:00:00.000Z`,
+          isActive: true,
+          kind: 'vaccine_due',
+          status: 'pending',
+          originType: 'system',
+          sourceType: 'medical_event',
+          note: locale === 'tr' ? 'Aşı takviyesi' : 'Vaccine booster',
+        }).next,
+      );
+    }
+
     setPetProfilesUpdatedAt((prev) => ({ ...prev, [activePetId]: nowIso }));
   };
 
@@ -1925,6 +1953,12 @@ export default function AuthGate() {
     setPetProfileBackRoute(from);
     setSubBackRoute(from);
     setRoute('petProfile');
+  };
+
+  const openWeightTracking = (petId: string = activePetId, from: AppRoute = 'petProfile') => {
+    setActivePetWithPersist(petId);
+    setPetProfileBackRoute(from);
+    setRoute('weightTracking');
   };
 
   const vaccinationsBridge = useMemo(
@@ -2125,6 +2159,100 @@ export default function AuthGate() {
     });
   };
 
+  const deletePet = (petId: string) => {
+    hap.heavy();
+    // Cancel any scheduled notifications for this pet's reminders
+    const petReminders = remindersByPet[petId] ?? [];
+    petReminders.forEach((reminder) => {
+      if (reminder.notificationId) {
+        void cancelReminderNotification(reminder.notificationId);
+      }
+    });
+
+    // Remove from all state collections
+    setPetProfilesWithPersist((prev) => {
+      const next = { ...prev };
+      delete next[petId];
+      return next;
+    });
+    setPetProfilesUpdatedAt((prev) => {
+      const next = { ...prev };
+      delete next[petId];
+      return next;
+    });
+    setPetList((prev) => prev.filter((id) => id !== petId));
+    setWeightsByPet((prev) => {
+      const next = { ...prev };
+      delete next[petId];
+      return next;
+    });
+    setWeightsUpdatedAt((prev) => {
+      const next = { ...prev };
+      delete next[petId];
+      return next;
+    });
+    setHealthEventsByPet((prev) => {
+      const next = { ...prev };
+      delete next[petId];
+      return next;
+    });
+    setVetVisitsByPet((prev) => {
+      const next = { ...prev };
+      delete next[petId];
+      return next;
+    });
+    setMedicalEventsByPet((prev) => {
+      const next = { ...prev };
+      delete next[petId];
+      return next;
+    });
+    setRemindersByPet((prev) => {
+      const next = { ...prev };
+      delete next[petId];
+      return next;
+    });
+    setMedicationCoursesByPet((prev) => {
+      const next = { ...prev };
+      delete next[petId];
+      return next;
+    });
+    setWeightGoalsByPet((prev) => {
+      const next = { ...prev };
+      delete next[petId];
+      return next;
+    });
+    setNotificationInbox((prev) => prev.filter((n) => n.petId !== petId));
+
+    // If deleted pet was active, switch to next available
+    if (activePetId === petId) {
+      const remaining = petList.filter((id) => id !== petId);
+      const nextPet = remaining[0] ?? '';
+      setActivePetWithPersist(nextPet);
+    }
+  };
+
+  const handleCompleteMedication = (id: string) => {
+    setMedicationCoursesByPet((prev) => {
+      const petCourses = prev[activePetId] ?? [];
+      return {
+        ...prev,
+        [activePetId]: petCourses.map((c) =>
+          c.id === id ? { ...c, status: 'completed' as const, updatedAt: new Date().toISOString() } : c,
+        ),
+      };
+    });
+  };
+
+  const handleDeleteMedication = (id: string) => {
+    setMedicationCoursesByPet((prev) => {
+      const petCourses = prev[activePetId] ?? [];
+      return {
+        ...prev,
+        [activePetId]: petCourses.filter((c) => c.id !== id),
+      };
+    });
+  };
+
   const openAddPet = () => {
     const id = `pet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setNewPetTemplate({
@@ -2242,6 +2370,55 @@ export default function AuthGate() {
       completed: completed.slice(0, 20),
     };
   }, [completedRemindersByPet, locale, petList, petProfiles, remindersByPet]);
+
+  const reminderSuggestions = useMemo<ReminderSuggestion[]>(() => {
+    const result: ReminderSuggestion[] = [];
+
+    // Active medication courses → medication reminder suggestions
+    (medicationCoursesByPet[activePetId] ?? [])
+      .filter((c) => c.status === 'active' || c.status === 'paused')
+      .slice(0, 3)
+      .forEach((c) => {
+        result.push({
+          id: `sug-med-${c.id}`,
+          title: locale === 'tr' ? `${c.name} - Hatırlatma` : `${c.name} - Reminder`,
+          subtype: 'medication',
+          source: 'medication',
+        });
+      });
+
+    // Last vet visit → follow-up suggestion
+    const sortedVetVisits = [...(vetVisitsByPet[activePetId] ?? [])].sort(
+      (a, b) => new Date(b.visitDate).getTime() - new Date(a.visitDate).getTime(),
+    );
+    if (sortedVetVisits.length > 0) {
+      const last = sortedVetVisits[0]!;
+      result.push({
+        id: `sug-vet-${last.id}`,
+        title: locale === 'tr'
+          ? `${last.clinicName ?? 'Veteriner'} - Kontrol`
+          : `${last.clinicName ?? 'Vet'} - Follow-up`,
+        subtype: 'vet_visit',
+        source: 'vet_visit',
+      });
+    }
+
+    // Recent vaccines → booster suggestions
+    (medicalEventsByPet[activePetId] ?? [])
+      .filter((e) => e.type === 'vaccine')
+      .sort((a, b) => new Date(b.eventDate).getTime() - new Date(a.eventDate).getTime())
+      .slice(0, 2)
+      .forEach((e) => {
+        result.push({
+          id: `sug-vac-${e.id}`,
+          title: locale === 'tr' ? `${e.title} - Tekrar` : `${e.title} - Booster`,
+          subtype: 'vaccine',
+          source: 'vaccine',
+        });
+      });
+
+    return result;
+  }, [activePetId, medicationCoursesByPet, vetVisitsByPet, medicalEventsByPet, locale]);
 
   const triggeredNotificationCandidates = useMemo<HealthNotification[]>(
     () => buildTriggeredNotifications({
@@ -2614,7 +2791,7 @@ export default function AuthGate() {
           const updated: Reminder = {
             ...item,
             scheduledAt: nextIso,
-            dueAt: nextIso,
+            dueDate: nextIso,
             status: 'pending' as const,
             completedAt: undefined,
             updatedAt: new Date().toISOString(),
@@ -2775,7 +2952,7 @@ export default function AuthGate() {
         ctaLabel: locale === 'tr' ? 'Hızlı Ekle' : 'Quick Add',
         onPress: () => undefined,
         secondaryCtaLabel: locale === 'tr' ? 'Grafiği Aç' : 'Open Weight',
-        onSecondaryPress: () => openPetProfile(activePetId, 'home'),
+        onSecondaryPress: () => openWeightTracking(activePetId, 'home'),
         priority: 8,
         dateMs: nowMs,
       });
@@ -2974,7 +3151,7 @@ export default function AuthGate() {
 
       return {
         ...prev,
-        [activePetId]: [...current, nextEntry].slice(-8),
+        [activePetId]: [...current, nextEntry],
       };
     });
 
@@ -3041,17 +3218,34 @@ export default function AuthGate() {
       const activePet = petProfiles[activePetId];
       if (!activePet) return <View style={styles.previewFallback} />;
       return (
-        <WeightTrackingScreen
+        <PetDetailScreen
+          pet={activePet}
+          weightEntries={weightsByPet[activePetId]}
+          weightGoal={weightGoalsByPet[activePetId]}
+          locale={locale}
           onBack={noop}
-          previewMode
-          onOpenHealthRecords={noop}
+        />
+      );
+    }
+
+    if (target === 'healthHub') {
+      return (
+        <HealthHubScreen
+          summary={healthHubSummary}
+          timeline={healthHubTimeline}
+          domainOverview={healthHubDomainOverview}
+          locale={locale}
+          medicationCourses={medicationCoursesByPet[activePetId] ?? []}
+          onPrimaryCta={noop}
+          onAddRecord={noop}
+          onDeleteRecord={noop}
           onOpenVetVisits={noop}
-          petName={activePet.name}
-          petType={activePet.petType}
-          petBreed={activePet.breed}
-          microchip={activePet.microchip}
-          entries={weightsByPet[activePetId]}
-          onAddEntry={noop}
+          onOpenHealthRecords={noop}
+          onOpenVaccines={noop}
+          onOpenWeightTracking={noop}
+          onOpenDocuments={noop}
+          onCompleteMedication={noop}
+          onDeleteMedication={noop}
         />
       );
     }
@@ -3181,7 +3375,6 @@ export default function AuthGate() {
                 frequency: 'once',
                 scheduledAt: payload.reminderDate,
                 kind: action.type === 'vaccine' ? 'vaccine_due' : action.type === 'prescription' ? 'medication' : 'medical_followup',
-                dueAt: payload.reminderDate,
                 note: action.note,
               };
             }
@@ -3231,10 +3424,31 @@ export default function AuthGate() {
     const activePet = petProfiles[activePetId];
     if (!activePet) return null;
     return (
+      <PetDetailScreen
+        pet={activePet}
+        weightEntries={weightsByPet[activePetId]}
+        weightGoal={weightGoalsByPet[activePetId]}
+        locale={locale}
+        onBack={() => setRoute(petProfileBackRoute)}
+        onEdit={() => {
+          setPetEditBackRoute('petProfile');
+          setRoute('petEdit');
+        }}
+        onOpenWeightTracking={() => openWeightTracking(activePetId, 'petProfile')}
+        onOpenHealthRecords={() => openSubRoute('healthRecords', 'petProfile')}
+        onOpenVetVisits={() => openSubRoute('vetVisits', 'petProfile')}
+        onOpenVaccinations={() => openSubRoute('vaccinations', 'petProfile')}
+      />
+    );
+  }
+
+  if (route === 'weightTracking' && petProfiles[activePetId]) {
+    const activePet = petProfiles[activePetId];
+    return (
       <WeightTrackingScreen
         onBack={() => setRoute(petProfileBackRoute)}
         backPreview={renderBackPreview(petProfileBackRoute)}
-        onOpenHealthRecords={() => openSubRoute('healthRecords', 'home')}
+        onOpenHealthRecords={() => openSubRoute('healthRecords', 'petProfile')}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'petProfile')}
         petName={activePet.name}
         petType={activePet.petType}
@@ -3245,7 +3459,6 @@ export default function AuthGate() {
         weightGoal={weightGoalsByPet[activePetId]}
         onSetWeightGoal={(goal) => {
           setWeightGoalsByPet((prev) => ({ ...prev, [activePetId]: goal }));
-          // create a reminder so the user gets notified to check progress
           const dueDate = new Date();
           dueDate.setDate(dueDate.getDate() + 30);
           setRemindersWithNotificationSync((prev) =>
@@ -3260,7 +3473,6 @@ export default function AuthGate() {
               frequency: 'once',
               isActive: true,
               kind: 'care_routine',
-              dueAt: dueDate.toISOString(),
               status: 'pending',
               originType: 'manual',
               sourceType: 'manual',
@@ -3276,7 +3488,7 @@ export default function AuthGate() {
       <PetEditScreen
         key={activePetId}
         pet={petProfiles[activePetId]}
-        onBack={() => setRoute('home')}
+        onBack={() => setRoute(petEditBackRoute)}
         onSaved={(nextPet) => {
           hap.medium();
           const previousPet = petProfiles[nextPet.id];
@@ -3354,7 +3566,7 @@ export default function AuthGate() {
               [nextPet.id]: nowIso,
             };
           });
-          setRoute('home');
+          setRoute(petEditBackRoute);
         }}
       />
     );
@@ -3372,11 +3584,16 @@ export default function AuthGate() {
         petProfiles={petProfiles}
         onBack={() => setRoute('profile')}
         onSelectPet={(petId) => setActivePetWithPersist(petId)}
-        onOpenPetDetail={(petId) => openPetProfile(petId, 'petProfiles')}
+        onOpenPetDetail={(petId) => {
+          setActivePetWithPersist(petId);
+          openPetProfile(petId, 'petProfiles');
+        }}
         onOpenPetEdit={(petId) => {
           setActivePetWithPersist(petId);
+          setPetEditBackRoute('petProfiles');
           setRoute('petEdit');
         }}
+        onDeletePet={deletePet}
         canAddPet={canAddPet}
         onAddPet={openAddPet}
       />
@@ -3461,9 +3678,13 @@ export default function AuthGate() {
         onOpenVetVisits={() => openSubRoute('vetVisits', 'healthHub')}
         onOpenHealthRecords={() => openSubRoute('healthRecords', 'healthHub')}
         onOpenVaccines={() => openSubRoute('vaccinations', 'healthHub')}
-        onOpenWeightTracking={() => openPetProfile(activePetId, 'healthHub')}
+        onOpenWeightTracking={() => openWeightTracking(activePetId, 'healthHub')}
         onOpenDocuments={() => openDocuments('healthHub')}
         documentsPreview={documentsVaultPreview}
+        medicationCourses={medicationCoursesByPet[activePetId] ?? []}
+        onCompleteMedication={handleCompleteMedication}
+        onDeleteMedication={handleDeleteMedication}
+        weightGoal={weightGoalsByPet[activePetId]}
       />,
     );
   }
@@ -3474,7 +3695,7 @@ export default function AuthGate() {
         onBack={() => setRoute(subBackRoute ?? 'healthHub')}
         backPreview={renderBackPreview(subBackRoute ?? 'healthHub')}
         recordsData={healthRecordsForUI ?? undefined}
-        status="ready"
+        status={petHydrated ? 'ready' : 'loading'}
         onAddRecord={() => openHealthHubCreate('diagnosis', 'record')}
       />
     );
@@ -3493,8 +3714,9 @@ export default function AuthGate() {
         activePetType={petProfiles[activePetId]?.petType}
         openCreateNonce={reminderCreateNonce}
         subtypePreset={reminderCreateSubtypePreset ?? undefined}
+        suggestions={reminderSuggestions}
         onDeleteReminder={handleDeleteReminder}
-        onCreate={({ petId, subtype, title, date }) => {
+        onCreate={({ petId, subtype, title, date, frequency }) => {
           const petType = petProfiles[petId]?.petType;
           if (!isReminderSubtypeAllowedForPet(petType, subtype)) {
             return;
@@ -3507,10 +3729,9 @@ export default function AuthGate() {
               subtype,
               title,
               scheduledAt: parsedDate,
-              frequency: 'once',
+              frequency: frequency ?? 'once',
               isActive: true,
               kind: subtype === 'vaccine' ? 'vaccine_due' : subtype === 'medication' ? 'medication' : subtype === 'vet_visit' ? 'medical_followup' : 'care_routine',
-              dueAt: parsedDate,
               status: 'pending',
               originType: 'manual',
               sourceType: 'manual',
@@ -3527,11 +3748,15 @@ export default function AuthGate() {
           if (!item) return;
           setRemindersWithNotificationSync((prev) => snoozeReminder(prev, item.petId, id, 24 * 60).next);
         }}
-        onEdit={(id) => {
+        onEdit={(id, payload) => {
           const item = [...remindersTabGroups.today, ...remindersTabGroups.upcoming, ...remindersTabGroups.overdue].find((r) => r.id === id);
           if (!item) return;
-          const dueIso = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-          setRemindersWithNotificationSync((prev) => updateReminder(prev, item.petId, id, { dueDate: dueIso }).next);
+          const dueIso = new Date(`${payload.date}T12:00:00.000Z`).toISOString();
+          setRemindersWithNotificationSync((prev) => updateReminder(prev, item.petId, id, {
+            title: payload.title,
+            dueDate: dueIso,
+            subtype: payload.subtype,
+          }).next);
         }}
       />,
     );
@@ -3626,6 +3851,7 @@ export default function AuthGate() {
       }}
       onOpenPetEdit={(petId) => {
         if (petId) setActivePetWithPersist(petId);
+        setPetEditBackRoute('home');
         setRoute('petEdit');
       }}
       onOpenPetPassport={(petId) => {
@@ -3665,14 +3891,15 @@ export default function AuthGate() {
             frequency: 'daily',
             isActive: true,
             kind: 'care_routine',
-            dueAt: scheduledAt,
             status: 'pending',
             originType: 'manual',
             sourceType: 'manual',
           }).next,
         );
       }}
+      onOpenWeightTracking={() => openWeightTracking(activePetId, 'home')}
       onQuickAddWeight={(value) => addWeightEntryForActivePet(value)}
+      weightGoal={weightGoalsByPet[activePetId]}
       nextImportantEvent={homeNextImportantEvent}
       healthJourneyEvents={homeHealthJourneyEvents}
       summaryCard={homeSummaryCard}
@@ -3700,9 +3927,6 @@ const styles = StyleSheet.create({
   primaryShell: {
     flex: 1,
     backgroundColor: '#faf8f5',
-    // Reserve stable space for the floating tab bar + press scale,
-    // so content never gets clipped behind it across screens.
-    paddingBottom: 112,
   },
   fabLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -3785,7 +4009,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 });
-
 
 
 

@@ -14,6 +14,20 @@ import Svg, { Circle, Path } from 'react-native-svg';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ReminderSubtype = 'vet_visit' | 'vaccine' | 'medication' | 'food' | 'litter' | 'walk' | 'custom';
+
+export type ReminderSuggestion = {
+  id: string;
+  title: string;
+  subtype: ReminderSubtype;
+  source: 'medication' | 'vet_visit' | 'vaccine';
+};
+
+type DailyCareTemplate = {
+  id: string;
+  title: string;
+  subtype: ReminderSubtype;
+};
+
 type ReminderItem = {
   id: string;
   title: string;
@@ -36,9 +50,10 @@ type RemindersScreenProps = {
   openCreateNonce?: number;
   subtypePreset?: ReminderSubtype;
   locale?: 'en' | 'tr';
+  suggestions?: ReminderSuggestion[];
   onComplete?: (id: string) => void;
   onSnooze?: (id: string) => void;
-  onEdit?: (id: string) => void;
+  onEdit?: (id: string, payload: { title: string; date: string; subtype: ReminderSubtype }) => void;
   onDeleteReminder?: (id: string) => void;
   onOpenNotifications?: () => void;
   onCreate?: (payload: {
@@ -46,6 +61,7 @@ type RemindersScreenProps = {
     subtype: ReminderSubtype;
     title: string;
     date: string;
+    frequency?: 'once' | 'daily';
   }) => void;
 };
 
@@ -83,11 +99,22 @@ function isMedicalSubtype(subtype: ReminderSubtype | undefined) {
   return subtype === 'vet_visit' || subtype === 'vaccine' || subtype === 'medication';
 }
 
-function buildRowSub(item: ReminderItem, isTr: boolean) {
-  const parts: string[] = [];
-  if (item.petName) parts.push(item.petName);
-  if (item.subtype) parts.push(subtypeLabel(item.subtype, isTr));
-  return parts.join(' · ');
+function relativeDateLabel(dueDate: string | undefined, isTr: boolean) {
+  if (!dueDate) return { text: '—', color: '#9a9c95', bg: '#f0f0ea' };
+  const ms = new Date(dueDate).getTime();
+  if (!Number.isFinite(ms)) return { text: '—', color: '#9a9c95', bg: '#f0f0ea' };
+  const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+  const targetStart = new Date(ms); targetStart.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((targetStart.getTime() - todayStart.getTime()) / 86400000);
+  if (diffDays === 0) return { text: isTr ? 'Bugün' : 'Today', color: '#2d6a38', bg: '#e8f5ea' };
+  if (diffDays === 1) return { text: isTr ? 'Yarın' : 'Tomorrow', color: '#3a6e45', bg: '#eef6ef' };
+  if (diffDays > 1 && diffDays <= 6) return { text: isTr ? `${diffDays} gün sonra` : `In ${diffDays} days`, color: '#4a7a54', bg: '#f0f7f1' };
+  if (diffDays === -1) return { text: isTr ? 'Dün gecikti' : 'Due yesterday', color: '#b84040', bg: '#fdeaea' };
+  if (diffDays < -1) return { text: isTr ? `${Math.abs(diffDays)} gün gecikti` : `${Math.abs(diffDays)}d overdue`, color: '#b84040', bg: '#fdeaea' };
+  const d = new Date(ms);
+  const M_TR = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+  const M_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return { text: `${d.getDate()} ${isTr ? (M_TR[d.getMonth()] ?? '') : (M_EN[d.getMonth()] ?? '')}`, color: '#5d605a', bg: '#f0f0ea' };
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -167,7 +194,6 @@ function ReminderEmptyIcon() {
 
 function ReminderRow({
   item,
-  isLast,
   isOverdue,
   isHistory,
   isTr,
@@ -177,7 +203,6 @@ function ReminderRow({
   onDelete,
 }: {
   item: ReminderItem;
-  isLast: boolean;
   isOverdue: boolean;
   isHistory: boolean;
   isTr: boolean;
@@ -187,78 +212,103 @@ function ReminderRow({
   onDelete?: (id: string) => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [completing, setCompleting] = useState(false);
+  const timerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const accent = subtypeAccent(item.subtype);
-  const sub = buildRowSub(item, isTr);
+  const rel = relativeDateLabel(item.dueDate, isTr);
+
+  const handleComplete = () => {
+    if (completing) return;
+    setCompleting(true);
+    timerRef.current = setTimeout(() => { onComplete?.(item.id); }, 700);
+  };
+
+  React.useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
 
   return (
-    <View style={[styles.row, !isLast && styles.rowBorder]}>
-      {/* subtype icon box */}
-      <View style={[styles.rowIconBox, { backgroundColor: accent.bg }]}>
-        <Icon kind={isOverdue ? 'clock' : 'check'} size={16} color={accent.fg} />
-      </View>
+    <View style={[styles.reminderCard, isOverdue && styles.reminderCardOverdue]}>
+      {/* Left accent bar */}
+      <View style={[styles.cardAccent, { backgroundColor: completing ? '#47664a' : isOverdue ? '#c05050' : accent.fg }]} />
 
-      {/* body */}
-      <View style={styles.rowBody}>
-        <Text style={[styles.rowTitle, isHistory && styles.rowTitleHistory]} numberOfLines={1}>
-          {item.title}
-        </Text>
-        <View style={styles.rowMetaRow}>
-          <Text style={styles.rowDate}>{item.date}</Text>
-          {sub ? (
-            <>
-              <View style={styles.rowMetaDot} />
-              <Text style={styles.rowSub}>{sub}</Text>
-            </>
-          ) : null}
-        </View>
-      </View>
-
-      {/* right action */}
-      {isHistory ? (
-        <View style={styles.historyBadge}>
-          <Text style={styles.historyBadgeText}>{isTr ? 'Tamam' : 'Done'}</Text>
-        </View>
-      ) : confirmDelete ? (
-        <View style={styles.deleteConfirmRow}>
-          <Pressable style={styles.deleteConfirmBtn} onPress={() => { onDelete?.(item.id); setConfirmDelete(false); }}>
-            <Text style={styles.deleteConfirmText}>{isTr ? 'Sil' : 'Delete'}</Text>
-          </Pressable>
-          <Pressable onPress={() => setConfirmDelete(false)}>
-            <Icon kind="close" size={16} color="#b1b3ab" />
-          </Pressable>
-        </View>
-      ) : (
-        <View style={styles.rowActions}>
-          {isOverdue ? (
-            <View style={styles.overduePill}>
-              <Text style={styles.overduePillText}>{isTr ? 'Gecikmiş' : 'Overdue'}</Text>
-            </View>
-          ) : (
+      <View style={styles.cardContent}>
+        {/* Main row */}
+        <View style={styles.cardMainRow}>
+          {/* Checkbox */}
+          {!isHistory ? (
             <Pressable
-              style={styles.doneBtn}
-              onPress={() => onComplete?.(item.id)}
-              hitSlop={8}
+              style={[styles.checkCircle, { borderColor: completing ? '#47664a' : accent.fg }, completing && styles.checkCircleDone]}
+              onPress={handleComplete}
+              hitSlop={10}
             >
-              <Icon kind="check" size={15} color="#47664a" />
+              {completing ? <Icon kind="check" size={13} color="#fff" /> : null}
             </Pressable>
+          ) : (
+            <View style={[styles.checkCircle, styles.checkCircleDone, { borderColor: '#9a9c95' }]}>
+              <Icon kind="check" size={13} color="#fff" />
+            </View>
           )}
-          {onSnooze ? (
-            <Pressable style={styles.actionPill} onPress={() => onSnooze(item.id)}>
-              <Text style={styles.actionPillText}>{isTr ? 'Ertele' : 'Snooze'}</Text>
-            </Pressable>
-          ) : null}
-          {onEdit ? (
-            <Pressable style={styles.actionPill} onPress={() => onEdit(item.id)}>
-              <Text style={styles.actionPillText}>{isTr ? 'Düzenle' : 'Edit'}</Text>
-            </Pressable>
-          ) : null}
-          {onDelete ? (
-            <Pressable onPress={() => setConfirmDelete(true)} hitSlop={10} style={styles.deleteTrigger}>
-              <Icon kind="close" size={13} color="#b1b3ab" />
-            </Pressable>
-          ) : null}
+
+          {/* Title + meta */}
+          <View style={styles.cardTitleArea}>
+            <Text
+              style={[styles.cardTitle, (isHistory || completing) && styles.cardTitleDone]}
+              numberOfLines={2}
+            >
+              {item.title}
+            </Text>
+
+            {completing ? (
+              <Text style={styles.completingText}>{isTr ? 'Tamamlanıyor…' : 'Marking done…'}</Text>
+            ) : (
+              <View style={styles.cardMetaRow}>
+                {/* Relative date badge */}
+                <View style={[styles.dateBadge, { backgroundColor: rel.bg }]}>
+                  <Text style={[styles.dateBadgeText, { color: rel.color }]}>{rel.text}</Text>
+                </View>
+                {/* Subtype tag */}
+                {item.subtype && item.subtype !== 'custom' ? (
+                  <Text style={styles.subtypeTag}>{subtypeLabel(item.subtype, isTr)}</Text>
+                ) : null}
+                {/* Pet name */}
+                {item.petName ? (
+                  <Text style={styles.petTag} numberOfLines={1}>{item.petName}</Text>
+                ) : null}
+              </View>
+            )}
+          </View>
         </View>
-      )}
+
+        {/* Action row */}
+        {!isHistory && !completing && (
+          <View style={styles.cardActionsRow}>
+            {onSnooze ? (
+              <Pressable style={styles.cardActionBtn} onPress={() => onSnooze(item.id)}>
+                <Text style={styles.cardActionText}>{isTr ? 'Ertele' : 'Snooze'}</Text>
+              </Pressable>
+            ) : null}
+            {onEdit ? (
+              <Pressable style={styles.cardActionBtn} onPress={() => onEdit(item.id)}>
+                <Text style={styles.cardActionText}>{isTr ? 'Düzenle' : 'Edit'}</Text>
+              </Pressable>
+            ) : null}
+            <View style={{ flex: 1 }} />
+            {confirmDelete ? (
+              <View style={styles.deleteConfirmRow}>
+                <Pressable style={styles.deleteConfirmBtn} onPress={() => { onDelete?.(item.id); setConfirmDelete(false); }}>
+                  <Text style={styles.deleteConfirmText}>{isTr ? 'Sil' : 'Delete'}</Text>
+                </Pressable>
+                <Pressable onPress={() => setConfirmDelete(false)} hitSlop={8}>
+                  <Icon kind="close" size={14} color="#b1b3ab" />
+                </Pressable>
+              </View>
+            ) : onDelete ? (
+              <Pressable onPress={() => setConfirmDelete(true)} hitSlop={10} style={styles.deleteTrigger}>
+                <Icon kind="close" size={13} color="#c8cac4" />
+              </Pressable>
+            ) : null}
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -290,13 +340,12 @@ function ReminderSection({
 
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionLabel}>{label}</Text>
-      <View style={styles.card}>
-        {items.map((item, idx) => (
+      {label ? <Text style={styles.sectionLabel}>{label}</Text> : null}
+      <View style={styles.sectionCards}>
+        {items.map((item) => (
           <ReminderRow
             key={item.id}
             item={item}
-            isLast={idx === items.length - 1}
             isOverdue={isOverdue}
             isHistory={isHistory}
             isTr={isTr}
@@ -339,6 +388,7 @@ export default function RemindersScreen({
   openCreateNonce,
   subtypePreset,
   locale = 'en',
+  suggestions = [],
   onComplete,
   onSnooze,
   onEdit,
@@ -350,13 +400,24 @@ export default function RemindersScreen({
 
   // ── state ──
   const [createOpen, setCreateOpen] = useState(false);
-  const [subtype, setSubtype] = useState<ReminderSubtype>(activePetType === 'Dog' ? 'walk' : 'food');
+  const [subtype, setSubtype] = useState<ReminderSubtype>('custom');
   const [entryTitle, setEntryTitle] = useState('');
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
+  const [entryFrequency, setEntryFrequency] = useState<'once' | 'daily'>('once');
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [focusedField, setFocusedField] = useState<'title' | 'date' | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
   const [group, setGroup] = useState<'medical' | 'care'>('medical');
+
+  // ── edit modal state ──
+  const [editOpen, setEditOpen] = useState(false);
+  const [editId, setEditId] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editSubtype, setEditSubtype] = useState<ReminderSubtype>('custom');
+  const [editError, setEditError] = useState('');
+  const [editFocused, setEditFocused] = useState<'title' | 'date' | null>(null);
   const saveScale = useMemo(() => new Animated.Value(1), []);
 
   // ── entrance animation ──
@@ -400,14 +461,40 @@ export default function RemindersScreen({
   const hasMedicalItems = medicalToday.length > 0 || medicalUpcoming.length > 0 || medicalOverdue.length > 0;
   const hasCareItems = careToday.length > 0 || careUpcoming.length > 0 || careOverdue.length > 0;
 
+  // ── daily care templates ──
+  const dailyCareTemplates: DailyCareTemplate[] = activePetType === 'Cat'
+    ? [
+        { id: 'tpl-food', title: isTr ? 'Mama' : 'Food', subtype: 'food' },
+        { id: 'tpl-litter', title: isTr ? 'Kum Temizliği' : 'Litter Box', subtype: 'litter' },
+      ]
+    : [
+        { id: 'tpl-food', title: isTr ? 'Mama' : 'Food', subtype: 'food' },
+        { id: 'tpl-walk', title: isTr ? 'Yürüyüş' : 'Walk', subtype: 'walk' },
+      ];
+
   // ── create ──
-  const openCreate = () => {
-    const preferred = subtypePreset ?? (activePetType === 'Dog' ? 'walk' : 'food');
-    const safePreferred = subtypeOptions.includes(preferred) ? preferred : subtypeOptions[0];
-    setSubtype(safePreferred);
-    setEntryTitle('');
+  const selectPreset = (id: string, title: string, st: ReminderSubtype, freq: 'once' | 'daily' = 'once') => {
+    setSelectedPresetId(id);
+    setEntryTitle(title ?? '');
+    setSubtype(st);
+    setEntryFrequency(freq);
+    setError('');
+  };
+
+  const openCreate = (preset?: { id: string; title: string; subtype: ReminderSubtype; freq: 'once' | 'daily' }) => {
     setEntryDate(new Date().toISOString().slice(0, 10));
     setError('');
+    if (preset) {
+      setEntryTitle(preset.title ?? '');
+      setSubtype(preset.subtype);
+      setSelectedPresetId(preset.id);
+      setEntryFrequency(preset.freq);
+    } else {
+      setEntryTitle('');
+      setSubtype('custom');
+      setSelectedPresetId(null);
+      setEntryFrequency('once');
+    }
     setCreateOpen(true);
   };
 
@@ -417,18 +504,38 @@ export default function RemindersScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openCreateNonce]);
 
-  const isFormValid =
-    entryTitle.trim().length > 0 &&
-    isValidDate(entryDate) &&
-    subtypeOptions.includes(subtype) &&
-    !(activePetType === 'Cat' && subtype === 'walk');
+  const safeEntryTitle = entryTitle ?? '';
+  const isFormValid = safeEntryTitle.trim().length > 0 && isValidDate(entryDate);
 
   const submitCreate = () => {
-    if (!entryTitle.trim()) { setError(isTr ? 'Başlık girin.' : 'Please enter a title.'); return; }
+    if (!safeEntryTitle.trim()) { setError(isTr ? 'Başlık girin.' : 'Please enter a title.'); return; }
     if (!isValidDate(entryDate)) { setError(isTr ? 'Geçerli tarih girin (YYYY-AA-GG).' : 'Enter a valid date (YYYY-MM-DD).'); return; }
-    if (!subtypeOptions.includes(subtype)) { setError(isTr ? 'Geçerli tür seçin.' : 'Select a valid type.'); return; }
-    onCreate?.({ petId: activePetId, subtype, title: entryTitle.trim(), date: entryDate });
+    onCreate?.({ petId: activePetId, subtype, title: safeEntryTitle.trim(), date: entryDate, frequency: entryFrequency });
     setCreateOpen(false);
+  };
+
+  // ── edit ──
+  const allItems = useMemo(() => [...today, ...upcoming, ...overdue, ...completed], [today, upcoming, overdue, completed]);
+
+  const openEdit = (id: string) => {
+    const item = allItems.find((r) => r.id === id);
+    if (!item) return;
+    setEditId(id);
+    setEditTitle(item.title ?? '');
+    setEditDate(item.dueDate?.slice(0, 10) ?? item.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+    setEditSubtype((item.subtype ?? 'custom') as ReminderSubtype);
+    setEditError('');
+    setEditOpen(true);
+  };
+
+  const safeEditTitle = editTitle ?? '';
+  const isEditValid = safeEditTitle.trim().length > 0 && isValidDate(editDate);
+
+  const submitEdit = () => {
+    if (!safeEditTitle.trim()) { setEditError(isTr ? 'Başlık girin.' : 'Please enter a title.'); return; }
+    if (!isValidDate(editDate)) { setEditError(isTr ? 'Geçerli tarih girin (YYYY-AA-GG).' : 'Enter a valid date (YYYY-MM-DD).'); return; }
+    onEdit?.(editId, { title: safeEditTitle.trim(), date: editDate, subtype: editSubtype });
+    setEditOpen(false);
   };
 
   // ── stats ──
@@ -457,28 +564,66 @@ export default function RemindersScreen({
                 ) : null}
               </Pressable>
             ) : null}
+            <Pressable style={styles.addPill} onPress={() => openCreate()}>
+              <Icon kind="add" size={16} color="#fff" />
+              <Text style={styles.addPillText}>{isTr ? 'Ekle' : 'Add'}</Text>
+            </Pressable>
           </View>
         </Animated.View>
 
+        {/* ── Stats row (always visible when any data exists) ── */}
+        {(totalActive > 0 || completed.length > 0) && (
+          <View style={styles.statsRow}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{totalActive}</Text>
+              <Text style={styles.statLabel}>{isTr ? 'AKTİF' : 'ACTIVE'}</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, overdueCount > 0 && styles.statValueDanger]}>{overdueCount}</Text>
+              <Text style={styles.statLabel}>{isTr ? 'GECİKMİŞ' : 'OVERDUE'}</Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{completed.length}</Text>
+              <Text style={styles.statLabel}>{isTr ? 'TAMAMLANAN' : 'COMPLETED'}</Text>
+            </View>
+          </View>
+        )}
+
         <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
 
-          {/* ── Stats row ── */}
-          {!isFullyEmpty && (
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{totalActive}</Text>
-                <Text style={styles.statLabel}>{isTr ? 'AKTİF' : 'ACTIVE'}</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={[styles.statValue, overdueCount > 0 && styles.statValueDanger]}>{overdueCount}</Text>
-                <Text style={styles.statLabel}>{isTr ? 'GECİKMİŞ' : 'OVERDUE'}</Text>
-              </View>
-              <View style={styles.statDivider} />
-              <View style={styles.statItem}>
-                <Text style={styles.statValue}>{completed.length}</Text>
-                <Text style={styles.statLabel}>{isTr ? 'TAMAMLANAN' : 'COMPLETED'}</Text>
-              </View>
+          {/* ── Suggestions strip ── */}
+          {suggestions.length > 0 && (
+            <View style={styles.suggestionsSection}>
+              <Text style={styles.suggestionsLabel}>
+                {isTr ? 'AKTİF KAYITLARDAN ÖNERİLER' : 'SUGGESTED FROM RECORDS'}
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.suggestionsScroll}
+              >
+                {suggestions.map((s) => {
+                  const accent = subtypeAccent(s.subtype);
+                  return (
+                    <Pressable
+                      key={s.id}
+                      style={styles.suggestionCard}
+                      onPress={() => openCreate({ id: s.id, title: s.title, subtype: s.subtype, freq: 'once' })}
+                    >
+                      <View style={[styles.suggestionAccent, { backgroundColor: accent.fg }]} />
+                      <View style={styles.suggestionBody}>
+                        <Text style={styles.suggestionTitle} numberOfLines={2}>{s.title}</Text>
+                        <Text style={styles.suggestionSub}>{subtypeLabel(s.subtype, isTr)}</Text>
+                      </View>
+                      <View style={styles.suggestionArrow}>
+                        <Icon kind="add" size={14} color={accent.fg} />
+                      </View>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
             </View>
           )}
 
@@ -512,7 +657,7 @@ export default function RemindersScreen({
                   ? 'İlk hatırlatmanı ekle ve takipte kal.'
                   : 'Create your first reminder to stay on track.'}
               </Text>
-              <Pressable style={styles.emptyCta} onPress={openCreate}>
+              <Pressable style={styles.emptyCta} onPress={() => openCreate()}>
                 <Text style={styles.emptyCtaText}>{isTr ? 'Hatırlatma Ekle' : 'Add Reminder'}</Text>
               </Pressable>
             </View>
@@ -526,7 +671,7 @@ export default function RemindersScreen({
             isTr={isTr}
             onComplete={onComplete}
             onSnooze={onSnooze}
-            onEdit={onEdit}
+            onEdit={openEdit}
             onDelete={onDeleteReminder}
           />
 
@@ -537,7 +682,7 @@ export default function RemindersScreen({
             isTr={isTr}
             onComplete={onComplete}
             onSnooze={onSnooze}
-            onEdit={onEdit}
+            onEdit={openEdit}
             onDelete={onDeleteReminder}
           />
 
@@ -548,7 +693,7 @@ export default function RemindersScreen({
             isTr={isTr}
             onComplete={onComplete}
             onSnooze={onSnooze}
-            onEdit={onEdit}
+            onEdit={openEdit}
             onDelete={onDeleteReminder}
           />
 
@@ -587,64 +732,98 @@ export default function RemindersScreen({
         <View style={styles.modalBackdrop}>
           <Pressable style={styles.modalDismiss} onPress={() => setCreateOpen(false)} />
           <View style={styles.modalSheet}>
-            {/* handle */}
             <View style={styles.modalHandle} />
-
             <Text style={styles.modalTitle}>{isTr ? 'Hatırlatma Ekle' : 'Add Reminder'}</Text>
 
-            {/* subtype chips */}
-            <Text style={styles.modalFieldLabel}>{isTr ? 'Tür' : 'Type'}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subtypeScroll}>
-              {subtypeOptions.map((item) => {
-                const accent = subtypeAccent(item);
-                const isActive = subtype === item;
-                return (
-                  <Pressable
-                    key={item}
-                    style={[
-                      styles.subtypeChip,
-                      isActive
-                        ? { backgroundColor: accent.bg, borderColor: accent.fg }
-                        : styles.subtypeChipInactive,
-                    ]}
-                    onPress={() => setSubtype(item)}
-                  >
-                    <View style={[styles.subtypeDot, { backgroundColor: isActive ? accent.fg : '#b1b3ab' }]} />
-                    <Text style={[styles.subtypeChipText, isActive && { color: accent.fg }]}>
-                      {subtypeLabel(item, isTr)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+            <ScrollView showsVerticalScrollIndicator={false} style={styles.createScroll} keyboardShouldPersistTaps="handled">
+
+              {/* ── Suggestions ── */}
+              {suggestions.length > 0 && (
+                <View style={styles.createSection}>
+                  <Text style={styles.createSectionLabel}>{isTr ? 'AKTİF KAYITLARDAN ÖNERİLER' : 'SUGGESTIONS FROM RECORDS'}</Text>
+                  {suggestions.map((s) => {
+                    const accent = subtypeAccent(s.subtype);
+                    const isSelected = selectedPresetId === s.id;
+                    return (
+                      <Pressable
+                        key={s.id}
+                        style={[styles.presetRow, isSelected && { borderColor: accent.fg, backgroundColor: accent.bg }]}
+                        onPress={() => selectPreset(s.id, s.title, s.subtype, 'once')}
+                      >
+                        <View style={[styles.presetDot, { backgroundColor: accent.fg }]} />
+                        <View style={styles.presetBody}>
+                          <Text style={[styles.presetTitle, isSelected && { color: accent.fg }]} numberOfLines={1}>{s.title}</Text>
+                          <Text style={styles.presetSub}>{subtypeLabel(s.subtype, isTr)}</Text>
+                        </View>
+                        {isSelected ? <Icon kind="check" size={16} color={accent.fg} /> : <Icon kind="chevronRight" size={16} color="#b1b3ab" />}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
+
+              {/* ── Daily Care ── */}
+              <View style={styles.createSection}>
+                <Text style={styles.createSectionLabel}>{isTr ? 'GÜNLÜK BAKIM' : 'DAILY CARE'}</Text>
+                <View style={styles.dailyCareRow}>
+                  {dailyCareTemplates.map((t) => {
+                    const accent = subtypeAccent(t.subtype);
+                    const isSelected = selectedPresetId === t.id;
+                    return (
+                      <Pressable
+                        key={t.id}
+                        style={[styles.dailyCareChip, isSelected && { backgroundColor: accent.bg, borderColor: accent.fg }]}
+                        onPress={() => selectPreset(t.id, t.title, t.subtype, 'daily')}
+                      >
+                        <View style={[styles.subtypeDot, { backgroundColor: isSelected ? accent.fg : '#b1b3ab' }]} />
+                        <Text style={[styles.dailyCareChipText, isSelected && { color: accent.fg }]}>{t.title}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                {selectedPresetId && dailyCareTemplates.some((t) => t.id === selectedPresetId) && (
+                  <View style={styles.freqBadge}>
+                    <Text style={styles.freqBadgeText}>{isTr ? '📅 Her gün tekrar eder' : '📅 Repeats daily'}</Text>
+                  </View>
+                )}
+              </View>
+
+              {/* ── Custom ── */}
+              <View style={styles.createSection}>
+                <Text style={styles.createSectionLabel}>{isTr ? 'ÖZEL' : 'CUSTOM'}</Text>
+                <TextInput
+                  style={[styles.modalInput, focusedField === 'title' && styles.modalInputFocused]}
+                  placeholder={isTr ? 'Başlık yaz...' : 'Write a title...'}
+                  placeholderTextColor="#b1b3ab"
+                  value={safeEntryTitle}
+                  onChangeText={(v) => {
+                    setEntryTitle(v ?? '');
+                    if ((v ?? '').trim()) { setSelectedPresetId(null); setSubtype('custom'); setEntryFrequency('once'); }
+                    setError('');
+                  }}
+                  onFocus={() => setFocusedField('title')}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+
+              {/* ── Date ── */}
+              <View style={styles.createSection}>
+                <Text style={styles.createSectionLabel}>{isTr ? 'TARİH (YYYY-AA-GG)' : 'DATE (YYYY-MM-DD)'}</Text>
+                <TextInput
+                  style={[styles.modalInput, focusedField === 'date' && styles.modalInputFocused]}
+                  placeholder="2026-04-15"
+                  placeholderTextColor="#b1b3ab"
+                  value={entryDate}
+                  onChangeText={(v) => { setEntryDate(v); setError(''); }}
+                  autoCapitalize="none"
+                  keyboardType="numbers-and-punctuation"
+                  onFocus={() => setFocusedField('date')}
+                  onBlur={() => setFocusedField(null)}
+                />
+              </View>
+
+              {error ? <Text style={styles.modalError}>{error}</Text> : null}
             </ScrollView>
-
-            {/* title */}
-            <Text style={styles.modalFieldLabel}>{isTr ? 'Başlık' : 'Title'}</Text>
-            <TextInput
-              style={[styles.modalInput, focusedField === 'title' && styles.modalInputFocused]}
-              placeholder={isTr ? 'Hatırlatma başlığı' : 'Reminder title'}
-              placeholderTextColor="#b1b3ab"
-              value={entryTitle}
-              onChangeText={(v) => { setEntryTitle(v); setError(''); }}
-              onFocus={() => setFocusedField('title')}
-              onBlur={() => setFocusedField(null)}
-            />
-
-            {/* date */}
-            <Text style={styles.modalFieldLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
-            <TextInput
-              style={[styles.modalInput, focusedField === 'date' && styles.modalInputFocused]}
-              placeholder="2026-04-15"
-              placeholderTextColor="#b1b3ab"
-              value={entryDate}
-              onChangeText={(v) => { setEntryDate(v); setError(''); }}
-              autoCapitalize="none"
-              keyboardType="numbers-and-punctuation"
-              onFocus={() => setFocusedField('date')}
-              onBlur={() => setFocusedField(null)}
-            />
-
-            {error ? <Text style={styles.modalError}>{error}</Text> : null}
 
             <View style={styles.modalActions}>
               <Pressable style={styles.modalCancelBtn} onPress={() => setCreateOpen(false)}>
@@ -661,6 +840,90 @@ export default function RemindersScreen({
                   <Text style={styles.modalSaveText}>{isTr ? 'Kaydet' : 'Save'}</Text>
                 </Pressable>
               </Animated.View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ── Edit Modal ── */}
+      <Modal
+        visible={editOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setEditOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <Pressable style={styles.modalDismiss} onPress={() => setEditOpen(false)} />
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHandle} />
+
+            <Text style={styles.modalTitle}>{isTr ? 'Hatırlatmayı Düzenle' : 'Edit Reminder'}</Text>
+
+            {/* subtype chips */}
+            <Text style={styles.modalFieldLabel}>{isTr ? 'Tür' : 'Type'}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.subtypeScroll}>
+              {subtypeOptions.map((item) => {
+                const accent = subtypeAccent(item);
+                const isActive = editSubtype === item;
+                return (
+                  <Pressable
+                    key={item}
+                    style={[
+                      styles.subtypeChip,
+                      isActive
+                        ? { backgroundColor: accent.bg, borderColor: accent.fg }
+                        : styles.subtypeChipInactive,
+                    ]}
+                    onPress={() => setEditSubtype(item)}
+                  >
+                    <View style={[styles.subtypeDot, { backgroundColor: isActive ? accent.fg : '#b1b3ab' }]} />
+                    <Text style={[styles.subtypeChipText, isActive && { color: accent.fg }]}>
+                      {subtypeLabel(item, isTr)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+
+            {/* title */}
+            <Text style={styles.modalFieldLabel}>{isTr ? 'Başlık' : 'Title'}</Text>
+            <TextInput
+              style={[styles.modalInput, editFocused === 'title' && styles.modalInputFocused]}
+              placeholder={isTr ? 'Hatırlatma başlığı' : 'Reminder title'}
+              placeholderTextColor="#b1b3ab"
+              value={safeEditTitle}
+              onChangeText={(v) => { setEditTitle(v); setEditError(''); }}
+              onFocus={() => setEditFocused('title')}
+              onBlur={() => setEditFocused(null)}
+            />
+
+            {/* date */}
+            <Text style={styles.modalFieldLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
+            <TextInput
+              style={[styles.modalInput, editFocused === 'date' && styles.modalInputFocused]}
+              placeholder="2026-04-15"
+              placeholderTextColor="#b1b3ab"
+              value={editDate}
+              onChangeText={(v) => { setEditDate(v); setEditError(''); }}
+              autoCapitalize="none"
+              keyboardType="numbers-and-punctuation"
+              onFocus={() => setEditFocused('date')}
+              onBlur={() => setEditFocused(null)}
+            />
+
+            {editError ? <Text style={styles.modalError}>{editError}</Text> : null}
+
+            <View style={styles.modalActions}>
+              <Pressable style={styles.modalCancelBtn} onPress={() => setEditOpen(false)}>
+                <Text style={styles.modalCancelText}>{isTr ? 'İptal' : 'Cancel'}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalSaveBtn, !isEditValid && styles.modalSaveBtnDisabled]}
+                disabled={!isEditValid}
+                onPress={submitEdit}
+              >
+                <Text style={styles.modalSaveText}>{isTr ? 'Kaydet' : 'Save'}</Text>
+              </Pressable>
             </View>
           </View>
         </View>
@@ -792,6 +1055,62 @@ const styles = StyleSheet.create({
   },
 
   // ── Group tabs ──
+  // ── Suggestions strip ──
+  suggestionsSection: {
+    marginBottom: 20,
+  },
+  suggestionsLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9a9d97',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  suggestionsScroll: {
+    gap: 10,
+    paddingRight: 4,
+  },
+  suggestionCard: {
+    width: 164,
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    flexDirection: 'row',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  suggestionAccent: {
+    width: 4,
+  },
+  suggestionBody: {
+    flex: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 12,
+    gap: 4,
+  },
+  suggestionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1c1c1e',
+    lineHeight: 17,
+    letterSpacing: -0.1,
+  },
+  suggestionSub: {
+    fontSize: 11,
+    color: '#8e8e93',
+    fontWeight: '500',
+  },
+  suggestionArrow: {
+    paddingRight: 10,
+    paddingTop: 10,
+  },
+
   groupRow: {
     flexDirection: 'row',
     gap: 8,
@@ -919,79 +1238,122 @@ const styles = StyleSheet.create({
   },
 
   // ── Row ──
-  row: {
+  sectionCards: {
+    gap: 8,
+  },
+  reminderCard: {
+    borderRadius: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    gap: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
-  rowBorder: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0ea',
+  reminderCardOverdue: {
+    borderColor: 'rgba(184,64,64,0.18)',
+    backgroundColor: '#fffafa',
   },
-  rowIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  cardAccent: {
+    width: 4,
+  },
+  cardContent: {
+    flex: 1,
+    paddingHorizontal: 13,
+    paddingTop: 13,
+    paddingBottom: 10,
+    gap: 10,
+  },
+  cardMainRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 11,
+  },
+  checkCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 1,
     flexShrink: 0,
   },
-  rowBody: {
-    flex: 1,
-    gap: 2,
+  checkCircleDone: {
+    backgroundColor: '#47664a',
+    borderColor: '#47664a',
   },
-  rowTitle: {
+  cardTitleArea: {
+    flex: 1,
+    gap: 6,
+  },
+  cardTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#30332e',
+    color: '#1c1c1e',
     lineHeight: 20,
+    letterSpacing: -0.1,
   },
-  rowTitleHistory: {
+  cardTitleDone: {
     color: '#9a9c95',
     textDecorationLine: 'line-through',
   },
-  rowMetaRow: {
+  cardMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
+    flexWrap: 'wrap',
+    gap: 6,
   },
-  rowDate: {
+  dateBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  dateBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  subtypeTag: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#8e8e93',
+  },
+  petTag: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#8e8e93',
+    flexShrink: 1,
+  },
+  completingText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#5d605a',
+    color: '#47664a',
+    fontStyle: 'italic',
   },
-  rowMetaDot: {
-    width: 3,
-    height: 3,
-    borderRadius: 1.5,
-    backgroundColor: '#b1b3ab',
-  },
-  rowSub: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#5d605a',
-  },
-  rowActions: {
+  cardActionsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    flexShrink: 0,
+    gap: 6,
   },
-  actionPill: {
-    height: 28,
+  cardActionBtn: {
+    height: 26,
     paddingHorizontal: 10,
-    borderRadius: 999,
-    backgroundColor: '#eeeee8',
+    borderRadius: 8,
+    backgroundColor: '#f2f2f0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  actionPillText: {
+  cardActionText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#5d605a',
   },
+  // kept for compatibility
   doneBtn: {
     width: 32,
     height: 32,
@@ -1100,7 +1462,85 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: '#30332e',
     letterSpacing: -0.4,
-    marginBottom: 20,
+    marginBottom: 12,
+  },
+  createScroll: {
+    maxHeight: 440,
+  },
+  createSection: {
+    marginBottom: 16,
+  },
+  createSectionLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#9a9d97',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  presetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f2',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    padding: 12,
+    marginBottom: 6,
+    gap: 10,
+  },
+  presetDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  presetBody: {
+    flex: 1,
+    gap: 2,
+  },
+  presetTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#30332e',
+  },
+  presetSub: {
+    fontSize: 11,
+    color: '#8a8d87',
+    fontWeight: '500',
+  },
+  dailyCareRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  dailyCareChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#f5f5f2',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.07)',
+  },
+  dailyCareChipText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#5d605a',
+  },
+  freqBadge: {
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#eef4eb',
+    alignSelf: 'flex-start',
+  },
+  freqBadgeText: {
+    fontSize: 12,
+    color: '#4a6c44',
+    fontWeight: '500',
   },
   modalFieldLabel: {
     fontSize: 11,

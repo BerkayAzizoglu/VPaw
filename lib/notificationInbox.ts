@@ -1,5 +1,4 @@
-import type { WeightPoint } from '../screens/WeightTrackingScreen';
-import type { ByPet, MedicalEvent, Reminder, VetVisit } from './healthMvpModel';
+import type { WeightPoint, ByPet, MedicalEvent, Reminder, VetVisit } from './healthMvpModel';
 
 export type HealthNotificationType = 'reminder_due' | 'overdue' | 'followup' | 'missing_data';
 export type HealthNotificationPriority = 'high' | 'medium' | 'low';

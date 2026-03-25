@@ -18,15 +18,9 @@ import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from 'react
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
+import type { WeightPoint } from '../lib/healthMvpModel';
 
-// ─── Exported types ──────────────────────────────────────────────────────────
-
-export type WeightPoint = {
-  label: string;
-  value: number;
-  date: string;
-  change: string;
-};
+export type { WeightPoint };
 
 type WeightTrackingScreenProps = {
   onBack: () => void;

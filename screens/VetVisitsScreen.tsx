@@ -55,6 +55,7 @@ type VetVisitsScreenProps = {
   createPreset?: VetVisitCreatePreset | null;
   onAddVisit?: () => void;
   onCreateVisit?: (payload: CreateVetVisitPayload) => void;
+  onEditVisit?: (id: string, payload: CreateVetVisitPayload) => void;
   onOpenDocuments?: () => void;
   status?: 'ready' | ScreenStateMode;
   onRetry?: () => void;
@@ -75,7 +76,22 @@ export type VisitItem = {
   attachPlaceholder?: boolean;
 };
 
-function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethoscope' | 'wallet' | 'clinic' | 'file' | 'plus' | 'pulse'; size?: number; color?: string }) {
+function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethoscope' | 'wallet' | 'clinic' | 'file' | 'plus' | 'pulse' | 'edit' | 'check'; size?: number; color?: string }) {
+  if (kind === 'edit') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M4 20H8L18.5 9.5C19.3 8.7 19.3 7.4 18.5 6.5L17.5 5.5C16.7 4.7 15.3 4.7 14.5 5.5L4 16V20Z" stroke={color} strokeWidth={1.8} strokeLinejoin="round" />
+        <Path d="M13.5 6.5L17.5 10.5" stroke={color} strokeWidth={1.8} strokeLinecap="round" />
+      </Svg>
+    );
+  }
+  if (kind === 'check') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M5.5 12.5L9.5 16.5L18.5 7.5" stroke={color} strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
   if (kind === 'back') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -143,7 +159,34 @@ function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethosc
 const MONTHS_EN = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 const MONTHS_TR = ['OCA','ŞUB','MAR','NİS','MAY','HAZ','TEM','AĞU','EYL','EKİ','KAS','ARA'];
 
-function FeaturedCard({ item, isTr, clinicName }: { item: VisitItem; isTr: boolean; clinicName?: string }) {
+function UpcomingMiniCard({ item, isTr, onEdit }: { item: VisitItem; isTr: boolean; onEdit?: () => void }) {
+  const parts = item.date.split('-');
+  const monthIdx = parseInt(parts[1] ?? '1', 10) - 1;
+  const day = parts[2] ?? '—';
+  const mon = (isTr ? MONTHS_TR : MONTHS_EN)[monthIdx] ?? '—';
+  return (
+    <View style={styles.miniCard}>
+      <View style={styles.miniDateBox}>
+        <Text style={styles.miniDateMon}>{mon}</Text>
+        <Text style={styles.miniDateDay}>{day}</Text>
+      </View>
+      <View style={styles.miniBody}>
+        <Text style={styles.miniClinic} numberOfLines={1}>{item.clinic || (isTr ? 'Veteriner Kliniği' : 'Vet Clinic')}</Text>
+        {item.title ? <Text style={styles.miniTitle} numberOfLines={1}>{item.title}</Text> : null}
+      </View>
+      <View style={styles.miniPill}>
+        <Text style={styles.miniPillText}>{isTr ? 'Planlandı' : 'Planned'}</Text>
+      </View>
+      {onEdit ? (
+        <Pressable style={styles.miniEditBtn} onPress={onEdit} hitSlop={8}>
+          <Icon kind="edit" size={14} color="#4a6e4e" />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
+function FeaturedCard({ item, isTr, clinicName, onEdit }: { item: VisitItem; isTr: boolean; clinicName?: string; onEdit?: () => void }) {
   const parts = item.date.split('-');
   const monthIdx = parseInt(parts[1] ?? '1', 10) - 1;
   const day = parts[2] ?? '—';
@@ -156,8 +199,15 @@ function FeaturedCard({ item, isTr, clinicName }: { item: VisitItem; isTr: boole
     <View style={styles.featuredCard}>
       <View style={styles.featuredInner}>
         <View style={styles.featuredLeft}>
-          <View style={styles.featuredGlassTag}>
-            <Text style={styles.featuredGlassText}>{isTr ? 'PLANLI' : 'PLANNED'}</Text>
+          <View style={styles.featuredTopRow}>
+            <View style={styles.featuredGlassTag}>
+              <Text style={styles.featuredGlassText}>{isTr ? 'PLANLI' : 'PLANNED'}</Text>
+            </View>
+            {onEdit ? (
+              <Pressable style={styles.featuredEditBtn} onPress={onEdit} hitSlop={8}>
+                <Icon kind="edit" size={14} color="rgba(255,255,255,0.85)" />
+              </Pressable>
+            ) : null}
           </View>
           <Text style={styles.featuredClinic}>{item.clinic || (isTr ? 'Veteriner Kliniği' : 'Vet Clinic')}</Text>
           {item.doctor ? <Text style={styles.featuredDoctor}>{item.doctor}</Text> : null}
@@ -184,77 +234,64 @@ function FeaturedCard({ item, isTr, clinicName }: { item: VisitItem; isTr: boole
   );
 }
 
-function VisitCard({
+function CompletedVisitCard({
   item,
   isTr,
-  today,
   onOpenDocuments,
 }: {
   item: VisitItem;
   isTr: boolean;
-  today: string;
   onOpenDocuments?: () => void;
 }) {
-  const isPlanned = item.date > today;
-  const firstRecord = item.attachments[0];
+  const parts = item.date.split('-');
+  const monthIdx = parseInt(parts[1] ?? '1', 10) - 1;
+  const day = parts[2] ?? '—';
+  const mon = (isTr ? MONTHS_TR : MONTHS_EN)[monthIdx] ?? '—';
+  const year = parts[0]?.slice(2) ?? '—';
+
   return (
-    <View style={styles.visitCard}>
-      {/* Top row */}
-      <View style={styles.visitCardTopRow}>
-        <View style={[styles.visitIconBox, { backgroundColor: isPlanned ? '#dff0e3' : '#edffe3' }]}>
-          <Icon kind={item.icon} size={22} color={isPlanned ? '#4a7a5a' : '#3a6e45'} />
-        </View>
-        <View style={styles.visitCardBody}>
-          <Text style={styles.visitCardTitle}>{item.title}</Text>
-          <View style={styles.visitCardMeta}>
-            {item.clinic ? <Text style={styles.visitMetaText}>{item.clinic}</Text> : null}
-            {item.clinic && item.date ? <Text style={styles.visitMetaDot}>{'  ·  '}</Text> : null}
-            <Text style={styles.visitMetaText}>{item.date.slice(2).replace(/-/g, '.')}</Text>
-          </View>
-        </View>
-        {item.amount != null ? (
-          <View style={styles.visitCardRight}>
-            <Text style={styles.visitCardAmount}>{item.amount.toLocaleString('tr-TR')} {item.currency ?? 'TL'}</Text>
-            {firstRecord ? (
-              <Text style={styles.visitCardCategory}>{firstRecord.toUpperCase()}</Text>
-            ) : null}
-          </View>
-        ) : (
-          <Text style={styles.visitCardDate}>{item.date.slice(2).replace(/-/g, '.')}</Text>
-        )}
+    <View style={styles.completedCard}>
+      {/* Date column */}
+      <View style={styles.completedDateCol}>
+        <Text style={styles.completedDateMon}>{mon}</Text>
+        <Text style={styles.completedDateDay}>{day}</Text>
+        <Text style={styles.completedDateYear}>{`'${year}`}</Text>
       </View>
 
-      {/* Status + amount */}
-      <View style={styles.visitStatusRow}>
-        <View style={[styles.visitStatusPill, isPlanned ? styles.visitStatusPlanned : styles.visitStatusDone]}>
-          <Text style={[styles.visitStatusText, isPlanned ? styles.visitStatusTextPlanned : styles.visitStatusTextDone]}>
-            {isPlanned ? (isTr ? 'Planlandı' : 'Planned') : (isTr ? 'Tamamlandı' : 'Completed')}
+      {/* Divider */}
+      <View style={styles.completedDivider} />
+
+      {/* Body */}
+      <View style={styles.completedBody}>
+        <View style={styles.completedTopRow}>
+          <Text style={styles.completedClinic} numberOfLines={1}>
+            {item.clinic || (isTr ? 'Veteriner Kliniği' : 'Vet Clinic')}
           </Text>
-        </View>
-        {isPlanned ? (
-          <View style={styles.visitAutoReminderPill}>
-            <Text style={styles.visitAutoReminderText}>{isTr ? 'Otomatik hatırlatma' : 'Auto-reminder'}</Text>
+          <View style={styles.completedCheckBadge}>
+            <Icon kind="check" size={12} color="#47664a" />
           </View>
+        </View>
+        {item.title ? (
+          <Text style={styles.completedTitle} numberOfLines={1}>{item.title}</Text>
         ) : null}
-      </View>
-
-      {/* Records / attachments */}
-      {item.attachments.length > 0 ? (
-        <View style={styles.visitRecords}>
-          <Text style={styles.visitRecordsLabel}>{isTr ? 'ZİYARET KAYITLARI' : 'VISIT RECORDS'}</Text>
-          {item.attachments.map((att, i) => (
-            <View key={i} style={styles.visitRecordRow}>
-              <View style={styles.visitRecordDot} />
-              <Text style={styles.visitRecordText}>{att}</Text>
+        <View style={styles.completedMeta}>
+          {item.amount != null ? (
+            <View style={styles.completedAmountPill}>
+              <Text style={styles.completedAmountText}>{item.amount.toLocaleString('tr-TR')} {item.currency ?? 'TL'}</Text>
             </View>
-          ))}
-          {onOpenDocuments ? (
-            <Pressable onPress={onOpenDocuments} style={styles.viewDocumentsBtn}>
-              <Text style={styles.viewDocumentsBtnText}>{isTr ? 'Belgeleri Gör' : 'View Documents'}</Text>
+          ) : null}
+          {item.attachments.length > 0 ? (
+            <Pressable
+              style={styles.completedDocPill}
+              onPress={onOpenDocuments}
+              disabled={!onOpenDocuments}
+            >
+              <Icon kind="file" size={11} color="#5d605a" />
+              <Text style={styles.completedDocText}>{item.attachments.length} {isTr ? 'belge' : 'doc'}</Text>
             </Pressable>
           ) : null}
         </View>
-      ) : null}
+      </View>
     </View>
   );
 }
@@ -265,6 +302,7 @@ export default function VetVisitsScreen({
   createPreset,
   onAddVisit,
   onCreateVisit,
+  onEditVisit,
   onOpenDocuments,
   status = 'ready',
   onRetry,
@@ -275,7 +313,11 @@ export default function VetVisitsScreen({
   const isTr = locale === 'tr';
 
   const [isCreateVisible, setIsCreateVisible] = useState(false);
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
+  const today = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, []);
   const [visitDate, setVisitDate] = useState(today);
   const [visitClinic, setVisitClinic] = useState('');
   const [visitReason, setVisitReason] = useState<VetVisitReasonCategory>('checkup');
@@ -480,6 +522,16 @@ export default function VetVisitsScreen({
     });
   };
 
+  const openEditModal = (item: VisitItem) => {
+    resetCreateForm();
+    setEditingVisitId(item.id);
+    setVisitDate(item.date);
+    setVisitClinic(item.clinic ?? '');
+    if (item.amount != null) setVisitAmount(String(item.amount));
+    if (item.currency) setVisitCurrency(item.currency);
+    setIsCreateVisible(true);
+  };
+
   const reminderPresetOptions: Array<{ value: ReminderPreset; label: string }> = isTr
     ? [
       { value: 'one_day_before', label: '1 gün önce' },
@@ -673,6 +725,14 @@ export default function VetVisitsScreen({
       actions,
     };
 
+    if (editingVisitId && onEditVisit) {
+      onEditVisit(editingVisitId, payload);
+      setIsCreateVisible(false);
+      setEditingVisitId(null);
+      resetCreateForm();
+      return;
+    }
+
     if (onCreateVisit) {
       onCreateVisit(payload);
       setIsCreateVisible(false);
@@ -696,7 +756,6 @@ export default function VetVisitsScreen({
   const visitsData = visits ?? fallbackVisits;
   const pastVisits = useMemo(() => visitsData.filter((v) => v.date <= today), [visitsData, today]);
   const plannedVisits = useMemo(() => visitsData.filter((v) => v.date > today), [visitsData, today]);
-  const nextVisit = plannedVisits[0] ?? null;
 
   const totalCurrency = visitsData.find((v) => v.currency)?.currency ?? 'TL';
   const visitsCountText = isTr ? `${visitsData.length} Ziyaret` : `${visitsData.length} Visits`;
@@ -770,46 +829,34 @@ export default function VetVisitsScreen({
 
         {showMainContent ? (
           <>
-            {/* ── Featured next appointment ── */}
-            {nextVisit ? (
+            {/* ── Upcoming visits ── */}
+            {plannedVisits.length > 0 ? (
               <>
-                <Text style={styles.sectionLabel}>{isTr ? 'SONRAKI RANDEVU' : 'NEXT APPOINTMENT'}</Text>
-                <FeaturedCard item={nextVisit} isTr={isTr} clinicName={nextVisit.clinic || nextVisit.title} />
+                <Text style={styles.sectionLabel}>{isTr ? 'YAKLAŞAN ZİYARETLER' : 'UPCOMING VISITS'}</Text>
+                <FeaturedCard
+                  item={plannedVisits[0]!}
+                  isTr={isTr}
+                  clinicName={plannedVisits[0]!.clinic || plannedVisits[0]!.title}
+                  onEdit={() => openEditModal(plannedVisits[0]!)}
+                />
+                {plannedVisits.slice(1).map((item) => (
+                  <UpcomingMiniCard key={item.id} item={item} isTr={isTr} onEdit={() => openEditModal(item)} />
+                ))}
               </>
             ) : null}
 
-            {/* ── Visit History ── */}
+            {/* ── Completed visits ── */}
             {pastVisits.length > 0 ? (
-              <View style={styles.sectionHeaderRow}>
-                <Text style={styles.sectionLabel}>{isTr ? 'ZİYARET GEÇMİŞİ' : 'VISIT HISTORY'}</Text>
-              </View>
-            ) : null}
-
-            <View style={styles.cardsColumn}>
-              {pastVisits.map((item) => (
-                <VisitCard key={item.id} item={item} isTr={isTr} today={today} onOpenDocuments={onOpenDocuments} />
-              ))}
-            </View>
-
-            {/* ── Planned visits (when no featured) ── */}
-            {!nextVisit && plannedVisits.length > 0 ? (
               <>
-                <View style={styles.sectionHeaderRow}>
-                  <Text style={styles.sectionLabel}>{isTr ? 'PLANLANANLAR' : 'PLANNED'}</Text>
+                <View style={[styles.sectionHeaderRow, plannedVisits.length > 0 && { marginTop: 28 }]}>
+                  <Text style={styles.sectionLabel}>{isTr ? 'TAMAMLANAN ZİYARETLER' : 'COMPLETED VISITS'}</Text>
                 </View>
-                <View style={styles.cardsColumn}>
-                  {plannedVisits.map((item) => (
-                    <VisitCard key={item.id} item={item} isTr={isTr} today={today} onOpenDocuments={onOpenDocuments} />
+                <View style={styles.completedList}>
+                  {pastVisits.map((item) => (
+                    <CompletedVisitCard key={item.id} item={item} isTr={isTr} onOpenDocuments={onOpenDocuments} />
                   ))}
                 </View>
               </>
-            ) : null}
-
-            {/* ── View All History button ── */}
-            {pastVisits.length > 0 ? (
-              <Pressable style={styles.viewAllHistoryBtn}>
-                <Text style={styles.viewAllHistoryText}>{isTr ? 'Tüm Geçmiş' : 'View All History'}</Text>
-              </Pressable>
             ) : null}
 
             {/* ── Stats grid ── */}
@@ -845,12 +892,12 @@ export default function VetVisitsScreen({
         animationType="slide"
         presentationStyle="fullScreen"
         statusBarTranslucent={false}
-        onRequestClose={() => setIsCreateVisible(false)}
+        onRequestClose={() => { setIsCreateVisible(false); setEditingVisitId(null); resetCreateForm(); }}
       >
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalKeyboardWrap}>
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>{isTr ? 'Veteriner Ziyareti Ekle' : 'Create Vet Visit'}</Text>
+              <Text style={styles.modalTitle}>{editingVisitId ? (isTr ? 'Ziyareti Düzenle' : 'Edit Visit') : (isTr ? 'Veteriner Ziyareti Ekle' : 'Create Vet Visit')}</Text>
               <ScrollView style={styles.modalMainScroll} showsVerticalScrollIndicator={false}>
                 <View style={styles.modalSection}>
                   <Text style={styles.modalSectionTitle}>{isTr ? 'Ziyaret Bilgisi' : 'Visit info'}</Text>
@@ -1064,6 +1111,7 @@ export default function VetVisitsScreen({
                   style={styles.modalSecondaryBtn}
                   onPress={() => {
                     setIsCreateVisible(false);
+                    setEditingVisitId(null);
                     resetCreateForm();
                   }}
                 >
@@ -1199,6 +1247,23 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
   },
+  featuredTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  featuredEditBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
   featuredGlassTag: {
     alignSelf: 'flex-start',
     borderRadius: 20,
@@ -1285,6 +1350,187 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     color: '#ffffff',
+  },
+
+  // ── upcoming mini card ────────────────────────────────────────────────────
+  miniCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#f0f4f0',
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 8,
+  },
+  miniDateBox: {
+    alignItems: 'center',
+    width: 40,
+    flexShrink: 0,
+  },
+  miniDateMon: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#4a6e4e',
+    letterSpacing: 0.8,
+  },
+  miniDateDay: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#2e4230',
+    lineHeight: 24,
+    letterSpacing: -0.5,
+  },
+  miniBody: {
+    flex: 1,
+    gap: 2,
+  },
+  miniClinic: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#30332e',
+    letterSpacing: -0.1,
+  },
+  miniTitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#5d605a',
+  },
+  miniPill: {
+    backgroundColor: '#d6e8d6',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexShrink: 0,
+  },
+  miniPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#3a6040',
+    letterSpacing: 0.2,
+  },
+  miniEditBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: '#e4ede4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+
+  // ── completed visits ──────────────────────────────────────────────────────
+  completedList: {
+    gap: 8,
+  },
+  completedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 0,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  completedDateCol: {
+    width: 52,
+    alignItems: 'center',
+    paddingVertical: 14,
+    backgroundColor: '#f4f6f2',
+    gap: 0,
+  },
+  completedDateMon: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#718562',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  completedDateDay: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#30332e',
+    lineHeight: 24,
+    letterSpacing: -0.5,
+  },
+  completedDateYear: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#9a9d93',
+    letterSpacing: 0.2,
+  },
+  completedDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    backgroundColor: '#edeee9',
+  },
+  completedBody: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    gap: 3,
+  },
+  completedTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  completedClinic: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#30332e',
+    letterSpacing: -0.1,
+  },
+  completedCheckBadge: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#eef4eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  completedTitle: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#5d605a',
+  },
+  completedMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 4,
+  },
+  completedAmountPill: {
+    backgroundColor: '#f0f4f0',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  completedAmountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#47664a',
+  },
+  completedDocPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#f2f2f0',
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  completedDocText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#5d605a',
   },
 
   // ── visit card (history item) ──────────────────────────────────────────────

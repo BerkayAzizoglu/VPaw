@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Circle, Line, Path, Polyline, SvgUri } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Polyline, Rect, SvgUri } from 'react-native-svg';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { useLocale } from '../hooks/useLocale';
@@ -82,17 +82,23 @@ function AppIcon({ name, size = 16, color = '#7a7a7a', strokeWidth = 1.9 }: { na
   if (name === 'home') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-        <Path d="M4.8 10.6L12 5L19.2 10.6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
-        <Path d="M7.2 9.8V18.6H16.8V9.8" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
-        <Path d="M10.3 18.6V14.2H13.7V18.6" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+        <Path
+          d="M22,5.724V2c0-.552-.447-1-1-1s-1,.448-1,1v2.366L14.797,.855c-1.699-1.146-3.895-1.146-5.594,0L2.203,5.579c-1.379,.931-2.203,2.48-2.203,4.145v9.276c0,2.757,2.243,5,5,5h2c.553,0,1-.448,1-1V14c0-.551,.448-1,1-1h6c.552,0,1,.449,1,1v9c0,.552,.447,1,1,1h2c2.757,0,5-2.243,5-5V9.724c0-1.581-.744-3.058-2-4Z"
+          fill={color}
+        />
       </Svg>
     );
   }
   if (name === 'edit') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-        <Path d="M4.4 19.6H8.1L18 9.7C18.6 9.1 18.6 8.2 18 7.6L16.4 6C15.8 5.4 14.9 5.4 14.3 6L4.4 15.9V19.6Z" stroke={color} strokeWidth={strokeWidth} strokeLinejoin="round" />
-        <Path d="M12.9 7.4L16.6 11.1" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+        <Rect x="3.1" y="3.1" width="17.8" height="17.8" rx="5.4" fill={color} />
+        <Path
+          d="M8.2 15.9H10.85L16.45 10.3C16.84 9.91 16.84 9.27 16.45 8.88L15.1 7.53C14.71 7.14 14.07 7.14 13.68 7.53L8.2 13.01V15.9Z"
+          fill="#FFFFFF"
+        />
+        <Path d="M12.95 8.3L15.7 11.05" stroke="#FFFFFF" strokeWidth={1.8} strokeLinecap="round" />
+        <Path d="M8.15 15.9H11.1" stroke="#FFFFFF" strokeWidth={1.8} strokeLinecap="round" />
       </Svg>
     );
   }

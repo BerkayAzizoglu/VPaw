@@ -1,5 +1,5 @@
 import type { PetProfile } from '../components/AuthGate';
-import type { WeightPoint } from '../screens/WeightTrackingScreen';
+import type { WeightPoint } from './healthMvpModel';
 import type { LegacyHealthEvent } from './healthEventDedup';
 import {
   isSameMedicalEvent,

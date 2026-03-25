@@ -10,11 +10,14 @@ import {
   View,
 } from 'react-native';
 import {
+  CheckCircle,
   ChevronRight,
   FileText,
+  Pill,
   Scale,
   Stethoscope,
   Syringe,
+  Trash2,
   TrendingUp,
 } from 'lucide-react-native';
 
@@ -107,6 +110,10 @@ type HealthHubScreenProps = {
   onOpenDocuments?: () => void;
   domainOverview?: HealthHubDomainOverview;
   documentsPreview?: Array<{ id: string; title: string; date: string; type: string }>;
+  medicationCourses?: Array<{ id: string; name: string; startDate: string; status: string; dose?: number; doseUnit?: string; frequency?: string; endDate?: string }>;
+  onCompleteMedication?: (id: string) => void;
+  onDeleteMedication?: (id: string) => void;
+  weightGoal?: number;
   locale?: 'en' | 'tr';
 };
 type HealthHubIconKind = 'vet' | 'records' | 'vaccines' | 'weight' | 'documents';
@@ -198,6 +205,10 @@ export default function HealthHubScreen({
   onOpenDocuments,
   domainOverview,
   documentsPreview,
+  medicationCourses,
+  onCompleteMedication,
+  onDeleteMedication,
+  weightGoal,
   locale = 'en',
 }: HealthHubScreenProps) {
   const isTr = locale === 'tr';
@@ -354,6 +365,19 @@ export default function HealthHubScreen({
                   <View style={[s.summaryCardBadge, { backgroundColor: wHasData ? '#dceaf7' : C.surfaceContainer }]}>
                     <Text style={[s.summaryCardBadgeText, { color: wHasData ? C.fgWeight : C.outlineVariant }]}>{weightBadge}</Text>
                   </View>
+                  {weightGoal != null && weightGoal > 0 && wHasData ? (() => {
+                    const currentKg = parseFloat(weightNum);
+                    const ratio = Number.isFinite(currentKg) ? Math.min(1, Math.max(0, currentKg / weightGoal)) : 0;
+                    const onTarget = Number.isFinite(currentKg) && currentKg <= weightGoal;
+                    return (
+                      <View style={s.goalWrap}>
+                        <View style={s.goalTrack}>
+                          <View style={[s.goalFill, { width: `${Math.round(ratio * 100)}%`, backgroundColor: onTarget ? C.accentWeight : '#c96a6a' }]} />
+                        </View>
+                        <Text style={s.goalText}>{weightGoal.toFixed(1)} kg</Text>
+                      </View>
+                    );
+                  })() : null}
                 </View>
 
                 {/* Vaccines */}
@@ -480,6 +504,50 @@ export default function HealthHubScreen({
             <ChevronRight size={16} color={C.outlineVariant} />
           </Pressable>
         </Animated.View>
+
+        {/* ── ACTIVE MEDICATIONS ── */}
+        {medicationCourses && medicationCourses.filter((m) => m.status === 'active' || m.status === 'paused').length > 0 ? (
+          <>
+            <View style={s.sectionHeaderRow}>
+              <Text style={s.sectionLabel}>{isTr ? 'AKTİF İLAÇLAR' : 'ACTIVE MEDICATIONS'}</Text>
+            </View>
+            <Animated.View style={[s.categoryList, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+              {medicationCourses
+                .filter((m) => m.status === 'active' || m.status === 'paused')
+                .map((med) => {
+                  const doseLabel = med.dose ? `${med.dose}${med.doseUnit ?? ''} ${med.frequency ?? ''}`.trim() : (isTr ? 'Doz belirtilmedi' : 'No dose specified');
+                  return (
+                    <View key={med.id} style={s.medCard}>
+                      <View style={s.medIconBox}>
+                        <Pill size={18} color="#7a4a9a" strokeWidth={1.9} />
+                      </View>
+                      <View style={s.medBody}>
+                        <Text style={s.medName} numberOfLines={1}>{med.name}</Text>
+                        <Text style={s.medSub} numberOfLines={1}>{doseLabel}</Text>
+                        {med.status === 'paused' ? (
+                          <View style={s.medPausedPill}>
+                            <Text style={s.medPausedText}>{isTr ? 'Duraklatıldı' : 'Paused'}</Text>
+                          </View>
+                        ) : null}
+                      </View>
+                      <View style={s.medActions}>
+                        {onCompleteMedication ? (
+                          <Pressable style={s.medCompleteBtn} onPress={() => onCompleteMedication(med.id)}>
+                            <CheckCircle size={16} color="#3a6e45" strokeWidth={2} />
+                          </Pressable>
+                        ) : null}
+                        {onDeleteMedication ? (
+                          <Pressable style={s.medDeleteBtn} onPress={() => onDeleteMedication(med.id)}>
+                            <Trash2 size={14} color="#c0392b" strokeWidth={2} />
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    </View>
+                  );
+                })}
+            </Animated.View>
+          </>
+        ) : null}
 
         {/* ── EXPENSE CHART ── */}
         {summary.totalExpenses && false ? <Animated.View style={[s.expenseChartCard, { opacity: fadeAnim }]}>
@@ -821,6 +889,28 @@ const s = StyleSheet.create({
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.2,
+    textAlign: 'center',
+  },
+  goalWrap: {
+    marginTop: 8,
+    gap: 4,
+    width: '100%',
+  },
+  goalTrack: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    overflow: 'hidden',
+    width: '100%',
+  },
+  goalFill: {
+    height: 3,
+    borderRadius: 2,
+  },
+  goalText: {
+    fontSize: 9,
+    color: C.onSurfaceVariant,
+    fontWeight: '600',
     textAlign: 'center',
   },
 
@@ -1295,6 +1385,79 @@ const s = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     color: C.primaryDim,
+  },
+
+  // Medication cards
+  medCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    padding: 12,
+    gap: 10,
+    marginBottom: 8,
+  },
+  medIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: '#f3eaf9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  medBody: {
+    flex: 1,
+    gap: 2,
+  },
+  medName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.onSurface,
+  },
+  medSub: {
+    fontSize: 12,
+    color: C.onSurfaceVariant,
+  },
+  medPausedPill: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: '#fdf4e3',
+    borderWidth: 1,
+    borderColor: 'rgba(180,130,0,0.2)',
+  },
+  medPausedText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#8a6800',
+  },
+  medActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  medCompleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#e9ffe6',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(58,110,69,0.15)',
+  },
+  medDeleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: '#fdf0ef',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(192,57,43,0.15)',
   },
 
   // Filter chips

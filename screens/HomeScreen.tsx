@@ -78,6 +78,7 @@ type HomeScreenProps = {
   userAvatarUri?: string;
   userInitials?: string;
   onOpenPetProfile?: (petId?: string) => void;
+  onOpenWeightTracking?: () => void;
   onOpenVaccinations?: (petId?: string) => void;
   onOpenHealthRecords?: (petId?: string) => void;
   onOpenVetVisits?: (petId?: string) => void;
@@ -96,6 +97,7 @@ type HomeScreenProps = {
   topInsights?: AiInsight[];
   onInsightAction?: (insight: AiInsight) => void;
   onQuickAddWeight?: (value: number) => void;
+  weightGoal?: number;
   nextImportantEvent?: NextImportantEventItem | null;
   healthJourneyEvents?: JourneyEventItem[];
   summaryCard?: {
@@ -178,6 +180,7 @@ export default function HomeScreen({
   userAvatarUri,
   userInitials = 'VP',
   onOpenPetProfile,
+  onOpenWeightTracking,
   onOpenVaccinations,
   onOpenHealthRecords,
   onOpenVetVisits,
@@ -196,6 +199,7 @@ export default function HomeScreen({
   topInsights = [],
   onInsightAction,
   onQuickAddWeight,
+  weightGoal,
   nextImportantEvent,
   healthJourneyEvents,
   summaryCard,
@@ -425,6 +429,15 @@ export default function HomeScreen({
     return { status: isTr ? 'Artış görülüyor' : 'Weight gaining', badgeBg: '#fff3e0', badgeFg: '#9a6520' };
   }, [activePet, hasWeightData, isTr]);
 
+  const goalProgress = useMemo(() => {
+    if (!weightGoal || weightGoal <= 0 || !hasWeightData) return null;
+    const currentKg = parseFloat(activeWeightHistory[activeWeightHistory.length - 1]?.value?.toString() ?? '0');
+    if (!Number.isFinite(currentKg) || currentKg <= 0) return null;
+    const ratio = Math.min(1, Math.max(0, currentKg / weightGoal));
+    const onTarget = currentKg <= weightGoal;
+    return { ratio, currentKg, onTarget };
+  }, [weightGoal, hasWeightData, activeWeightHistory]);
+
   useEffect(() => {
     setFrontImageLoaded(false);
   }, [activePet?.id]);
@@ -644,7 +657,7 @@ export default function HomeScreen({
         </View>
         {/* ── PRIMARY HEALTH CARD (breathing animation) ── */}
         <Animated.View style={breathAnimStyle}>
-          <Pressable style={styles.weightCard} onPress={() => onOpenPetProfile?.(activePet.id)}>
+          <Pressable style={styles.weightCard} onPress={() => onOpenWeightTracking?.()}>
             <View style={styles.weightHeader}>
               <Text style={styles.weightLabel}>{isTr ? 'AĞIRLIK PROFİLİ' : 'WEIGHT PROFILE'}</Text>
               <View style={[styles.weightDeltaBadge, { backgroundColor: weightStatusInfo.badgeBg }]}>
@@ -670,6 +683,18 @@ export default function HomeScreen({
               </View>
             </View>
             <Text style={styles.weightDateText}>{weightUpdatedText}</Text>
+            {goalProgress && (
+              <View style={styles.goalProgressWrap}>
+                <View style={styles.goalProgressTrack}>
+                  <View style={[styles.goalProgressFill, { width: `${Math.round(goalProgress.ratio * 100)}%`, backgroundColor: goalProgress.onTarget ? '#6b9e6b' : '#c96a6a' }]} />
+                </View>
+                <Text style={styles.goalProgressText}>
+                  {isTr
+                    ? `${goalProgress.currentKg.toFixed(1)} / ${weightGoal!.toFixed(1)} kg hedef`
+                    : `${goalProgress.currentKg.toFixed(1)} / ${weightGoal!.toFixed(1)} kg goal`}
+                </Text>
+              </View>
+            )}
           </Pressable>
         </Animated.View>
 
@@ -977,7 +1002,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 22,
     paddingTop: 56,
-    paddingBottom: 24,
+    paddingBottom: 132,
     gap: 16,
   },
   topRow: {
@@ -1833,6 +1858,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#8f8f8f',
     marginTop: 6,
+  },
+  goalProgressWrap: {
+    marginTop: 10,
+    gap: 5,
+  },
+  goalProgressTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(0,0,0,0.08)',
+    overflow: 'hidden',
+  },
+  goalProgressFill: {
+    height: 4,
+    borderRadius: 2,
+  },
+  goalProgressText: {
+    fontSize: 11,
+    color: '#8f8f8f',
+    fontWeight: '500',
   },
 
   // ── Health Journey ──

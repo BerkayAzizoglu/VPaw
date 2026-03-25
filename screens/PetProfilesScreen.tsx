@@ -1,7 +1,8 @@
 ﻿import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { ChevronLeft, ChevronRight, Mars, Venus } from 'lucide-react-native';
+import { Alert } from 'react-native';
+import { ChevronLeft, ChevronRight, Mars, Trash2, Venus } from 'lucide-react-native';
 import type { PetProfile } from '../components/AuthGate';
 import type { Locale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
@@ -14,6 +15,7 @@ type PetProfilesScreenProps = {
   onSelectPet: (petId: string) => void;
   onOpenPetDetail: (petId: string) => void;
   onOpenPetEdit: (petId: string) => void;
+  onDeletePet?: (petId: string) => void;
   canAddPet?: boolean;
   onAddPet?: () => void;
 };
@@ -48,6 +50,7 @@ export default function PetProfilesScreen({
   onSelectPet,
   onOpenPetDetail,
   onOpenPetEdit,
+  onDeletePet,
   canAddPet = false,
   onAddPet,
 }: PetProfilesScreenProps) {
@@ -106,6 +109,29 @@ export default function PetProfilesScreen({
                       <Text style={styles.actionText}>{isTr ? 'Düzenle' : 'Edit'}</Text>
                       <ChevronRight size={14} color="#8d8d8d" strokeWidth={2.4} />
                     </Pressable>
+                    {onDeletePet && (
+                      <Pressable
+                        style={styles.deleteBtn}
+                        onPress={() => {
+                          Alert.alert(
+                            isTr ? `${pet.name} silinsin mi?` : `Delete ${pet.name}?`,
+                            isTr
+                              ? 'Bu evcil hayvana ait tüm sağlık verileri kalıcı olarak silinecek.'
+                              : 'All health data for this pet will be permanently deleted.',
+                            [
+                              { text: isTr ? 'İptal' : 'Cancel', style: 'cancel' },
+                              {
+                                text: isTr ? 'Sil' : 'Delete',
+                                style: 'destructive',
+                                onPress: () => onDeletePet(pet.id),
+                              },
+                            ],
+                          );
+                        }}
+                      >
+                        <Trash2 size={14} color="#c0392b" strokeWidth={2.4} />
+                      </Pressable>
+                    )}
                   </View>
                 </View>
               </Pressable>
@@ -258,6 +284,16 @@ const styles = StyleSheet.create({
     lineHeight: 16,
     color: '#545454',
     fontWeight: '600',
+  },
+  deleteBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 12,
+    backgroundColor: '#fdf0ef',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(192,57,43,0.15)',
   },
   emptyText: {
     textAlign: 'center',

@@ -1,8 +1,8 @@
-import type { WeightPoint } from '../screens/WeightTrackingScreen';
 import type {
   MedicalEvent,
   MedicalEventType,
   VetVisit,
+  WeightPoint,
   VetVisitReasonCategory,
   VetVisitStatus,
 } from './healthMvpModel';

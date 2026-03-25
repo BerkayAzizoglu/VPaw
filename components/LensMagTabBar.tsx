@@ -54,10 +54,10 @@ const COLOR_ACTIVE   = '#47664a';
 const COLOR_INACTIVE = '#9a9c95';
 
 // Glass lens appearance
-const BAR_BG         = 'rgba(242, 239, 235, 0.96)';
-const BAR_BORDER     = 'rgba(76, 86, 73, 0.12)';
-const PILL_BG        = 'rgba(255, 255, 255, 0.92)';
-const PILL_BORDER    = 'rgba(0, 0, 0, 0.09)';
+const BAR_BG         = 'rgba(242, 239, 235, 0.62)';
+const BAR_BORDER     = 'rgba(76, 86, 73, 0.14)';
+const PILL_BG        = 'rgba(233, 235, 231, 0.86)';
+const PILL_BORDER    = 'rgba(68, 74, 66, 0.10)';
 
 const BAR_HEIGHT  = 82;
 const BAR_MARGIN  = 18;
@@ -471,10 +471,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-around',
     shadowColor: '#30332e',
-    shadowOpacity: 0.13,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 8,
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
   },
 
   pill: {
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     left: 0,
     height: PILL_HEIGHT,
     borderRadius: PILL_RADIUS,
-    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+    backgroundColor: PILL_BG,
     borderWidth: 1,
     borderColor: PILL_BORDER,
     shadowColor: '#000',

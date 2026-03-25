@@ -1,5 +1,12 @@
 export type PetId = string;
 
+export type WeightPoint = {
+  label: string;
+  value: number;
+  date: string;
+  change: string;
+};
+
 export type VetVisitReasonCategory =
   | 'checkup'
   | 'vaccine'
@@ -112,6 +119,7 @@ export type Reminder = {
 
   // Backward compatibility fields (legacy storage + transitional flows)
   kind?: ReminderKind;
+  /** @deprecated Use dueDate instead. Kept for legacy storage round-trip only. */
   dueAt?: string;
   status?: ReminderStatus;
   sourceType?: ReminderSourceType;
@@ -441,7 +449,6 @@ export function createReminder(
   const item: Reminder = {
     ...input,
     kind,
-    dueAt: dueDate,
     dueDate,
     scheduledAt,
     type: resolvedType,
@@ -536,7 +543,6 @@ export function markReminderCompleted(
         ...reminder,
         scheduledAt: nextScheduledAt,
         dueDate: nextScheduledAt,
-        dueAt: nextScheduledAt,
         completedAt: undefined,
         status: 'pending',
         isActive: true,
@@ -612,7 +618,6 @@ export function snoozeReminder(
       status: 'snoozed',
       dueDate: nextIso,
       scheduledAt: nextIso,
-      dueAt: nextIso,
       updatedAt: nowIso,
     };
     return updated;
@@ -649,7 +654,6 @@ export function updateReminder(
       title: typeof patch.title === 'string' && patch.title.trim().length > 0 ? patch.title.trim() : reminder.title,
       dueDate,
       scheduledAt: dueDate,
-      dueAt: dueDate,
       subtype: patch.subtype ?? reminder.subtype,
       note: typeof patch.note === 'string' ? patch.note : reminder.note,
       status: reminder.completedAt ? 'done' : reminder.status === 'snoozed' ? 'snoozed' : 'pending',

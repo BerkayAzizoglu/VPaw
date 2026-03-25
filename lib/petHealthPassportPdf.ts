@@ -4,8 +4,7 @@ import { getAllDocumentsForPet } from './healthDocumentsVault';
 import { getHealthCardSummary, getVaccinesForUI, getVetVisitsForUI } from './healthEventAdapters';
 import type { HealthEvent } from '../components/AuthGate';
 import { buildUnifiedHealthEventsForPet, type UnifiedHealthEvent } from './unifiedHealthEvents';
-import type { ByPet, MedicalEvent, MedicationCourse, Reminder, VetVisit } from './healthMvpModel';
-import type { WeightPoint } from '../screens/WeightTrackingScreen';
+import type { ByPet, MedicalEvent, MedicationCourse, Reminder, VetVisit, WeightPoint } from './healthMvpModel';
 
 type PassportState = {
   petProfiles: Record<string, PetProfile>;
