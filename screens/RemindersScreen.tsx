@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import PawLottie from '../components/PawLottie';
 import {
   Animated,
   Modal,
@@ -15,8 +14,6 @@ import Svg, { Circle, Path } from 'react-native-svg';
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ReminderSubtype = 'vet_visit' | 'vaccine' | 'medication' | 'food' | 'litter' | 'walk' | 'custom';
-type ReminderGroup = 'medical' | 'care';
-
 type ReminderItem = {
   id: string;
   title: string;
@@ -137,6 +134,32 @@ function Icon({ kind, size = 18, color = '#5d605a' }: { kind: 'check' | 'clock' 
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M9 6L15 12L9 18" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
+  );
+}
+
+function ReminderEmptyIcon() {
+  return (
+    <View style={styles.emptyIconShell}>
+      <View style={styles.emptyIconGlow} />
+      <Svg width={74} height={74} viewBox="0 0 74 74" fill="none">
+        <Path
+          d="M22 18.5C22 16.8431 23.3431 15.5 25 15.5H49C50.6569 15.5 52 16.8431 52 18.5V50.5C52 52.1569 50.6569 53.5 49 53.5H25C23.3431 53.5 22 52.1569 22 50.5V18.5Z"
+          fill="#FFFFFF"
+          stroke="#D8DDD4"
+          strokeWidth={2}
+        />
+        <Path d="M22 25.5H52" stroke="#E4E8E1" strokeWidth={2} />
+        <Path d="M29 12.5V20.5" stroke="#47664A" strokeWidth={3} strokeLinecap="round" />
+        <Path d="M45 12.5V20.5" stroke="#47664A" strokeWidth={3} strokeLinecap="round" />
+        <Path d="M29.5 33.5H36.5" stroke="#C5CEC1" strokeWidth={3} strokeLinecap="round" />
+        <Path d="M29.5 41.5H43.5" stroke="#D6DDD2" strokeWidth={3} strokeLinecap="round" />
+        <Path
+          d="M48.5 37.5C48.5 34.4624 50.9624 32 54 32C57.0376 32 59.5 34.4624 59.5 37.5V40.5455C59.5 41.6346 59.8192 42.6998 60.4181 43.6095L61.0399 44.5542C61.4418 45.1648 61.0037 46 60.2727 46H47.7273C46.9963 46 46.5582 45.1648 46.9601 44.5542L47.5819 43.6095C48.1808 42.6998 48.5 41.6346 48.5 40.5455V37.5Z"
+          fill="#47664A"
+        />
+        <Path d="M52 48.3C52.2405 49.2865 53.05 50 54 50C54.95 50 55.7595 49.2865 56 48.3" stroke="#47664A" strokeWidth={2.2} strokeLinecap="round" />
+      </Svg>
+    </View>
   );
 }
 
@@ -288,6 +311,22 @@ function ReminderSection({
   );
 }
 
+function ReminderSectionEmpty({
+  title,
+  body,
+}: {
+  title: string;
+  body: string;
+}) {
+  return (
+    <View style={styles.emptyCardCompact}>
+      <ReminderEmptyIcon />
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyBody}>{body}</Text>
+    </View>
+  );
+}
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function RemindersScreen({
@@ -317,7 +356,7 @@ export default function RemindersScreen({
   const [error, setError] = useState('');
   const [focusedField, setFocusedField] = useState<'title' | 'date' | null>(null);
   const [showCompleted, setShowCompleted] = useState(false);
-  const [group, setGroup] = useState<ReminderGroup>('medical');
+  const [group, setGroup] = useState<'medical' | 'care'>('medical');
   const saveScale = useMemo(() => new Animated.Value(1), []);
 
   // ── entrance animation ──
@@ -336,7 +375,6 @@ export default function RemindersScreen({
   );
 
   const isFullyEmpty = today.length === 0 && upcoming.length === 0 && overdue.length === 0;
-
   const filteredToday = useMemo(
     () => today.filter((item) => (group === 'medical' ? isMedicalSubtype(item.subtype) : !isMedicalSubtype(item.subtype))),
     [group, today],
@@ -353,6 +391,14 @@ export default function RemindersScreen({
     () => completed.filter((item) => (group === 'medical' ? isMedicalSubtype(item.subtype) : !isMedicalSubtype(item.subtype))),
     [completed, group],
   );
+  const medicalToday = useMemo(() => today.filter((item) => isMedicalSubtype(item.subtype)), [today]);
+  const medicalUpcoming = useMemo(() => upcoming.filter((item) => isMedicalSubtype(item.subtype)), [upcoming]);
+  const medicalOverdue = useMemo(() => overdue.filter((item) => isMedicalSubtype(item.subtype)), [overdue]);
+  const careToday = useMemo(() => today.filter((item) => !isMedicalSubtype(item.subtype)), [today]);
+  const careUpcoming = useMemo(() => upcoming.filter((item) => !isMedicalSubtype(item.subtype)), [upcoming]);
+  const careOverdue = useMemo(() => overdue.filter((item) => !isMedicalSubtype(item.subtype)), [overdue]);
+  const hasMedicalItems = medicalToday.length > 0 || medicalUpcoming.length > 0 || medicalOverdue.length > 0;
+  const hasCareItems = careToday.length > 0 || careUpcoming.length > 0 || careOverdue.length > 0;
 
   // ── create ──
   const openCreate = () => {
@@ -411,10 +457,6 @@ export default function RemindersScreen({
                 ) : null}
               </Pressable>
             ) : null}
-            <Pressable style={styles.addPill} onPress={openCreate}>
-              <Icon kind="add" size={15} color="#fff" />
-              <Text style={styles.addPillText}>{isTr ? 'Ekle' : 'Add'}</Text>
-            </Pressable>
           </View>
         </Animated.View>
 
@@ -463,7 +505,7 @@ export default function RemindersScreen({
           {/* ── Empty state ── */}
           {isFullyEmpty && (
             <View style={styles.emptyCard}>
-              <PawLottie size={90} />
+              <ReminderEmptyIcon />
               <Text style={styles.emptyTitle}>{isTr ? 'Hatırlatma yok' : 'No reminders yet'}</Text>
               <Text style={styles.emptyBody}>
                 {isTr
@@ -792,6 +834,39 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
+  },
+  emptyCardCompact: {
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    paddingVertical: 22,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 20,
+    width: '86%',
+    alignSelf: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
+  },
+  emptyIconShell: {
+    width: 92,
+    height: 92,
+    borderRadius: 28,
+    backgroundColor: '#f3f5ef',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+    position: 'relative',
+    overflow: 'visible',
+  },
+  emptyIconGlow: {
+    position: 'absolute',
+    inset: 10,
+    borderRadius: 22,
+    backgroundColor: 'rgba(71,102,74,0.08)',
   },
   emptyTitle: {
     fontSize: 18,

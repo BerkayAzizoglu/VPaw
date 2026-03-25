@@ -3095,7 +3095,13 @@ export default function AuthGate() {
       <LensMagTabBar
         activeTab={primaryTab}
         locale={locale}
-        onTabPress={(tab) => { setPrimaryTab(tab); setRoute(tab); }}
+        onTabPress={(tab) => {
+          if (tab === 'healthHub') {
+            setHealthHubCreatePreset((prev) => (prev ? { ...prev, openCreate: false } : null));
+          }
+          setPrimaryTab(tab);
+          setRoute(tab);
+        }}
       />
 
       <SuccessOverlay ref={successOverlayRef} />
@@ -3670,6 +3676,7 @@ export default function AuthGate() {
       nextImportantEvent={homeNextImportantEvent}
       healthJourneyEvents={homeHealthJourneyEvents}
       summaryCard={homeSummaryCard}
+      expenseBreakdown={healthHubSummary.totalExpenses}
     />
   );
 }
@@ -3693,6 +3700,9 @@ const styles = StyleSheet.create({
   primaryShell: {
     flex: 1,
     backgroundColor: '#faf8f5',
+    // Reserve stable space for the floating tab bar + press scale,
+    // so content never gets clipped behind it across screens.
+    paddingBottom: 112,
   },
   fabLayer: {
     ...StyleSheet.absoluteFillObject,
@@ -3775,9 +3785,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
 });
-
-
-
 
 
 

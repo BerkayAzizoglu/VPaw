@@ -482,7 +482,7 @@ export default function HealthHubScreen({
         </Animated.View>
 
         {/* ── EXPENSE CHART ── */}
-        <Animated.View style={[s.expenseChartCard, { opacity: fadeAnim }]}>
+        {summary.totalExpenses && false ? <Animated.View style={[s.expenseChartCard, { opacity: fadeAnim }]}>
           <View style={s.expenseChartHeader}>
             <Text style={s.expenseChartTitle}>{isTr ? 'Harcama Analizi' : 'Expense Breakdown'}</Text>
             <View style={s.expenseChartYearPill}>
@@ -490,13 +490,13 @@ export default function HealthHubScreen({
             </View>
           </View>
 
-          {summary.totalExpenses && summary.totalExpenses.breakdown.length > 0 ? (() => {
-            const { total, currency, breakdown } = summary.totalExpenses;
+          {summary.totalExpenses?.breakdown.length ? (() => {
+            const { total, currency, breakdown } = summary.totalExpenses!;
             return (
               <>
                 {/* Stacked proportional bar */}
                 <View style={s.expenseStackBar}>
-                  {breakdown.map((item, i) => (
+                  {breakdown.map((item: { label: string; amount: number; color: string }, i: number) => (
                     <View
                       key={item.label}
                       style={[
@@ -511,7 +511,7 @@ export default function HealthHubScreen({
 
                 {/* Per-category rows */}
                 <View style={s.expenseChartRows}>
-                  {breakdown.map((item) => {
+                  {breakdown.map((item: { label: string; amount: number; color: string }) => {
                     const pct = Math.round((item.amount / total) * 100);
                     return (
                       <View key={item.label} style={s.expenseChartRow}>
@@ -543,7 +543,7 @@ export default function HealthHubScreen({
               </Text>
             </View>
           )}
-        </Animated.View>
+        </Animated.View> : null}
 
       </ScrollView>
 

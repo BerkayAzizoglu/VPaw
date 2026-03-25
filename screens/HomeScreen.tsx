@@ -102,6 +102,11 @@ type HomeScreenProps = {
     title: string;
     body: string;
   };
+  expenseBreakdown?: {
+    total: number;
+    currency: string;
+    breakdown: Array<{ label: string; amount: number; color: string }>;
+  };
 };
 
 function formatPetAge(birthDate: string, locale: 'en' | 'tr') {
@@ -194,6 +199,7 @@ export default function HomeScreen({
   nextImportantEvent,
   healthJourneyEvents,
   summaryCard,
+  expenseBreakdown,
 }: HomeScreenProps) {
   const { locale } = useLocale();
   const { settings } = useAppSettings();
@@ -806,6 +812,68 @@ export default function HomeScreen({
             <Text style={styles.summaryTitle}>{summaryTitle}</Text>
             <Text style={styles.summaryBody}>{summaryBody}</Text>
           </View>
+        </View>
+
+        <View style={styles.expenseCard}>
+          <View style={styles.expenseHeader}>
+            <Text style={styles.expenseTitle}>{isTr ? 'Harcama Analizi' : 'Expense Breakdown'}</Text>
+            <View style={styles.expenseYearPill}>
+              <Text style={styles.expenseYearText}>{new Date().getFullYear()}</Text>
+            </View>
+          </View>
+
+          {expenseBreakdown && expenseBreakdown.breakdown.length > 0 ? (
+            <>
+              <View style={styles.expenseStackBar}>
+                {expenseBreakdown.breakdown.map((item, index) => (
+                  <View
+                    key={item.label}
+                    style={[
+                      styles.expenseStackSegment,
+                      { flex: item.amount / expenseBreakdown.total, backgroundColor: item.color },
+                      index === 0 && styles.expenseStackFirst,
+                      index === expenseBreakdown.breakdown.length - 1 && styles.expenseStackLast,
+                    ]}
+                  />
+                ))}
+              </View>
+
+              <View style={styles.expenseRows}>
+                {expenseBreakdown.breakdown.map((item) => {
+                  const ratio = item.amount / expenseBreakdown.total;
+                  const pct = Math.round(ratio * 100);
+                  return (
+                    <View key={item.label} style={styles.expenseRow}>
+                      <View style={[styles.expenseDot, { backgroundColor: item.color }]} />
+                      <Text style={styles.expenseRowLabel}>{item.label}</Text>
+                      <View style={styles.expenseBarTrack}>
+                        <View style={[styles.expenseBarFill, { width: `${Math.max(10, ratio * 100)}%`, backgroundColor: `${item.color}33` }]} />
+                      </View>
+                      <Text style={styles.expensePct}>{pct}%</Text>
+                      <Text style={styles.expenseAmt}>
+                        {item.amount.toLocaleString(isTr ? 'tr-TR' : 'en-US')} {expenseBreakdown.currency}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+
+              <View style={styles.expenseFooter}>
+                <Text style={styles.expenseFooterLabel}>{isTr ? 'Toplam' : 'Total'}</Text>
+                <Text style={styles.expenseFooterValue}>
+                  {expenseBreakdown.total.toLocaleString(isTr ? 'tr-TR' : 'en-US')} {expenseBreakdown.currency}
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.expenseEmpty}>
+              <Text style={styles.expenseEmptyText}>
+                {isTr
+                  ? 'Veteriner ziyareti eklendikçe harcama dağılımı burada görünür.'
+                  : 'Expense distribution will appear here as you add vet visits.'}
+              </Text>
+            </View>
+          )}
         </View>
 
       </ScrollView>
@@ -1522,6 +1590,143 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: '#3d5a40',
     fontWeight: '400',
+  },
+  expenseCard: {
+    marginTop: 2,
+    marginBottom: 8,
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+    shadowColor: '#2d3a2d',
+    shadowOpacity: 0.05,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+    gap: 14,
+  },
+  expenseHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  expenseTitle: {
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '700',
+    color: '#30332e',
+    letterSpacing: -0.3,
+  },
+  expenseYearPill: {
+    paddingHorizontal: 10,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#f1f1eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expenseYearText: {
+    fontSize: 11,
+    lineHeight: 12,
+    fontWeight: '700',
+    color: '#5d605a',
+    letterSpacing: 0.6,
+  },
+  expenseStackBar: {
+    height: 10,
+    borderRadius: 999,
+    overflow: 'hidden',
+    flexDirection: 'row',
+    backgroundColor: '#f1f1eb',
+  },
+  expenseStackSegment: {
+    height: '100%',
+  },
+  expenseStackFirst: {
+    borderTopLeftRadius: 999,
+    borderBottomLeftRadius: 999,
+  },
+  expenseStackLast: {
+    borderTopRightRadius: 999,
+    borderBottomRightRadius: 999,
+  },
+  expenseRows: {
+    gap: 10,
+  },
+  expenseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  expenseDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  expenseRowLabel: {
+    width: 62,
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: '#4b4d48',
+  },
+  expenseBarTrack: {
+    flex: 1,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#f1f1eb',
+    overflow: 'hidden',
+  },
+  expenseBarFill: {
+    height: '100%',
+    borderRadius: 999,
+  },
+  expensePct: {
+    width: 36,
+    textAlign: 'right',
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '700',
+    color: '#6a6d67',
+  },
+  expenseAmt: {
+    minWidth: 78,
+    textAlign: 'right',
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '700',
+    color: '#30332e',
+  },
+  expenseFooter: {
+    paddingTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderTopWidth: 1,
+    borderTopColor: '#ecece4',
+  },
+  expenseFooterLabel: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: '#6a6d67',
+  },
+  expenseFooterValue: {
+    fontSize: 16,
+    lineHeight: 20,
+    fontWeight: '800',
+    color: '#30332e',
+    letterSpacing: -0.2,
+  },
+  expenseEmpty: {
+    paddingVertical: 8,
+  },
+  expenseEmptyText: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: '#6a6d67',
   },
   quickWeightOverlay: {
     flex: 1,
