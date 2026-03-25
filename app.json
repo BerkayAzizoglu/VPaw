@@ -25,6 +25,9 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "@lottiefiles/dotlottie-react-native/plugin"
+    ]
   }
 }

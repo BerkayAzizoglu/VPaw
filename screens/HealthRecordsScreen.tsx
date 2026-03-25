@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, type ReactNode } from 'react';
+﻿import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Animated,
@@ -15,7 +15,7 @@ import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 
-// ─── Exported types ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Exported types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type HealthRecordsSegmentContent = {
   activeTitle: string;
@@ -46,7 +46,7 @@ type HealthRecordsScreenProps = {
   recordsData?: HealthRecordsData;
 };
 
-// ─── Icon component ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Icon component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function Icon({ kind, size = 20, color = '#7a7a7a' }: { kind: 'back' | 'record' | 'pulse' | 'clock' | 'alert' | 'plus'; size?: number; color?: string }) {
   if (kind === 'back') {
@@ -102,7 +102,7 @@ function Icon({ kind, size = 20, color = '#7a7a7a' }: { kind: 'back' | 'record' 
   );
 }
 
-// ─── Stat card (bento style) ──────────────────────────────────────────────────
+// â”€â”€â”€ Stat card (bento style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function StatCard({ kind, text }: { kind: 'record' | 'pulse' | 'clock'; text: string }) {
   const iconColor = kind === 'pulse' ? '#c96a6a' : kind === 'clock' ? '#c48d42' : '#47664a';
@@ -118,15 +118,39 @@ function StatCard({ kind, text }: { kind: 'record' | 'pulse' | 'clock'; text: st
   );
 }
 
-// ─── Main screen ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Main screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, status = 'ready', onRetry, recordsData }: HealthRecordsScreenProps) {
   const { locale } = useLocale();
-  const copy = getWording(locale).healthRecords;
+  const baseCopy = getWording(locale).healthRecords;
   const isTr = locale === 'tr';
+  const copy = isTr ? {
+    ...baseCopy,
+    title: 'Sağlık Kayıtları',
+    overview: 'Sağlık Özeti',
+    recordsCount: '6 Kayıt',
+    activeCount: '2 Aktif',
+    upToDate: 'Güncel',
+    allergies: 'Alerjiler',
+    diagnoses: 'Tanılar',
+    labResults: 'Lab Sonuçları',
+    activeSection: 'AKTİF',
+    historySection: 'GEÇMİŞ',
+    activeTitle: 'Tavuk Proteini',
+    activeDate: '12 Eki 2025',
+    activeBody: 'Tüketildiğinde şiddetli kaşıntı\nve pati ısırma görülür.',
+    activeBadge: 'Aktif',
+    activeSeverity: 'Yüksek',
+    historyTitle: 'Pire Isırıkları',
+    historyDate: '05 Haz 2024',
+    historyBody: 'Mevsimsel koruyucu ile tedavi edildi.',
+    resolvedBadge: 'Çözüldü',
+    historySeverity: 'Orta',
+    addRecord: 'Kayıt Ekle',
+  } : baseCopy;
   const [activeSegment, setActiveSegment] = useState<'allergies' | 'diagnoses' | 'labResults'>('allergies');
 
-  // ─── Fallback content with correct UTF-8 Turkish strings ─────────────────
+  // â”€â”€â”€ Fallback content with correct UTF-8 Turkish strings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const fallbackSegmentContent = useMemo(() => {
     if (activeSegment === 'diagnoses') {
@@ -184,7 +208,7 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
 
   const segmentContent = recordsData?.bySegment?.[activeSegment] ?? fallbackSegmentContent;
 
-  // ─── State machine ────────────────────────────────────────────────────────
+  // â”€â”€â”€ State machine â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const screenState = status;
   const showMainContent = screenState === 'ready';
   const showAddButton = screenState !== 'loading' && screenState !== 'error';
@@ -203,7 +227,7 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
 
   const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true });
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <View style={styles.screen}>
       {backPreview ? (
@@ -218,7 +242,7 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
           showsVerticalScrollIndicator={false}
           scrollEnabled={!swipePanResponder.isSwiping}
         >
-          {/* ── Header ─────────────────────────────────────────────────────── */}
+          {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
           <View style={styles.headerRow}>
             <Pressable style={styles.backCircle} onPress={onBack}>
               <Icon kind="back" size={22} color="#5d605a" />
@@ -246,17 +270,17 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
 
           {showMainContent ? (
             <>
-              {/* ── Page title ─────────────────────────────────────────────── */}
+              {/* â”€â”€ Page title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <Text style={styles.pageTitle}>{copy.overview}</Text>
 
-              {/* ── Stats bento row ────────────────────────────────────────── */}
+              {/* â”€â”€ Stats bento row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <View style={styles.statsRow}>
                 <StatCard kind="record" text={recordsData?.recordsCountText ?? copy.recordsCount} />
                 <StatCard kind="pulse" text={recordsData?.activeCountText ?? copy.activeCount} />
                 <StatCard kind="clock" text={recordsData?.upToDateText ?? copy.upToDate} />
               </View>
 
-              {/* ── Segment tabs ───────────────────────────────────────────── */}
+              {/* â”€â”€ Segment tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <View style={styles.segmentRow}>
                 {(['allergies', 'diagnoses', 'labResults'] as const).map((seg) => {
                   const isActive = activeSegment === seg;
@@ -275,7 +299,7 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
                 })}
               </View>
 
-              {/* ── Active section ─────────────────────────────────────────── */}
+              {/* â”€â”€ Active section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <View style={styles.sectionHead}>
                 <Text style={styles.sectionHeadText}>{copy.activeSection}</Text>
                 <View style={styles.sectionLine} />
@@ -311,7 +335,7 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
                 </View>
               </View>
 
-              {/* ── History section ────────────────────────────────────────── */}
+              {/* â”€â”€ History section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <View style={styles.sectionHead}>
                 <Text style={styles.sectionHeadText}>{copy.historySection}</Text>
                 <View style={styles.sectionLine} />
@@ -363,7 +387,7 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
           )}
         </ScrollView>
 
-        {/* ── Floating add button ──────────────────────────────────────────── */}
+        {/* â”€â”€ Floating add button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {showAddButton ? (
           <Pressable
             style={styles.addBtn}
@@ -389,7 +413,7 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const styles = StyleSheet.create({
   screen: {
@@ -744,3 +768,4 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+

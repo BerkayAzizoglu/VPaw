@@ -13,21 +13,32 @@ type UseEdgeSwipeBackParams = {
 export function useEdgeSwipeBack({
   onBack,
   enabled = true,
-  edgeWidth = 32,
-  triggerDx = 72,
+  edgeWidth = 28,
+  triggerDx = 64,
   maxDy = 36,
-  fullScreenGestureEnabled = false,
+  fullScreenGestureEnabled = true,
 }: UseEdgeSwipeBackParams) {
   const hasTriggeredRef = useRef(false);
   const navigatingRef = useRef(false);
   const onBackRef = useRef(onBack);
   const translateX = useRef(new Animated.Value(0)).current;
+  const enterProgress = useRef(new Animated.Value(0)).current;
   const screenWidth = Dimensions.get('window').width;
   const [isSwiping, setIsSwiping] = useState(false);
 
   useEffect(() => {
     onBackRef.current = onBack;
   }, [onBack]);
+
+  useEffect(() => {
+    enterProgress.setValue(0);
+    Animated.timing(enterProgress, {
+      toValue: 1,
+      duration: 240,
+      easing: Easing.bezier(0.22, 1, 0.36, 1),
+      useNativeDriver: true,
+    }).start();
+  }, [enterProgress]);
 
   const responder = useMemo(
     () =>
@@ -59,7 +70,7 @@ export function useEdgeSwipeBack({
             return;
           }
 
-          const hasVelocityIntent = gesture.vx >= 0.75 && gesture.dx >= 24;
+          const hasVelocityIntent = gesture.vx >= 0.65 && gesture.dx >= 22;
           const shouldGoBack = (gesture.dx >= triggerDx || hasVelocityIntent) && Math.abs(gesture.dy) < maxDy;
           if (shouldGoBack && !hasTriggeredRef.current) {
             hasTriggeredRef.current = true;
@@ -115,10 +126,23 @@ export function useEdgeSwipeBack({
     extrapolate: 'clamp',
   });
 
+  const enterTranslateX = enterProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [16, 0],
+    extrapolate: 'clamp',
+  });
+
+  const enterOpacity = enterProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.97, 1],
+    extrapolate: 'clamp',
+  });
+
   return {
     panHandlers: responder.panHandlers,
     frontLayerStyle: {
-      transform: [{ translateX }],
+      transform: [{ translateX: Animated.add(translateX, enterTranslateX) }],
+      opacity: enterOpacity,
       shadowColor: '#000',
       shadowOpacity: 0.12,
       shadowRadius: 12,

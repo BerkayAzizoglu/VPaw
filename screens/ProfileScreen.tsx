@@ -10,7 +10,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Circle, Line, Path, Polyline, Rect, SvgUri } from 'react-native-svg';
+import Svg, { Circle, Line, Path, Polyline, SvgUri } from 'react-native-svg';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { useLocale } from '../hooks/useLocale';
@@ -92,13 +92,8 @@ function AppIcon({ name, size = 16, color = '#7a7a7a', strokeWidth = 1.9 }: { na
   if (name === 'edit') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-        <Rect x="3.1" y="3.1" width="17.8" height="17.8" rx="5.4" fill={color} />
-        <Path
-          d="M8.2 15.9H10.85L16.45 10.3C16.84 9.91 16.84 9.27 16.45 8.88L15.1 7.53C14.71 7.14 14.07 7.14 13.68 7.53L8.2 13.01V15.9Z"
-          fill="#FFFFFF"
-        />
-        <Path d="M12.95 8.3L15.7 11.05" stroke="#FFFFFF" strokeWidth={1.8} strokeLinecap="round" />
-        <Path d="M8.15 15.9H11.1" stroke="#FFFFFF" strokeWidth={1.8} strokeLinecap="round" />
+        <Path d="M1.172 19.119A4 4 0 0 0 0 21.947V24H2.053A4 4 0 0 0 4.881 22.828L18.224 9.485L14.515 5.776L1.172 19.119Z" fill={color} />
+        <Path d="M23.145 0.855A2.622 2.622 0 0 0 19.435 0.855L15.929 4.362L19.638 8.071L23.145 4.565A2.622 2.622 0 0 0 23.145 0.855Z" fill={color} />
       </Svg>
     );
   }

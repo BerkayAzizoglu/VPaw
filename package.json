@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@lottiefiles/dotlottie-react-native": "^0.7.4",
     "@react-native-async-storage/async-storage": "^3.0.1",
     "@supabase/supabase-js": "^2.99.3",
     "expo": "~54.0.0",

@@ -16,7 +16,8 @@ import {
 } from 'react-native';
 import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
-import { Bell, PawPrint, Pencil } from 'lucide-react-native';
+import LottieView from 'lottie-react-native';
+import { PawPrint, Pencil } from 'lucide-react-native';
 import type { PetProfile } from '../components/AuthGate';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
@@ -580,7 +581,12 @@ export default function HomeScreen({
 
           <View style={styles.topActions}>
             <Pressable onPress={onOpenNotifications ?? onOpenReminders} style={styles.notifyBtn}>
-              <Bell size={18} color="#6a6d67" strokeWidth={2} />
+              <LottieView
+                source={require('../assets/animations/empty-notifications.json')}
+                autoPlay
+                loop
+                style={styles.notifyLottie}
+              />
               {reminderBadgeCount > 0 ? (
                 <View style={styles.notifyBadge}>
                   <Text style={styles.notifyBadgeText}>{Math.min(reminderBadgeCount, 9)}</Text>
@@ -616,6 +622,22 @@ export default function HomeScreen({
                             <Pressable style={styles.heroEditBtn} onPress={() => onOpenPetEdit?.(activePet.id)}>
                 <Pencil size={15} color="rgba(255,255,255,0.9)" strokeWidth={2.4} />
               </Pressable>
+              <View style={styles.heroLockSwitchWrap}>
+                {isPetLockEnabled ? (
+                  <View style={styles.heroLockPawMark} pointerEvents="none">
+                    <PawPrint size={8} color="#5f7f59" strokeWidth={3.1} />
+                  </View>
+                ) : null}
+                <View style={styles.heroLockSwitchScale}>
+                  <Switch
+                    value={isPetLockEnabled}
+                    onValueChange={(next) => onChangePetLockEnabled?.(next)}
+                    thumbColor={isPetLockEnabled ? '#ffffff' : '#f4f4f4'}
+                    trackColor={{ false: '#d8d8d8', true: '#6e8f66' }}
+                    ios_backgroundColor="#d8d8d8"
+                  />
+                </View>
+              </View>
 <View style={styles.heroBottom}>
                 <Text style={styles.heroName}>{activePet.name}</Text>
                 <View style={styles.heroMetaRow}>
@@ -627,34 +649,6 @@ export default function HomeScreen({
           </Animated.View>
         </View>
 
-        <View style={styles.controlRow}>
-          <View style={styles.petDots}>
-{pets.map((pet, idx) => (
-              <Text key={pet.id} style={[styles.petNumber, activePet.id === pet.id && styles.petNumberActive]}>
-                {idx + 1}
-              </Text>
-            ))}
-          </View>
-          <View style={styles.lockWrap}>
-            <Text style={styles.lockText}>{isTr ? 'Hayvan kilidi' : 'Pet lock'}</Text>
-            <View style={styles.lockSwitchWrap}>
-              {isPetLockEnabled ? (
-                <View style={styles.lockPawMark} pointerEvents="none">
-                  <PawPrint size={9} color="#5f7f59" strokeWidth={3.1} />
-                </View>
-              ) : null}
-              <View style={styles.lockSwitchScale}>
-                <Switch
-                  value={isPetLockEnabled}
-                  onValueChange={(next) => onChangePetLockEnabled?.(next)}
-                  thumbColor={isPetLockEnabled ? '#ffffff' : '#f4f4f4'}
-                  trackColor={{ false: '#d8d8d8', true: '#6e8f66' }}
-                  ios_backgroundColor="#d8d8d8"
-                />
-              </View>
-            </View>
-          </View>
-        </View>
         {/* ── PRIMARY HEALTH CARD (breathing animation) ── */}
         <Animated.View style={breathAnimStyle}>
           <Pressable style={styles.weightCard} onPress={() => onOpenWeightTracking?.()}>
@@ -1037,11 +1031,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.07)',
+  },
+  notifyLottie: {
+    width: 35,
+    height: 35,
   },
   notifyBadge: {
     position: 'absolute',
@@ -1183,37 +1179,26 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: 'rgba(255,255,255,0.86)',
   },
-  controlRow: {
-    marginTop: 4,
-    paddingHorizontal: 8,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  lockWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  lockText: {
-    fontSize: 10,
-    color: '#747474',
-    fontWeight: '600',
-    letterSpacing: 0.2,
-  },
-  lockSwitchScale: {
-    width: 42,
-    alignItems: 'flex-end',
-    transform: [{ scaleX: 0.78 }, { scaleY: 0.78 }],
-  },
-  lockSwitchWrap: {
-    position: 'relative',
+  heroLockSwitchWrap: {
+    position: 'absolute',
+    zIndex: 6,
+    right: 12,
+    bottom: 14,
     width: 42,
     height: 24,
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
   },
-  lockPawMark: {
+  heroLockSwitchScale: {
+    width: 42,
+    alignItems: 'flex-end',
+    transform: [{ scaleX: 0.72 }, { scaleY: 0.72 }],
+  },
+  heroLockPawMark: {
     position: 'absolute',
     right: -1,
     top: 6,
@@ -1223,21 +1208,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 2,
     opacity: 1,
-  },
-  petDots: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  petNumber: {
-    fontSize: 12,
-    lineHeight: 15,
-    color: 'rgba(45,45,45,0.46)',
-    fontWeight: '600',
-  },
-  petNumberActive: {
-    color: '#2d2d2d',
-    fontWeight: '700',
   },
   todayPulseCard: {
     borderRadius: 18,
