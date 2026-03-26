@@ -800,6 +800,7 @@ export default function VetVisitsScreen({
     onBack,
     enabled: !isCreateVisible,
     fullScreenGestureEnabled: true,
+    enterVariant: 'soft',
   });
 
   return (

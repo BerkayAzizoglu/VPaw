@@ -11,6 +11,9 @@ export type HealthDocumentItem = {
   date: string;
   sourceType: HealthDocumentSourceType;
   sourceId: string;
+  /** Reserved for future file viewer. Not rendered in DocumentsScreen yet.
+   *  If set, this is a local path or remote URL — local paths will not be
+   *  accessible after reinstall or on a different device. */
   fileUrl?: string;
   note?: string;
 };

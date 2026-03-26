@@ -1,8 +1,7 @@
-import type { PetProfile } from '../components/AuthGate';
+import type { PetProfile, HealthEvent } from './petProfileTypes';
 import type { HealthDocumentItem } from './healthDocumentsVault';
 import { getAllDocumentsForPet } from './healthDocumentsVault';
 import { getHealthCardSummary, getVaccinesForUI, getVetVisitsForUI } from './healthEventAdapters';
-import type { HealthEvent } from '../components/AuthGate';
 import { buildUnifiedHealthEventsForPet, type UnifiedHealthEvent } from './unifiedHealthEvents';
 import type { ByPet, MedicalEvent, MedicationCourse, Reminder, VetVisit, WeightPoint } from './healthMvpModel';
 

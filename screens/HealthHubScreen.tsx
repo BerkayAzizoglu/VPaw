@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Modal,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
   CheckCircle,
   ChevronRight,
   FileText,
+  Plus,
   Pill,
   Scale,
   Stethoscope,
@@ -20,6 +22,7 @@ import {
   Trash2,
   TrendingUp,
 } from 'lucide-react-native';
+import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 // ─── Colour palette (matches reference design system) ────────────────────────
 const C = {
@@ -117,6 +120,88 @@ type HealthHubScreenProps = {
   locale?: 'en' | 'tr';
 };
 type HealthHubIconKind = 'vet' | 'records' | 'vaccines' | 'weight' | 'documents';
+type AreaRowKey = HealthHubIconKind;
+type AreaRowTheme = {
+  start: string;
+  end: string;
+  iconBg: string;
+  iconTint: string;
+  titleColor: string;
+  subColor: string;
+  badgeBg: string;
+  badgeText: string;
+  statusText: string;
+  chevron: string;
+  divider: string;
+};
+
+const AREA_ROW_THEMES: Record<AreaRowKey, AreaRowTheme> = {
+  vet: {
+    start: '#102736',
+    end: '#173f4a',
+    iconBg: 'rgba(255,255,255,0.08)',
+    iconTint: '#e7f8ff',
+    titleColor: '#f2f8fb',
+    subColor: 'rgba(223,236,243,0.82)',
+    badgeBg: 'rgba(255,255,255,0.08)',
+    badgeText: '#6bb6c7',
+    statusText: 'rgba(189,216,227,0.92)',
+    chevron: '#6bb6c7',
+    divider: 'rgba(255,255,255,0.10)',
+  },
+  records: {
+    start: '#102736',
+    end: '#173f4a',
+    iconBg: 'rgba(255,255,255,0.08)',
+    iconTint: '#edf7ff',
+    titleColor: '#f2f8fb',
+    subColor: 'rgba(223,236,243,0.82)',
+    badgeBg: 'rgba(255,255,255,0.08)',
+    badgeText: '#8eadc0',
+    statusText: 'rgba(189,216,227,0.92)',
+    chevron: '#8eadc0',
+    divider: 'rgba(255,255,255,0.10)',
+  },
+  vaccines: {
+    start: '#102736',
+    end: '#173f4a',
+    iconBg: 'rgba(255,255,255,0.08)',
+    iconTint: '#e4f7ff',
+    titleColor: '#f2f8fb',
+    subColor: 'rgba(223,236,243,0.82)',
+    badgeBg: 'rgba(255,255,255,0.08)',
+    badgeText: '#75b9d6',
+    statusText: 'rgba(189,216,227,0.92)',
+    chevron: '#75b9d6',
+    divider: 'rgba(255,255,255,0.10)',
+  },
+  weight: {
+    start: '#102736',
+    end: '#173f4a',
+    iconBg: 'rgba(255,255,255,0.08)',
+    iconTint: '#e6f8ff',
+    titleColor: '#f2f8fb',
+    subColor: 'rgba(223,236,243,0.82)',
+    badgeBg: 'rgba(255,255,255,0.08)',
+    badgeText: '#88b7bf',
+    statusText: 'rgba(189,216,227,0.92)',
+    chevron: '#88b7bf',
+    divider: 'rgba(255,255,255,0.10)',
+  },
+  documents: {
+    start: '#102736',
+    end: '#173f4a',
+    iconBg: 'rgba(255,255,255,0.14)',
+    iconTint: '#ebf6fc',
+    titleColor: '#f2f8fb',
+    subColor: 'rgba(223,236,243,0.82)',
+    badgeBg: 'rgba(255,255,255,0.08)',
+    badgeText: '#9eb3c0',
+    statusText: 'rgba(189,216,227,0.92)',
+    chevron: '#9eb3c0',
+    divider: 'rgba(255,255,255,0.10)',
+  },
+};
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 function categoryLabel(c: HealthHubCategory, isTr: boolean) {
@@ -155,16 +240,87 @@ function timelineTypeAccent(type: Exclude<HealthHubCategory, 'all'>) {
   return C.accentRecord;
 }
 
-function HealthHubCategoryIcon({ kind, size = 21 }: { kind: HealthHubIconKind; size?: number }) {
+function FolderHeartIcon({ size = 21, color = '#7aa2b8' }: { size?: number; color?: string }) {
+  const heartPulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(heartPulse, { toValue: 1, duration: 380, useNativeDriver: true }),
+        Animated.timing(heartPulse, { toValue: 0, duration: 420, useNativeDriver: true }),
+        Animated.delay(700),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [heartPulse]);
+
+  const heartScale = heartPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.14],
+  });
+  const heartOpacity = heartPulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.88, 1],
+  });
+
+  return (
+    <View style={{ width: size, height: size }}>
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M10.638 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v3.417"
+          stroke={color}
+          strokeWidth={2}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </Svg>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFillObject,
+          {
+            alignItems: 'center',
+            justifyContent: 'center',
+            transform: [{ scale: heartScale }],
+            opacity: heartOpacity,
+          },
+        ]}
+      >
+        <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+          <Path
+            d="M14.62 18.8A2.25 2.25 0 1 1 18 15.836a2.25 2.25 0 1 1 3.38 2.966l-2.626 2.856a.998.998 0 0 1-1.507 0z"
+            stroke={color}
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Svg>
+      </Animated.View>
+    </View>
+  );
+}
+
+function HealthHubCategoryIcon({
+  kind,
+  size = 21,
+  colorOverride,
+}: {
+  kind: HealthHubIconKind;
+  size?: number;
+  colorOverride?: string;
+}) {
   const strokeWidth = 1.9;
-  if (kind === 'vet') return <Stethoscope size={size} strokeWidth={strokeWidth} color={C.fgVet} />;
-  if (kind === 'records') return <FileText size={size} strokeWidth={strokeWidth} color={C.fgRecords} />;
-  if (kind === 'vaccines') return <Syringe size={size} strokeWidth={strokeWidth} color={C.fgVaccines} />;
-  if (kind === 'weight') return <Scale size={size} strokeWidth={strokeWidth} color={C.fgWeight} />;
-  return <FileText size={size} strokeWidth={strokeWidth} color={C.fgDocuments} />;
+  if (kind === 'vet') return <Stethoscope size={size} strokeWidth={strokeWidth} color={colorOverride ?? C.fgVet} />;
+  if (kind === 'records') return <FolderHeartIcon size={size} color={colorOverride ?? C.fgRecords} />;
+  if (kind === 'vaccines') return <Syringe size={size} strokeWidth={strokeWidth} color={colorOverride ?? C.fgVaccines} />;
+  if (kind === 'weight') return <Scale size={size} strokeWidth={strokeWidth} color={colorOverride ?? C.fgWeight} />;
+  return <FileText size={size} strokeWidth={strokeWidth} color={colorOverride ?? C.fgDocuments} />;
 }
 
 const RECORD_TYPES: AddHealthRecordType[] = ['vaccine', 'diagnosis', 'procedure', 'prescription', 'test'];
+const SWIPE_ACTION_WIDTH = 174;
+const SWIPE_OPEN_THRESHOLD = 28;
 
 function fmtShort(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1).replace('.0', '') + 'k';
@@ -236,6 +392,10 @@ export default function HealthHubScreen({
   const [focusedField, setFocusedField] = useState<'title' | 'date' | 'note' | null>(null);
   const [error, setError] = useState('');
   const saveScale = useMemo(() => new Animated.Value(1), []);
+  const [openSwipeKey, setOpenSwipeKey] = useState<string | null>(null);
+  const swipeXByKeyRef = useRef<Record<string, Animated.Value>>({});
+  const swipePressLockUntilRef = useRef(0);
+  const iconAnimByKeyRef = useRef<Record<string, Animated.Value>>({});
 
   useEffect(() => { setCategory(initialCategory); }, [initialCategory, categoryResetKey]);
 
@@ -264,26 +424,18 @@ export default function HealthHubScreen({
         key: 'vet',
         title: isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits',
         subtitle: isTr ? 'Klinik görüşmeleri ve randevular' : 'Clinic visits & appointments',
-        icon: <HealthHubCategoryIcon kind="vet" />,
-        iconBg: C.iconVet,
+        icon: <HealthHubCategoryIcon kind="vet" colorOverride={AREA_ROW_THEMES.vet.iconTint} />,
+        iconBg: AREA_ROW_THEMES.vet.iconBg,
         onPress: onOpenVetVisits,
         overview: domainOverview?.vet,
       },
-      {
-        key: 'records',
-        title: isTr ? 'Sağlık Kayıtları' : 'Health Records',
-        subtitle: isTr ? 'Tanı, prosedür, test sonuçları' : 'Diagnosis, procedures & tests',
-        icon: <HealthHubCategoryIcon kind="records" />,
-        iconBg: C.iconRecords,
-        onPress: onOpenHealthRecords ?? (() => setCategory('record')),
-        overview: domainOverview?.records,
-      },
+      
       {
         key: 'vaccines',
         title: isTr ? 'Aşılar' : 'Vaccines',
         subtitle: isTr ? 'Yapılan ve planlanan aşılar' : 'Administered & upcoming vaccines',
-        icon: <HealthHubCategoryIcon kind="vaccines" />,
-        iconBg: C.iconVaccines,
+        icon: <HealthHubCategoryIcon kind="vaccines" colorOverride={AREA_ROW_THEMES.vaccines.iconTint} />,
+        iconBg: AREA_ROW_THEMES.vaccines.iconBg,
         onPress: onOpenVaccines,
         overview: domainOverview?.vaccines,
       },
@@ -291,10 +443,19 @@ export default function HealthHubScreen({
         key: 'weight',
         title: isTr ? 'Kilo Takibi' : 'Weight Tracking',
         subtitle: isTr ? 'Trend ve değişim analizi' : 'Trends & body condition',
-        icon: <HealthHubCategoryIcon kind="weight" />,
-        iconBg: C.iconWeight,
+        icon: <HealthHubCategoryIcon kind="weight" colorOverride={AREA_ROW_THEMES.weight.iconTint} />,
+        iconBg: AREA_ROW_THEMES.weight.iconBg,
         onPress: onOpenWeightTracking,
         overview: domainOverview?.weight,
+      },
+      {
+        key: 'records',
+        title: isTr ? 'Sağlık Kayıtları' : 'Health Records',
+        subtitle: isTr ? 'Tanı, prosedür, test sonuçları' : 'Diagnosis, procedures & tests',
+        icon: <HealthHubCategoryIcon kind="records" colorOverride={AREA_ROW_THEMES.records.iconTint} />,
+        iconBg: AREA_ROW_THEMES.records.iconBg,
+        onPress: onOpenHealthRecords ?? (() => setCategory('record')),
+        overview: domainOverview?.records,
       },
     ],
     [domainOverview, isTr, onOpenHealthRecords, onOpenVaccines, onOpenVetVisits, onOpenWeightTracking],
@@ -317,9 +478,91 @@ export default function HealthHubScreen({
     setCreateOpen(false);
   };
 
+  const getSwipeX = (key: string) => {
+    if (!swipeXByKeyRef.current[key]) swipeXByKeyRef.current[key] = new Animated.Value(0);
+    return swipeXByKeyRef.current[key];
+  };
+  const getIconAnim = (key: string) => {
+    if (!iconAnimByKeyRef.current[key]) iconAnimByKeyRef.current[key] = new Animated.Value(0);
+    return iconAnimByKeyRef.current[key];
+  };
+
+  const setSwipeOpen = (key: string, open: boolean) => {
+    if (openSwipeKey && openSwipeKey !== key) {
+      const prevX = getSwipeX(openSwipeKey);
+      Animated.spring(prevX, { toValue: 0, useNativeDriver: true, speed: 28, bounciness: 6 }).start();
+    }
+    const targetX = getSwipeX(key);
+    Animated.spring(targetX, {
+      toValue: open ? -SWIPE_ACTION_WIDTH : 0,
+      useNativeDriver: true,
+      speed: 28,
+      bounciness: 6,
+    }).start();
+    setOpenSwipeKey(open ? key : openSwipeKey === key ? null : openSwipeKey);
+  };
+
+  const handleQuickAddForKey = (key: string) => {
+    setSwipeOpen(key, false);
+    if (key === 'vet') {
+      if (onOpenVetVisits) onOpenVetVisits();
+      else openCreate('procedure', isTr ? 'Veteriner Ziyareti' : 'Vet Visit');
+      return;
+    }
+    if (key === 'vaccines') {
+      if (onOpenVaccines) onOpenVaccines();
+      else openCreate('vaccine', isTr ? 'Aşı Kaydı' : 'Vaccine Record');
+      return;
+    }
+    if (key === 'records') {
+      if (onOpenHealthRecords) onOpenHealthRecords();
+      else openCreate('diagnosis', isTr ? 'Sağlık Kaydı' : 'Health Record');
+      return;
+    }
+    if (key === 'weight') {
+      if (onOpenWeightTracking) onOpenWeightTracking();
+      return;
+    }
+    if (key === 'documents') {
+      onOpenDocuments?.();
+    }
+  };
+
+  useEffect(() => {
+    const keys: AreaRowKey[] = ['vet', 'vaccines', 'weight', 'records', 'documents'];
+    const loops = keys.map((key, idx) => {
+      const v = getIconAnim(key);
+      v.setValue(0);
+      return Animated.loop(
+        Animated.sequence([
+          Animated.delay(idx * 180),
+          Animated.timing(v, { toValue: 1, duration: 2200, useNativeDriver: true }),
+          Animated.timing(v, { toValue: 0, duration: 2200, useNativeDriver: true }),
+        ]),
+      );
+    });
+    loops.forEach((loop) => loop.start());
+    return () => {
+      loops.forEach((loop) => loop.stop());
+    };
+  }, []);
+
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <View style={s.screen}>
+      <View pointerEvents="none" style={s.pageBgLayer}>
+        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <Defs>
+            <LinearGradient id="healthHubPageBg" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0%" stopColor="#081a24" />
+              <Stop offset="55%" stopColor="#0e2a37" />
+              <Stop offset="100%" stopColor="#123743" />
+            </LinearGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100" height="100" fill="url(#healthHubPageBg)" />
+          <Rect x="0" y="0" width="100" height="100" fill="rgba(255,255,255,0.02)" />
+        </Svg>
+      </View>
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
 
         {/* ── HEADER ── */}
@@ -328,188 +571,273 @@ export default function HealthHubScreen({
           <Text style={s.headerTitle}>{isTr ? 'Sağlık Merkezi' : 'Health Hub'}</Text>
         </Animated.View>
 
-        {/* ── SUMMARY CARDS STRIP ── */}
-        {(() => {
-          const wRaw = summary.latestWeight;
-          const wHasData = /^\d/.test(wRaw);
-          const weightNum = wHasData ? wRaw.split(' ')[0] : '—';
-          const weightBadge = wHasData ? (wRaw.split(' ')[1] ?? 'kg') : (isTr ? 'kayıt yok' : 'no data');
-
-          const vStatus = summary.vaccineStatus;
-          const vHasData = !!vStatus && vStatus !== 'No data' && vStatus !== 'Kayıt yok';
-          const vaccineBadge = vHasData ? (isTr ? 'güncel' : 'up to date') : (isTr ? 'kayıt yok' : 'no data');
-
-          const visitRaw = summary.lastVetVisit;
-          const visitHasData = !!visitRaw && visitRaw !== 'No data' && visitRaw !== 'Kayıt yok';
-          const visitBadge = isTr ? 'Kontrol' : 'Visit';
-
-          const expHasData = !!summary.totalExpenses;
-          const expVal = expHasData ? fmtShort(summary.totalExpenses!.total) : '—';
-          const expBadge = isTr ? 'bu yıl' : 'this year';
-
-          return (
-            <Animated.View style={{ opacity: fadeAnim, marginBottom: 24 }}>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={s.summaryScrollContent}
-                style={s.summaryScroll}
-              >
-                {/* Weight */}
-                <View style={s.summaryCard}>
-                  <View style={[s.summaryCardIcon, { backgroundColor: C.iconWeight }]}>
-                    <HealthHubCategoryIcon kind="weight" size={20} />
-                  </View>
-                  <Text style={s.summaryCardValue}>{weightNum}</Text>
-                  <Text style={s.summaryCardLabel}>{isTr ? 'KİLO' : 'WEIGHT'}</Text>
-                  <View style={[s.summaryCardBadge, { backgroundColor: wHasData ? '#dceaf7' : C.surfaceContainer }]}>
-                    <Text style={[s.summaryCardBadgeText, { color: wHasData ? C.fgWeight : C.outlineVariant }]}>{weightBadge}</Text>
-                  </View>
-                  {weightGoal != null && weightGoal > 0 && wHasData ? (() => {
-                    const currentKg = parseFloat(weightNum);
-                    const ratio = Number.isFinite(currentKg) ? Math.min(1, Math.max(0, currentKg / weightGoal)) : 0;
-                    const onTarget = Number.isFinite(currentKg) && currentKg <= weightGoal;
-                    return (
-                      <View style={s.goalWrap}>
-                        <View style={s.goalTrack}>
-                          <View style={[s.goalFill, { width: `${Math.round(ratio * 100)}%`, backgroundColor: onTarget ? C.accentWeight : '#c96a6a' }]} />
-                        </View>
-                        <Text style={s.goalText}>{weightGoal.toFixed(1)} kg</Text>
-                      </View>
-                    );
-                  })() : null}
-                </View>
-
-                {/* Vaccines */}
-                <View style={s.summaryCard}>
-                  <View style={[s.summaryCardIcon, { backgroundColor: C.iconVaccines }]}>
-                    <HealthHubCategoryIcon kind="vaccines" size={20} />
-                  </View>
-                  <Text style={[s.summaryCardValue, { fontSize: 14 }]} numberOfLines={1} adjustsFontSizeToFit>
-                    {vHasData ? vStatus : '—'}
-                  </Text>
-                  <Text style={s.summaryCardLabel}>{isTr ? 'AŞI' : 'VACCINES'}</Text>
-                  <View style={[s.summaryCardBadge, { backgroundColor: vHasData ? '#c4e8c0' : C.surfaceContainer }]}>
-                    <Text style={[s.summaryCardBadgeText, { color: vHasData ? C.fgVaccines : C.outlineVariant }]}>{vaccineBadge}</Text>
-                  </View>
-                </View>
-
-                {/* Last Visit */}
-                <View style={s.summaryCard}>
-                  <View style={[s.summaryCardIcon, { backgroundColor: C.iconVet }]}>
-                    <HealthHubCategoryIcon kind="vet" size={20} />
-                  </View>
-                  <Text style={s.summaryCardValue} numberOfLines={1}>
-                    {visitHasData ? fmtVisitDate(visitRaw, isTr) : '—'}
-                  </Text>
-                  <Text style={s.summaryCardLabel}>{isTr ? 'SON ZİYARET' : 'LAST VISIT'}</Text>
-                  <View style={[s.summaryCardBadge, { backgroundColor: visitHasData ? '#eeeee8' : C.surfaceContainer }]}>
-                    <Text style={[s.summaryCardBadgeText, { color: C.onSurfaceVariant }]}>{visitHasData ? visitBadge : (isTr ? 'kayıt yok' : 'no data')}</Text>
-                  </View>
-                </View>
-
-                {/* Expenses */}
-                <View style={s.summaryCard}>
-                  <View style={[s.summaryCardIcon, { backgroundColor: C.iconRecords }]}>
-                    <TrendingUp size={20} color={C.fgRecords} />
-                  </View>
-                  <Text style={s.summaryCardValue}>{expVal}</Text>
-                  <Text style={s.summaryCardLabel}>{isTr ? 'BU YIL' : 'THIS YEAR'}</Text>
-                  <View style={[s.summaryCardBadge, { backgroundColor: expHasData ? '#e8e4f2' : C.surfaceContainer }]}>
-                    <Text style={[s.summaryCardBadgeText, { color: expHasData ? C.fgRecords : C.outlineVariant }]}>{expBadge}</Text>
-                  </View>
-                </View>
-              </ScrollView>
-            </Animated.View>
-          );
-        })()}
-
         {/* ── CATEGORY SECTION HEADER ── */}
         <View style={s.sectionHeaderRow}>
-          <Text style={s.sectionLabel}>{isTr ? 'SAĞLIK ALANLARI' : 'HEALTH AREAS'}</Text>
+          <Text style={[s.sectionLabel, s.sectionLabelAreas]}>{isTr ? 'SAĞLIK ALANLARI' : 'HEALTH AREAS'}</Text>
+          <View style={[s.sectionHeaderLine, s.sectionHeaderLineAreas]} />
         </View>
 
         {/* ── CATEGORY CARDS ── */}
         <Animated.View style={[s.categoryList, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          {hubEntries.map((entry, idx) => (
-            <Pressable
-              key={entry.key}
-              style={[s.categoryCard, idx < hubEntries.length - 1 && s.categoryCardDivider]}
-              onPress={entry.onPress}
-              android_ripple={{ color: 'rgba(71,102,74,0.06)' }}
-            >
-              {/* Icon box */}
-              <View style={[s.categoryIconBox, { backgroundColor: entry.iconBg }]}>
-                {entry.icon}
-              </View>
+          {hubEntries.map((entry, idx) => {
+            const rowTheme = AREA_ROW_THEMES[entry.key as Exclude<AreaRowKey, 'documents'>];
+            const gradientId = `healthHubAreaGradient-${entry.key}`;
+            const swipeX = getSwipeX(entry.key);
+            const panResponder = PanResponder.create({
+              onMoveShouldSetPanResponder: (_evt, g) => Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 8,
+              onMoveShouldSetPanResponderCapture: (_evt, g) => Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 8,
+              onPanResponderTerminationRequest: () => false,
+              onShouldBlockNativeResponder: () => true,
+              onPanResponderMove: (_evt, g) => {
+                const base = openSwipeKey === entry.key ? -SWIPE_ACTION_WIDTH : 0;
+                const nextX = Math.min(0, Math.max(-SWIPE_ACTION_WIDTH, g.dx + base));
+                swipeX.setValue(nextX);
+              },
+              onPanResponderRelease: (_evt, g) => {
+                swipePressLockUntilRef.current = Date.now() + 220;
+                const movedLeftEnough = g.dx < -SWIPE_OPEN_THRESHOLD;
+                const movedRightEnough = g.dx > 24;
+                if (movedLeftEnough) {
+                  setSwipeOpen(entry.key, true);
+                  return;
+                }
+                if (movedRightEnough) {
+                  setSwipeOpen(entry.key, false);
+                  return;
+                }
+                setSwipeOpen(entry.key, openSwipeKey === entry.key);
+              },
+              onPanResponderTerminate: () => {
+                swipePressLockUntilRef.current = Date.now() + 220;
+                setSwipeOpen(entry.key, openSwipeKey === entry.key);
+              },
+            });
+            const rowInner = (
+              <Pressable
+                style={({ pressed }) => [
+                  s.categoryCard,
+                  idx < hubEntries.length - 1 && s.categoryCardDividerSoft,
+                  pressed && s.categoryCardPressed,
+                ]}
+                onPress={() => {
+                  if (Date.now() < swipePressLockUntilRef.current) return;
+                  if (openSwipeKey === entry.key) {
+                    setSwipeOpen(entry.key, false);
+                    return;
+                  }
+                  entry.onPress?.();
+                }}
+                android_ripple={{ color: 'rgba(255,255,255,0.12)' }}
+              >
+                <View pointerEvents="none" style={s.rowGradientFill}>
+                  <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <Defs>
+                      <LinearGradient id={gradientId} x1="0" y1="0.5" x2="1" y2="0.5">
+                        <Stop offset="0%" stopColor={rowTheme.start} />
+                        <Stop offset="100%" stopColor={rowTheme.end} />
+                      </LinearGradient>
+                    </Defs>
+                    <Rect x="0" y="0" width="100" height="100" fill={`url(#${gradientId})`} />
+                  </Svg>
+                </View>
 
-              {/* Body text */}
-              <View style={s.categoryCardBody}>
-                <Text style={s.categoryCardTitle}>{entry.title}</Text>
-                <Text style={s.categoryCardSub} numberOfLines={1}>
-                  {entry.overview?.infoText ?? entry.subtitle}
-                </Text>
-              </View>
+                <View
+                  style={[
+                    s.categoryIconBox,
+                    {
+                      backgroundColor: entry.iconBg,
+                      borderColor: `${rowTheme.chevron}66`,
+                      shadowColor: rowTheme.chevron,
+                    },
+                  ]}
+                >
+                  <Animated.View
+                    style={{
+                      transform: [
+                        {
+                          scale: getIconAnim(entry.key).interpolate({
+                            inputRange: [0, 0.5, 1],
+                            outputRange: [1, 1.04, 1],
+                          }),
+                        },
+                      ],
+                    }}
+                  >
+                    {entry.icon}
+                  </Animated.View>
+                </View>
 
-              {/* Right side: count badge + status */}
-              <View style={s.categoryCardRight}>
-                {entry.overview?.countText ? (
-                  <View style={s.countBadge}>
-                    <Text style={s.countBadgeText}>{entry.overview.countText}</Text>
-                  </View>
-                ) : null}
-                {entry.overview?.statusText ? (
-                  <Text style={s.categoryStatusText} numberOfLines={1}>
-                    {entry.overview.statusText}
+                <View style={s.categoryCardBody}>
+                  <Text style={[s.categoryCardTitle, { color: rowTheme.titleColor }]}>{entry.title}</Text>
+                  <Text style={[s.categoryCardSub, { color: rowTheme.subColor }]} numberOfLines={1}>
+                    {entry.overview?.infoText ?? entry.subtitle}
                   </Text>
-                ) : null}
-              </View>
+                </View>
 
-              <ChevronRight size={16} color={C.outlineVariant} />
-            </Pressable>
-          ))}
+                <View style={s.categoryCardRight}>
+                  {entry.overview?.countText ? (
+                    <View style={[s.countBadge, { backgroundColor: rowTheme.badgeBg, borderColor: `${rowTheme.chevron}4D` }]}>
+                      <Text style={[s.countBadgeText, { color: rowTheme.badgeText }]}>{entry.overview.countText}</Text>
+                    </View>
+                  ) : null}
+                  {entry.overview?.statusText ? (
+                    <Text style={[s.categoryStatusText, { color: rowTheme.statusText }]} numberOfLines={1}>
+                      {entry.overview.statusText}
+                    </Text>
+                  ) : null}
+                </View>
+
+                <ChevronRight size={16} color={rowTheme.chevron} />
+              </Pressable>
+            );
+
+            return (
+              <View key={entry.key} style={s.swipeRowWrap}>
+                <View style={[s.swipeActionsRail, { backgroundColor: '#0f2a38' }]}>
+                  <Pressable style={[s.swipeDetailsBtn, { borderColor: `${rowTheme.chevron}55` }]} onPress={() => { setSwipeOpen(entry.key, false); entry.onPress?.(); }}>
+                    <Text style={s.swipeDetailsText}>{isTr ? 'Detaylar' : 'Details'}</Text>
+                  </Pressable>
+                  <Pressable style={[s.swipePlusBtn, { backgroundColor: `${rowTheme.chevron}33`, borderColor: `${rowTheme.chevron}80` }]} onPress={() => handleQuickAddForKey(entry.key)}>
+                    <Plus size={18} color="#e7f7ff" strokeWidth={2.2} />
+                  </Pressable>
+                </View>
+                <Animated.View style={{ transform: [{ translateX: swipeX }] }} {...panResponder.panHandlers}>
+                  {rowInner}
+                </Animated.View>
+              </View>
+            );
+          })}
         </Animated.View>
 
-        <View style={s.sectionHeaderRow}>
-          <Text style={s.sectionLabel}>{isTr ? 'BELGELER' : 'DOCUMENTS'}</Text>
+        <View style={[s.sectionHeaderRow, s.sectionHeaderRowSpaced]}>
+          <Text style={[s.sectionLabel, s.sectionLabelDocs]}>{isTr ? 'BELGELER' : 'DOCUMENTS'}</Text>
+          <View style={[s.sectionHeaderLine, s.sectionHeaderLineDocs]} />
         </View>
         <Animated.View style={[s.categoryList, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+          {(() => {
+            const docsKey = 'documents';
+            const docsSwipeX = getSwipeX(docsKey);
+            const docsResponder = PanResponder.create({
+              onMoveShouldSetPanResponder: (_evt, g) => Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 8,
+              onMoveShouldSetPanResponderCapture: (_evt, g) => Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 8,
+              onPanResponderTerminationRequest: () => false,
+              onShouldBlockNativeResponder: () => true,
+              onPanResponderMove: (_evt, g) => {
+                const base = openSwipeKey === docsKey ? -SWIPE_ACTION_WIDTH : 0;
+                const nextX = Math.min(0, Math.max(-SWIPE_ACTION_WIDTH, g.dx + base));
+                docsSwipeX.setValue(nextX);
+              },
+              onPanResponderRelease: (_evt, g) => {
+                swipePressLockUntilRef.current = Date.now() + 220;
+                const movedLeftEnough = g.dx < -SWIPE_OPEN_THRESHOLD;
+                const movedRightEnough = g.dx > 24;
+                if (movedLeftEnough) {
+                  setSwipeOpen(docsKey, true);
+                  return;
+                }
+                if (movedRightEnough) {
+                  setSwipeOpen(docsKey, false);
+                  return;
+                }
+                setSwipeOpen(docsKey, openSwipeKey === docsKey);
+              },
+              onPanResponderTerminate: () => {
+                swipePressLockUntilRef.current = Date.now() + 220;
+                setSwipeOpen(docsKey, openSwipeKey === docsKey);
+              },
+            });
+            return (
+              <View style={s.swipeRowWrap}>
+                <View style={[s.swipeActionsRail, { backgroundColor: '#0f2a38' }]}>
+                  <Pressable style={[s.swipeDetailsBtn, { borderColor: `${AREA_ROW_THEMES.documents.chevron}55` }]} onPress={() => { setSwipeOpen(docsKey, false); onOpenDocuments?.(); }}>
+                    <Text style={s.swipeDetailsText}>{isTr ? 'Detaylar' : 'Details'}</Text>
+                  </Pressable>
+                  <Pressable style={[s.swipePlusBtn, { backgroundColor: `${AREA_ROW_THEMES.documents.chevron}33`, borderColor: `${AREA_ROW_THEMES.documents.chevron}80` }]} onPress={() => handleQuickAddForKey(docsKey)}>
+                    <Plus size={18} color="#e7f7ff" strokeWidth={2.2} />
+                  </Pressable>
+                </View>
+                <Animated.View style={{ transform: [{ translateX: docsSwipeX }] }} {...docsResponder.panHandlers}>
           <Pressable
-            style={s.categoryCard}
-            onPress={onOpenDocuments}
-            android_ripple={{ color: 'rgba(71,102,74,0.06)' }}
+                    style={({ pressed }) => [s.categoryCard, pressed && s.categoryCardPressed]}
+                    onPress={() => {
+                      if (Date.now() < swipePressLockUntilRef.current) return;
+                      if (openSwipeKey === docsKey) {
+                        setSwipeOpen(docsKey, false);
+                        return;
+              }
+              onOpenDocuments?.();
+            }}
+            android_ripple={{ color: 'rgba(255,255,255,0.12)' }}
           >
-            <View style={[s.categoryIconBox, { backgroundColor: C.iconDocuments }]}>
-              <HealthHubCategoryIcon kind="documents" size={21} />
+            <View pointerEvents="none" style={s.rowGradientFill}>
+              <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <Defs>
+                  <LinearGradient id="healthHubAreaGradient-documents" x1="0" y1="0.5" x2="1" y2="0.5">
+                    <Stop offset="0%" stopColor={AREA_ROW_THEMES.documents.start} />
+                    <Stop offset="100%" stopColor={AREA_ROW_THEMES.documents.end} />
+                  </LinearGradient>
+                </Defs>
+                <Rect x="0" y="0" width="100" height="100" fill="url(#healthHubAreaGradient-documents)" />
+              </Svg>
+            </View>
+            <View
+              style={[
+                s.categoryIconBox,
+                {
+                  backgroundColor: AREA_ROW_THEMES.documents.iconBg,
+                  borderColor: `${AREA_ROW_THEMES.documents.chevron}66`,
+                  shadowColor: AREA_ROW_THEMES.documents.chevron,
+                },
+              ]}
+            >
+              <Animated.View
+                style={{
+                  transform: [
+                    {
+                      scale: getIconAnim('documents').interpolate({
+                        inputRange: [0, 0.5, 1],
+                        outputRange: [1, 1.04, 1],
+                      }),
+                    },
+                  ],
+                }}
+              >
+                <HealthHubCategoryIcon kind="documents" size={21} colorOverride={AREA_ROW_THEMES.documents.iconTint} />
+              </Animated.View>
             </View>
             <View style={s.categoryCardBody}>
-              <Text style={s.categoryCardTitle}>{isTr ? 'Belgeler' : 'Documents'}</Text>
-              <Text style={s.categoryCardSub} numberOfLines={1}>
+              <Text style={[s.categoryCardTitle, { color: AREA_ROW_THEMES.documents.titleColor }]}>{isTr ? 'Belgeler' : 'Documents'}</Text>
+              <Text style={[s.categoryCardSub, { color: AREA_ROW_THEMES.documents.subColor }]} numberOfLines={1}>
                 {domainOverview?.documents?.infoText ?? (isTr ? 'Tüm kayıt ekleri tek yerde' : 'All record attachments in one place')}
               </Text>
               {documentsPreview && documentsPreview.length > 0 ? (
-                <Text style={s.vaultPreviewText} numberOfLines={2}>
+                <Text style={[s.vaultPreviewText, { color: AREA_ROW_THEMES.documents.subColor }]} numberOfLines={2}>
                   {documentsPreview.map((item) => item.title).slice(0, 2).join(' • ')}
                 </Text>
               ) : null}
             </View>
             <View style={s.categoryCardRight}>
               {domainOverview?.documents?.countText ? (
-                <View style={s.countBadge}>
-                  <Text style={s.countBadgeText}>{domainOverview.documents.countText}</Text>
+                <View style={[s.countBadge, { backgroundColor: AREA_ROW_THEMES.documents.badgeBg, borderColor: `${AREA_ROW_THEMES.documents.chevron}4D` }]}>
+                  <Text style={[s.countBadgeText, { color: AREA_ROW_THEMES.documents.badgeText }]}>{domainOverview.documents.countText}</Text>
                 </View>
               ) : null}
-              <Text style={s.vaultCtaText}>{isTr ? 'Tüm Belgeler' : 'View All'}</Text>
+              <Text style={[s.vaultCtaText, { color: AREA_ROW_THEMES.documents.statusText }]}>{isTr ? 'Tüm Belgeler' : 'View All'}</Text>
             </View>
-            <ChevronRight size={16} color={C.outlineVariant} />
+            <ChevronRight size={16} color={AREA_ROW_THEMES.documents.chevron} />
           </Pressable>
+                </Animated.View>
+              </View>
+            );
+          })()}
         </Animated.View>
 
         {/* ── ACTIVE MEDICATIONS ── */}
         {medicationCourses && medicationCourses.filter((m) => m.status === 'active' || m.status === 'paused').length > 0 ? (
           <>
-            <View style={s.sectionHeaderRow}>
-              <Text style={s.sectionLabel}>{isTr ? 'AKTİF İLAÇLAR' : 'ACTIVE MEDICATIONS'}</Text>
+            <View style={[s.sectionHeaderRow, s.sectionHeaderRowSpaced]}>
+              <Text style={[s.sectionLabel, s.sectionLabelMeds]}>{isTr ? 'AKTİF İLAÇLAR' : 'ACTIVE MEDICATIONS'}</Text>
+              <View style={[s.sectionHeaderLine, s.sectionHeaderLineMeds]} />
             </View>
             <Animated.View style={[s.categoryList, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
               {medicationCourses
@@ -785,30 +1113,33 @@ export default function HealthHubScreen({
 const s = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: C.bg,
+    backgroundColor: '#0b1c25',
+  },
+  pageBgLayer: {
+    ...StyleSheet.absoluteFillObject,
   },
   content: {
-    paddingTop: 56,
-    paddingHorizontal: 22,
+    paddingTop: 36,
+    paddingHorizontal: 20,
     paddingBottom: 120,
   },
 
   // Header
   headerRow: {
-    marginBottom: 20,
+    marginBottom: 12,
   },
   headerLabel: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.4,
-    color: C.onSurfaceVariant,
+    color: 'rgba(196,222,234,0.84)',
     textTransform: 'uppercase',
     marginBottom: 4,
   },
   headerTitle: {
     fontSize: 34,
     fontWeight: '800',
-    color: C.onSurface,
+    color: '#eef7fb',
     letterSpacing: -0.8,
     lineHeight: 38,
   },
@@ -1287,15 +1618,42 @@ const s = StyleSheet.create({
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
+    justifyContent: 'flex-start',
+    gap: 10,
+    marginBottom: 8,
+  },
+  sectionHeaderRowSpaced: {
+    marginTop: 8,
   },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 1.4,
-    color: C.onSurfaceVariant,
+    color: 'rgba(196,222,234,0.84)',
     textTransform: 'uppercase',
+  },
+  sectionLabelAreas: {
+    color: 'rgba(132,204,220,0.92)',
+  },
+  sectionLabelDocs: {
+    color: 'rgba(173,190,204,0.92)',
+  },
+  sectionLabelMeds: {
+    color: 'rgba(139,210,196,0.92)',
+  },
+  sectionHeaderLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(189,216,227,0.24)',
+  },
+  sectionHeaderLineAreas: {
+    backgroundColor: 'rgba(132,204,220,0.28)',
+  },
+  sectionHeaderLineDocs: {
+    backgroundColor: 'rgba(173,190,204,0.26)',
+  },
+  sectionHeaderLineMeds: {
+    backgroundColor: 'rgba(139,210,196,0.28)',
   },
   timelineCountText: {
     fontSize: 11,
@@ -1305,52 +1663,126 @@ const s = StyleSheet.create({
 
   // Category cards
   categoryList: {
-    backgroundColor: C.surface,
-    borderRadius: 20,
-    marginBottom: 24,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderRadius: 18,
+    marginBottom: 18,
     overflow: 'hidden',
-    shadowColor: C.onSurface,
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: '#0b1b24',
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 2,
   },
   categoryCard: {
+    position: 'relative',
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 14,
-    gap: 14,
+    gap: 12,
+  },
+  categoryCardPressed: {
+    transform: [{ scale: 0.992 }],
+    opacity: 0.95,
+  },
+  categoryCardDividerSoft: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(8,24,34,0.45)',
+  },
+  swipeRowWrap: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  swipeActionsRail: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: SWIPE_ACTION_WIDTH,
+    backgroundColor: '#102a38',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    paddingHorizontal: 0,
+    gap: 10,
+  },
+  swipeDetailsBtn: {
+    height: 36,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  swipeDetailsText: {
+    color: '#e7f7ff',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  swipePlusBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.32)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   categoryCardDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: C.surfaceContainer,
   },
+  vaccineCategoryCard: {
+    backgroundColor: '#0d4644',
+  },
+  vaccineCategoryCardDivider: {
+    borderBottomColor: 'rgba(255,255,255,0.2)',
+  },
+  rowGradientFill: {
+    ...StyleSheet.absoluteFillObject,
+  },
   categoryIconBox: {
-    width: 46,
-    height: 46,
-    borderRadius: 13,
+    width: 44,
+    height: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
+    borderColor: 'rgba(255,255,255,0.16)',
+    shadowOpacity: 0.24,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  vaccineCategoryIconBox: {
+    borderColor: 'rgba(255,255,255,0.25)',
   },
   categoryCardBody: {
     flex: 1,
-    gap: 3,
+    gap: 4,
   },
   categoryCardTitle: {
-    fontSize: 15,
+    fontSize: 15.5,
     fontWeight: '700',
     color: C.onSurface,
     letterSpacing: -0.2,
+  },
+  vaccineCategoryTitle: {
+    color: '#ecfffb',
   },
   categoryCardSub: {
     fontSize: 12,
     fontWeight: '500',
     color: C.onSurfaceVariant,
-    lineHeight: 16,
+    lineHeight: 17,
+  },
+  vaccineCategorySub: {
+    color: 'rgba(236,255,251,0.84)',
   },
   vaultPreviewText: {
     marginTop: 4,
@@ -1361,25 +1793,37 @@ const s = StyleSheet.create({
   },
   categoryCardRight: {
     alignItems: 'flex-end',
-    gap: 3,
+    gap: 5,
+    minWidth: 82,
   },
   countBadge: {
     backgroundColor: C.surfaceContainer,
     borderRadius: 10,
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+  },
+  vaccineCountBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
   },
   countBadgeText: {
     fontSize: 11,
     fontWeight: '700',
     color: C.primary,
   },
+  vaccineCountBadgeText: {
+    color: '#ecfffb',
+  },
   categoryStatusText: {
     fontSize: 10,
     fontWeight: '600',
     color: C.onSurfaceVariant,
-    maxWidth: 80,
+    maxWidth: 84,
     textAlign: 'right',
+  },
+  vaccineCategoryStatusText: {
+    color: 'rgba(236,255,251,0.84)',
   },
   vaultCtaText: {
     fontSize: 11,
@@ -1827,3 +2271,5 @@ const s = StyleSheet.create({
     lineHeight: 18,
   },
 });
+
+

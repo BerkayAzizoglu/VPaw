@@ -1,4 +1,4 @@
-import type { PetProfile } from '../components/AuthGate';
+import type { PetProfile } from './petProfileTypes';
 import type { WeightPoint } from './healthMvpModel';
 import type { LegacyHealthEvent } from './healthEventDedup';
 import {

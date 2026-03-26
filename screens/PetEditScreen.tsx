@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SvgUri } from 'react-native-svg';
 import { Check, ChevronRight, PawPrint, Pencil } from 'lucide-react-native';
-import type { AllergyRecord, DiabetesRecord, PetProfile, SurgeryRecord, VaccinationRecord } from '../components/AuthGate';
+import type { AllergyRecord, DiabetesRecord, PetProfile, SurgeryRecord, VaccinationRecord } from '../lib/petProfileTypes';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { useLocale } from '../hooks/useLocale';
 

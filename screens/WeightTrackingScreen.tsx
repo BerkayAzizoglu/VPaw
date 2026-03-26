@@ -16,9 +16,11 @@ import {
 } from 'react-native';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
+import { useAppSettings } from '../hooks/useAppSettings';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 import type { WeightPoint } from '../lib/healthMvpModel';
+import type { WeightUnit } from '../hooks/useAppSettings';
 
 export type { WeightPoint };
 
@@ -50,6 +52,16 @@ type WeightReference = {
 const CHART_HEIGHT = 160;
 const CHART_INSET = 10;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
+
+// ─── Unit conversion ─────────────────────────────────────────────────────────
+
+const KG_TO_LB = 2.20462;
+function toDisplayVal(kg: number, unit: WeightUnit): number {
+  return unit === 'lb' ? kg * KG_TO_LB : kg;
+}
+function toKgFromUnit(displayVal: number, unit: WeightUnit): number {
+  return unit === 'lb' ? displayVal / KG_TO_LB : displayVal;
+}
 
 // ─── Pure helpers ─────────────────────────────────────────────────────────────
 
@@ -207,6 +219,8 @@ export default function WeightTrackingScreen({
   const { locale } = useLocale();
   const isTr = locale === 'tr';
   const copy = getWording(locale).weightTracking;
+  const { settings } = useAppSettings();
+  const weightUnit = settings.weightUnit;
 
   // ─── State ──────────────────────────────────────────────────────────────────
   const [selectedIndex, setSelectedIndex] = useState(Math.max(entries.length - 1, 0));
@@ -369,9 +383,9 @@ export default function WeightTrackingScreen({
   const rangeStatus = displayedValue < reference.min ? 'below' : displayedValue > reference.max ? 'above' : 'within';
   const comparisonText = Math.abs(deltaFromCurrent) < 0.01
     ? copy.current
-    : `${deltaFromCurrent > 0 ? '+' : ''}${deltaFromCurrent.toFixed(1)} kg ${copy.currentSuffix}`;
+    : `${deltaFromCurrent > 0 ? '+' : ''}${toDisplayVal(deltaFromCurrent, weightUnit).toFixed(1)} ${weightUnit} ${copy.currentSuffix}`;
 
-  const rangeText = `${reference.min.toFixed(1)} - ${reference.max.toFixed(1)} kg`;
+  const rangeText = `${toDisplayVal(reference.min, weightUnit).toFixed(1)} - ${toDisplayVal(reference.max, weightUnit).toFixed(1)} ${weightUnit}`;
   const targetName = petBreed ?? petType ?? copy.petFallback;
 
   const primaryInsightTitle = rangeStatus === 'within'
@@ -429,8 +443,8 @@ export default function WeightTrackingScreen({
     const direction = deltaKg > 0.05 ? 'up' : deltaKg < -0.05 ? 'down' : 'stable';
     const days = Math.round(daysDiff);
     const rateStr = absWeekly < 0.1
-      ? isTr ? '< 0.1 kg/hafta' : '< 0.1 kg/week'
-      : `${absWeekly.toFixed(1)} kg/${isTr ? 'hafta' : 'week'}`;
+      ? isTr ? `< 0.1 ${weightUnit}/hafta` : `< 0.1 ${weightUnit}/week`
+      : `${toDisplayVal(absWeekly, weightUnit).toFixed(1)} ${weightUnit}/${isTr ? 'hafta' : 'week'}`;
 
     if (direction === 'stable') {
       return {
@@ -540,7 +554,7 @@ export default function WeightTrackingScreen({
         : `It's been ${daysSince} days since the last entry. Regular measurements help spot health trends early.`,
       kind: 'warning' as const,
     };
-  }, [entries, isTr]);
+  }, [entries, isTr, weightUnit]);
 
   // ─── Goal progress ──────────────────────────────────────────────────────────
   const currentWeightForGoal = latestWeight?.value ?? 0;
@@ -561,7 +575,7 @@ export default function WeightTrackingScreen({
       return;
     }
 
-    onAddEntry(parsed, {
+    onAddEntry(toKgFromUnit(parsed, weightUnit), {
       date: parsedDate.toISOString(),
       note: entryNote.trim() || undefined,
     });
@@ -580,7 +594,7 @@ export default function WeightTrackingScreen({
       return;
     }
     if (onSetWeightGoal) {
-      onSetWeightGoal(parsed);
+      onSetWeightGoal(toKgFromUnit(parsed, weightUnit));
     }
     setGoalInput('');
     setGoalError(null);
@@ -633,8 +647,8 @@ export default function WeightTrackingScreen({
 
             <View style={styles.currentValueRow}>
               <Text style={styles.currentValue}>
-                {displayedValue.toFixed(1)}{' '}
-                <Text style={styles.currentUnit}>kg</Text>
+                {toDisplayVal(displayedValue, weightUnit).toFixed(1)}{' '}
+                <Text style={styles.currentUnit}>{weightUnit}</Text>
               </Text>
               <View style={styles.changePill}>
                 <Icon kind="spark" size={10} color="#47664a" />
@@ -650,7 +664,7 @@ export default function WeightTrackingScreen({
               <Pressable
                 style={styles.goalSection}
                 onPress={() => {
-                  setGoalInput(String(weightGoal));
+                  setGoalInput(toDisplayVal(weightGoal, weightUnit).toFixed(1));
                   setGoalError(null);
                   setShowGoalModal(true);
                 }}
@@ -658,7 +672,7 @@ export default function WeightTrackingScreen({
                 <View style={styles.goalSectionTop}>
                   <View style={styles.goalSectionLeft}>
                     <Text style={styles.goalSectionLabel}>{isTr ? 'HEDEF KİLO' : 'WEIGHT GOAL'}</Text>
-                    <Text style={styles.goalSectionValue}>{weightGoal.toFixed(1)} <Text style={styles.goalSectionUnit}>kg</Text></Text>
+                    <Text style={styles.goalSectionValue}>{toDisplayVal(weightGoal, weightUnit).toFixed(1)} <Text style={styles.goalSectionUnit}>{weightUnit}</Text></Text>
                   </View>
                   <View style={styles.goalSectionRight}>
                     <Text style={styles.goalDiffLabel}>{isTr ? 'Fark' : 'Gap'}</Text>
@@ -666,7 +680,7 @@ export default function WeightTrackingScreen({
                       styles.goalDiffValue,
                       { color: currentWeightForGoal <= weightGoal ? '#47664a' : '#c96a6a' },
                     ]}>
-                      {currentWeightForGoal <= weightGoal ? '' : '+'}{(currentWeightForGoal - weightGoal).toFixed(1)} kg
+                      {currentWeightForGoal <= weightGoal ? '' : '+'}{toDisplayVal(currentWeightForGoal - weightGoal, weightUnit).toFixed(1)} {weightUnit}
                     </Text>
                   </View>
                 </View>
@@ -879,7 +893,7 @@ export default function WeightTrackingScreen({
                   <Text style={styles.historyDate}>{item.date}</Text>
                 </View>
                 <View style={styles.historyRight}>
-                  <Text style={styles.historyWeight}>{item.value.toFixed(1)} kg</Text>
+                  <Text style={styles.historyWeight}>{toDisplayVal(item.value, weightUnit).toFixed(1)} {weightUnit}</Text>
                   <View style={styles.historyDeltaPill}>
                     <Text style={styles.historyDeltaText}>{item.change}</Text>
                   </View>
@@ -909,7 +923,7 @@ export default function WeightTrackingScreen({
               {isTr ? 'Grafik ile bağlantılı, tarihli bir kayıt ekleyin.' : 'Add a dated entry linked to this chart.'}
             </Text>
 
-            <Text style={styles.fieldLabel}>{isTr ? 'Ağırlık (kg)' : 'Weight (kg)'}</Text>
+            <Text style={styles.fieldLabel}>{isTr ? `Ağırlık (${weightUnit})` : `Weight (${weightUnit})`}</Text>
             <TextInput
               value={newWeight}
               onChangeText={setNewWeight}
@@ -998,7 +1012,7 @@ export default function WeightTrackingScreen({
               {isTr ? 'Hedefe ulaşma ilerlemenizi kilo kartında görebilirsiniz.' : 'You can track progress toward this goal in the weight card.'}
             </Text>
 
-            <Text style={styles.fieldLabel}>{isTr ? 'Hedef Ağırlık (kg)' : 'Goal Weight (kg)'}</Text>
+            <Text style={styles.fieldLabel}>{isTr ? `Hedef Ağırlık (${weightUnit})` : `Goal Weight (${weightUnit})`}</Text>
             <TextInput
               value={goalInput}
               onChangeText={setGoalInput}

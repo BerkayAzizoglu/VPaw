@@ -82,8 +82,10 @@ function normalizeWeights(raw: unknown): WeightPoint[] {
     .map((entry) => {
       const value = typeof entry.value === 'number' ? entry.value : Number.NaN;
       if (!Number.isFinite(value)) return null;
-      const date = typeof entry.date === 'string' ? entry.date : '';
-      if (!date) return null;
+      const rawDate = typeof entry.date === 'string' ? entry.date : '';
+      if (!rawDate) return null;
+      const dateMs = new Date(rawDate).getTime();
+      const date = Number.isFinite(dateMs) ? new Date(dateMs).toISOString() : rawDate;
       return {
         label: typeof entry.label === 'string' ? entry.label : date,
         value,
@@ -116,11 +118,14 @@ function normalizePayloadForPet(petId: string, payload: HealthDomainRow['payload
   };
 }
 
-export async function fetchHealthDomainFromCloud(userId: string): Promise<CloudHealthDomain | null> {
+export async function fetchHealthDomainFromCloud(): Promise<CloudHealthDomain | null> {
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return null;
+
   const { data, error } = await supabase
     .from('health_domain_state')
     .select('pet_id, payload, updated_at')
-    .eq('user_id', userId);
+    .eq('user_id', user.id);
 
   if (error || !data) {
     if (__DEV__) {
@@ -142,7 +147,6 @@ export async function fetchHealthDomainFromCloud(userId: string): Promise<CloudH
 }
 
 export async function saveHealthDomainToCloud(
-  userId: string,
   petIdsToUpload: string[],
   input: {
     vetVisitsByPet: ByPet<VetVisit>;
@@ -155,9 +159,12 @@ export async function saveHealthDomainToCloud(
 ): Promise<boolean> {
   if (petIdsToUpload.length === 0) return true;
 
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return false;
+
   const rows: HealthDomainRow[] = petIdsToUpload.map((petId) => ({
     // Source of truth remains local canonical state; cloud row is persistence snapshot.
-    user_id: userId,
+    user_id: user.id,
     pet_id: petId,
     payload: {
       vetVisits: input.vetVisitsByPet[petId] ?? [],
@@ -180,6 +187,25 @@ export async function saveHealthDomainToCloud(
 
   if (error && __DEV__) {
     console.warn('[health-sync:save]', error.message);
+  }
+
+  return !error;
+}
+
+export async function deleteHealthDomainFromCloud(petIds: string[]): Promise<boolean> {
+  if (petIds.length === 0) return true;
+
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) return false;
+
+  const { error } = await supabase
+    .from('health_domain_state')
+    .delete()
+    .eq('user_id', user.id)
+    .in('pet_id', petIds);
+
+  if (error && __DEV__) {
+    console.warn('[health-sync:delete]', error.message);
   }
 
   return !error;

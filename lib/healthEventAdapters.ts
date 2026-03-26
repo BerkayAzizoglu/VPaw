@@ -1,4 +1,4 @@
-import type { PetProfile } from '../components/AuthGate';
+import type { PetProfile } from './petProfileTypes';
 import type { VisitItem } from '../screens/VetVisitsScreen';
 import type { HealthRecordsData } from '../screens/HealthRecordsScreen';
 import type { VaccinationsAttentionCounts, VaccinationsHistoryItem, VaccinationsNextUpData } from '../screens/VaccinationsScreen';
@@ -453,11 +453,11 @@ export function getHealthCardSummary(
 
   const hasNewModelData = visits.length > 0 || medicalEvents.length > 0 || reminders.length > 0 || medications.length > 0;
   const weightRows = weightEntries.length
-    ? weightEntries.slice(-5).reverse().map((entry) => `${entry.value.toFixed(1)} kg • ${entry.date}`)
+    ? weightEntries.slice(-5).reverse().map((entry) => `${entry.value.toFixed(1)} kg ï¿½ ${entry.date}`)
     : ['No weight records'];
-  const legacyAllergies = (legacyProfile?.allergiesLog ?? []).map((item) => `${item.category} • ${item.status}`);
-  const legacySurgeries = (legacyProfile?.surgeriesLog ?? []).map((item) => `${item.name} • ${item.date}`);
-  const legacyMeds = (legacyProfile?.diabetesLog ?? []).map((item) => `${item.type} • ${item.status}`);
+  const legacyAllergies = (legacyProfile?.allergiesLog ?? []).map((item) => `${item.category} ï¿½ ${item.status}`);
+  const legacySurgeries = (legacyProfile?.surgeriesLog ?? []).map((item) => `${item.name} ï¿½ ${item.date}`);
+  const legacyMeds = (legacyProfile?.diabetesLog ?? []).map((item) => `${item.type} ï¿½ ${item.status}`);
 
   if (!hasNewModelData) {
     return {
@@ -476,14 +476,14 @@ export function getHealthCardSummary(
       recentEvents: [],
       alerts: [],
       exportRows: {
-        vaccines: mergedVaccines?.historyItems?.slice(0, 5).map((item) => `${item.name} • ${item.dueDate}`) ?? ['Rabies • Apr 12, 2026'],
-        visits: mergedVisitItems.slice(0, 5).map((item) => `${item.title} • ${item.date}`),
+        vaccines: mergedVaccines?.historyItems?.slice(0, 5).map((item) => `${item.name} ï¿½ ${item.dueDate}`) ?? ['Rabies ï¿½ Apr 12, 2026'],
+        visits: mergedVisitItems.slice(0, 5).map((item) => `${item.title} ï¿½ ${item.date}`),
         health: [
           mergedHealthRecords?.bySegment?.allergies?.activeTitle,
           mergedHealthRecords?.bySegment?.diagnoses?.activeTitle,
           mergedHealthRecords?.bySegment?.labResults?.activeTitle,
         ].filter((item): item is string => Boolean(item)).slice(0, 5),
-        weight: weightRows.length > 0 ? weightRows : ['5.2 kg • Apr 15, 2026'],
+        weight: weightRows.length > 0 ? weightRows : ['5.2 kg ï¿½ Apr 15, 2026'],
         allergy: legacyAllergies.length ? legacyAllergies.slice(0, 5) : ['No allergy records'],
         surgery: legacySurgeries.length ? legacySurgeries.slice(0, 5) : ['No surgery records'],
         meds: legacyMeds.length ? legacyMeds.slice(0, 5) : ['No active medication'],
@@ -515,9 +515,9 @@ export function getHealthCardSummary(
   }).length;
   if (overdueVaccineCount > 0) alerts.push(`${overdueVaccineCount} overdue vaccine${overdueVaccineCount > 1 ? 's' : ''}`);
 
-  const diagnosisRows = medicalEvents.filter((event) => event.type === 'diagnosis').slice(0, 5).map((event) => `${event.title} • ${toDateLabel(event.eventDate)}`);
-  const procedureRows = medicalEvents.filter((event) => event.type === 'procedure').slice(0, 5).map((event) => `${event.title} • ${toDateLabel(event.eventDate)}`);
-  const medicationRows = medications.slice(0, 5).map((course) => `${course.name} • ${toDateLabel(course.startDate)}`);
+  const diagnosisRows = medicalEvents.filter((event) => event.type === 'diagnosis').slice(0, 5).map((event) => `${event.title} ï¿½ ${toDateLabel(event.eventDate)}`);
+  const procedureRows = medicalEvents.filter((event) => event.type === 'procedure').slice(0, 5).map((event) => `${event.title} ï¿½ ${toDateLabel(event.eventDate)}`);
+  const medicationRows = medications.slice(0, 5).map((course) => `${course.name} ï¿½ ${toDateLabel(course.startDate)}`);
 
   return {
     lastVisit: mergedVisitItems.length > 0 ? {
@@ -527,8 +527,8 @@ export function getHealthCardSummary(
       doctor: mergedVisitItems[0].doctor,
     } : null,
     vaccinesSummary: {
-      latest: mergedVaccines?.historyItems?.[0] ? `${mergedVaccines.historyItems[0].name} • ${mergedVaccines.historyItems[0].dueDate}` : null,
-      next: mergedVaccines?.nextUpData?.name ? `${mergedVaccines.nextUpData.name} • ${mergedVaccines.nextUpData.date}` : null,
+      latest: mergedVaccines?.historyItems?.[0] ? `${mergedVaccines.historyItems[0].name} ï¿½ ${mergedVaccines.historyItems[0].dueDate}` : null,
+      next: mergedVaccines?.nextUpData?.name ? `${mergedVaccines.nextUpData.name} ï¿½ ${mergedVaccines.nextUpData.date}` : null,
       total: mergedVaccines?.historyItems?.length ?? vaccineEvents.length,
     },
     activeMedications: medications.slice(0, 5).map((course) => ({
@@ -539,9 +539,9 @@ export function getHealthCardSummary(
     recentEvents,
     alerts,
     exportRows: {
-      vaccines: mergedVaccines?.historyItems?.slice(0, 5).map((item) => `${item.name} • ${item.dueDate}`) ?? [],
-      visits: mergedVisitItems.slice(0, 5).map((item) => `${item.title} • ${item.date}`),
-      health: recentEvents.map((event) => `${event.title} • ${event.category}`).slice(0, 5),
+      vaccines: mergedVaccines?.historyItems?.slice(0, 5).map((item) => `${item.name} ï¿½ ${item.dueDate}`) ?? [],
+      visits: mergedVisitItems.slice(0, 5).map((item) => `${item.title} ï¿½ ${item.date}`),
+      health: recentEvents.map((event) => `${event.title} ï¿½ ${event.category}`).slice(0, 5),
       weight: weightRows,
       allergy: diagnosisRows.length ? diagnosisRows : ['No allergy records'],
       surgery: procedureRows.length ? procedureRows : ['No surgery records'],

@@ -65,7 +65,7 @@ export default function DocumentsScreen({
   locale = 'en',
 }: DocumentsScreenProps) {
   const isTr = locale === 'tr';
-  const swipePan = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true });
+  const swipePan = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: false });
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('newest');
   const [query, setQuery] = useState('');
@@ -169,8 +169,8 @@ export default function DocumentsScreen({
               {query || typeFilter !== 'all'
                 ? (isTr ? 'Filtreleri temizleyin veya farklı bir arama deneyin.' : 'Try clearing filters or using a different search.')
                 : (isTr
-                    ? 'Belgeler, veteriner ziyaretlerine veya sağlık kayıtlarına ek olarak eklenir.'
-                    : 'Documents are added as attachments to vet visits or health records.')}
+                    ? 'Veteriner ziyaretlerine veya sağlık kayıtlarına eklenen belgeler burada görünür.'
+                    : 'Documents linked to vet visits or health records will appear here.')}
             </Text>
           </View>
         )}

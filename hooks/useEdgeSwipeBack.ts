@@ -8,15 +8,17 @@ type UseEdgeSwipeBackParams = {
   triggerDx?: number;
   maxDy?: number;
   fullScreenGestureEnabled?: boolean;
+  enterVariant?: 'soft' | 'snappy' | 'drift';
 };
 
 export function useEdgeSwipeBack({
   onBack,
   enabled = true,
-  edgeWidth = 28,
-  triggerDx = 64,
-  maxDy = 36,
-  fullScreenGestureEnabled = true,
+  edgeWidth = 40,
+  triggerDx = 28,
+  maxDy = 72,
+  fullScreenGestureEnabled = false,
+  enterVariant = 'soft',
 }: UseEdgeSwipeBackParams) {
   const hasTriggeredRef = useRef(false);
   const navigatingRef = useRef(false);
@@ -31,14 +33,20 @@ export function useEdgeSwipeBack({
   }, [onBack]);
 
   useEffect(() => {
+    const variantMap = {
+      soft: { duration: 240, offset: 16, easing: Easing.bezier(0.22, 1, 0.36, 1) },
+      snappy: { duration: 170, offset: 10, easing: Easing.out(Easing.cubic) },
+      drift: { duration: 300, offset: 22, easing: Easing.bezier(0.16, 1, 0.3, 1) },
+    } as const;
+    const variant = variantMap[enterVariant];
     enterProgress.setValue(0);
     Animated.timing(enterProgress, {
       toValue: 1,
-      duration: 240,
-      easing: Easing.bezier(0.22, 1, 0.36, 1),
+      duration: variant.duration,
+      easing: variant.easing,
       useNativeDriver: true,
     }).start();
-  }, [enterProgress]);
+  }, [enterProgress, enterVariant]);
 
   const responder = useMemo(
     () =>
@@ -46,9 +54,9 @@ export function useEdgeSwipeBack({
         onStartShouldSetPanResponder: () => false,
         onMoveShouldSetPanResponder: (evt, gesture) => {
           if (!enabled) return false;
-          const startX = evt.nativeEvent.pageX ?? gesture.moveX;
+          const startX = gesture.x0 ?? evt.nativeEvent.pageX ?? gesture.moveX;
           const startsFromLeftEdge = fullScreenGestureEnabled ? true : startX <= edgeWidth;
-          const enoughHorizontalIntent = gesture.dx > 8;
+          const enoughHorizontalIntent = gesture.dx > 7 && Math.abs(gesture.dx) > Math.abs(gesture.dy);
           const lowVerticalNoise = Math.abs(gesture.dy) < maxDy;
           return startsFromLeftEdge && enoughHorizontalIntent && lowVerticalNoise;
         },
@@ -70,20 +78,18 @@ export function useEdgeSwipeBack({
             return;
           }
 
-          const hasVelocityIntent = gesture.vx >= 0.65 && gesture.dx >= 22;
-          const shouldGoBack = (gesture.dx >= triggerDx || hasVelocityIntent) && Math.abs(gesture.dy) < maxDy;
+          const hasVelocityIntent = gesture.vx >= 0.28 && gesture.dx >= 8;
+          const shouldGoBack = (gesture.dx >= triggerDx || hasVelocityIntent) && Math.abs(gesture.dy) < maxDy * 1.25;
           if (shouldGoBack && !hasTriggeredRef.current) {
             hasTriggeredRef.current = true;
             navigatingRef.current = true;
             Animated.timing(translateX, {
               toValue: screenWidth,
-              duration: 190,
+              duration: 175,
               easing: Easing.bezier(0.22, 1, 0.36, 1),
               useNativeDriver: true,
             }).start(({ finished }) => {
-              if (finished) {
-                onBackRef.current();
-              }
+              if (finished) onBackRef.current();
               translateX.setValue(0);
               hasTriggeredRef.current = false;
               navigatingRef.current = false;
@@ -120,15 +126,18 @@ export function useEdgeSwipeBack({
     [edgeWidth, enabled, fullScreenGestureEnabled, maxDy, screenWidth, translateX, triggerDx],
   );
 
-  const parallax = translateX.interpolate({
+  const backReveal = translateX.interpolate({
     inputRange: [0, screenWidth],
-    outputRange: [0, 14],
+    outputRange: [-18, 0],
     extrapolate: 'clamp',
   });
 
   const enterTranslateX = enterProgress.interpolate({
     inputRange: [0, 1],
-    outputRange: [16, 0],
+    outputRange: [
+      enterVariant === 'snappy' ? 10 : enterVariant === 'drift' ? 22 : 16,
+      0,
+    ],
     extrapolate: 'clamp',
   });
 
@@ -151,7 +160,7 @@ export function useEdgeSwipeBack({
       backgroundColor: '#faf8f5',
     } as const,
     backLayerStyle: {
-      transform: [{ translateX: Animated.multiply(parallax, -1) }],
+      transform: [{ translateX: backReveal }],
     } as const,
     isSwiping,
   };

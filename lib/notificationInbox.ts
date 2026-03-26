@@ -103,6 +103,7 @@ export function buildTriggeredNotifications(args: {
   const seen = new Set<string>();
   const todayStart = startOfDayMs(nowMs);
   const todayEnd = endOfDayMs(nowMs);
+  const dayBucket = String(todayStart);
 
   const pushUnique = (item: HealthNotification) => {
     if (seen.has(item.id)) return;
@@ -122,7 +123,7 @@ export function buildTriggeredNotifications(args: {
 
         if (dueMs >= todayStart && dueMs <= todayEnd) {
           pushUnique({
-            id: `notif-reminder-due-${r.id}`,
+            id: `notif-reminder-due-${r.id}-${dueMs}`,
             petId,
             type: 'reminder_due',
             priority: 'medium',
@@ -134,7 +135,7 @@ export function buildTriggeredNotifications(args: {
           });
         } else if (dueMs < nowMs) {
           pushUnique({
-            id: `notif-overdue-${r.id}`,
+            id: `notif-overdue-${r.id}-${dueMs}`,
             petId,
             type: 'overdue',
             priority: 'high',
@@ -186,7 +187,7 @@ export function buildTriggeredNotifications(args: {
           ? (locale === 'tr' ? 'saglik kaydi' : 'health record')
           : (locale === 'tr' ? 'veteriner ziyareti' : 'vet visit');
       pushUnique({
-        id: `notif-missing-${domain}-${petId}`,
+        id: `notif-missing-${domain}-${petId}-${dayBucket}`,
         petId,
         type: 'missing_data',
         priority: 'low',

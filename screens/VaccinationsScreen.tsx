@@ -294,7 +294,7 @@ export default function VaccinationsScreen({
   }, [fadeAnim, slideAnim]);
 
   // ── swipe ──
-  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true });
+  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true, enterVariant: 'drift' });
 
   return (
     <View style={styles.screen}>

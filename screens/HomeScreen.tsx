@@ -18,7 +18,7 @@ import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import LottieView from 'lottie-react-native';
 import { PawPrint, Pencil } from 'lucide-react-native';
-import type { PetProfile } from '../components/AuthGate';
+import type { PetProfile } from '../lib/petProfileTypes';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
 import { useAppSettings } from '../hooks/useAppSettings';

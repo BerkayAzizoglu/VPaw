@@ -8,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { ChevronLeft, ChevronRight, Edit2, Mars, Venus } from 'lucide-react-native';
-import type { PetProfile, RoutineCareRecord } from '../components/AuthGate';
+import type { PetProfile, RoutineCareRecord } from '../lib/petProfileTypes';
 import type { WeightPoint } from '../lib/healthMvpModel';
 
 // ─── Types ────────────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View, Image, RefreshControl, Switch } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { RefreshCw, PawPrint } from 'lucide-react-native';
-import type { PetProfile } from '../components/AuthGate';
+import type { PetProfile } from '../lib/petProfileTypes';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
@@ -85,7 +85,7 @@ export default function PetHealthPassportScreen({
   const isTr = locale === 'tr';
   const [refreshing, setRefreshing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
-  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true });
+  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: false });
 
   const initialRows = useMemo<Record<ExportRowKey, string[]>>(() => {
     const noRecords = isTr ? 'Kayıt yok' : 'No records yet';
@@ -422,7 +422,6 @@ const styles = StyleSheet.create({
   exportBtnDisabled: { opacity: 0.72 },
   exportBtnText: { fontSize: 16, lineHeight: 22, color: '#faf8f5', fontWeight: '700' },
 });
-
 
 
 

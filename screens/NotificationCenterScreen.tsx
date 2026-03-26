@@ -60,7 +60,7 @@ export default function NotificationCenterScreen({
   onOpen,
 }: NotificationCenterScreenProps) {
   const isTr = locale === 'tr';
-  const swipePan = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true });
+  const swipePan = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true, enterVariant: 'snappy' });
   const sorted = [...notifications].sort((a, b) => {
     const unreadCmp = Number(a.isRead) - Number(b.isRead);
     if (unreadCmp !== 0) return unreadCmp;
@@ -103,6 +103,12 @@ export default function NotificationCenterScreen({
           <View style={styles.listWrap}>
             {sorted.map((item, idx) => {
               const c = colorsForType(item.type);
+              const supportsReminderActions = item.type === 'reminder_due' || item.type === 'overdue';
+              const supportsOpenAction =
+                item.type === 'reminder_due'
+                || item.type === 'overdue'
+                || item.type === 'followup'
+                || item.type === 'missing_data';
               return (
                 <Pressable
                   key={item.id}
@@ -117,17 +123,17 @@ export default function NotificationCenterScreen({
                     <Text style={styles.itemMessage}>{item.message}</Text>
                     <Text style={styles.itemDate}>{formatDate(item.createdAt, locale)}</Text>
                     <View style={styles.actionsRow}>
-                      {onDone ? (
+                      {supportsReminderActions && onDone ? (
                         <Pressable style={styles.actionBtn} onPress={() => onDone(item.id)}>
                           <Text style={styles.actionText}>{isTr ? 'Tamamlandı' : 'Done'}</Text>
                         </Pressable>
                       ) : null}
-                      {onSnooze ? (
+                      {supportsReminderActions && onSnooze ? (
                         <Pressable style={styles.actionBtn} onPress={() => onSnooze(item.id)}>
                           <Text style={styles.actionText}>{isTr ? 'Ertele' : 'Snooze'}</Text>
                         </Pressable>
                       ) : null}
-                      {onOpen ? (
+                      {supportsOpenAction && onOpen ? (
                         <Pressable style={styles.actionBtnPrimary} onPress={() => onOpen(item.id)}>
                           <ExternalLink size={12} color="#e9ffe6" strokeWidth={2.1} />
                           <Text style={styles.actionTextPrimary}>{isTr ? 'Aç' : 'Open'}</Text>

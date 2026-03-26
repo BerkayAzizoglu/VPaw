@@ -9,7 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
@@ -35,6 +35,104 @@ export type HealthRecordsData = {
   activeCountText?: string;
   upToDateText?: string;
   bySegment?: Partial<Record<'allergies' | 'diagnoses' | 'labResults', HealthRecordsSegmentContent>>;
+};
+
+type HealthRecordsSegment = 'allergies' | 'diagnoses' | 'labResults';
+
+type SegmentPalette = {
+  screenTop: string;
+  screenBottom: string;
+  auraColor: string;
+  chipActiveTop: string;
+  chipActiveBottom: string;
+  chipActiveText: string;
+  chipActiveBorder: string;
+  sectionLine: string;
+  cardStart: string;
+  cardEnd: string;
+  cardGlow: string;
+  cardBorder: string;
+  iconBg: string;
+  iconColor: string;
+  badgeBg: string;
+  badgeBorder: string;
+  badgeText: string;
+  resolvedBg: string;
+  resolvedBorder: string;
+  resolvedText: string;
+  dotColor: string;
+};
+
+const SEGMENT_PALETTES: Record<HealthRecordsSegment, SegmentPalette> = {
+  allergies: {
+    screenTop: '#f2f7ff',
+    screenBottom: '#f9f1ff',
+    auraColor: '#ff8fa61f',
+    chipActiveTop: '#f06c9b',
+    chipActiveBottom: '#8d6bff',
+    chipActiveText: '#ffffff',
+    chipActiveBorder: '#ffffff66',
+    sectionLine: '#9f8cff66',
+    cardStart: '#fff5fa',
+    cardEnd: '#eef4ff',
+    cardGlow: '#ff7aa038',
+    cardBorder: '#ffffffa6',
+    iconBg: '#ffe7f2',
+    iconColor: '#cb4579',
+    badgeBg: '#ffe7f2',
+    badgeBorder: '#f5b0ce',
+    badgeText: '#b13566',
+    resolvedBg: '#f4eefc',
+    resolvedBorder: '#d8c9f3',
+    resolvedText: '#6c539a',
+    dotColor: '#cf4f7d',
+  },
+  diagnoses: {
+    screenTop: '#edf8ff',
+    screenBottom: '#eff5ff',
+    auraColor: '#65c6ff21',
+    chipActiveTop: '#28b7df',
+    chipActiveBottom: '#3a78f2',
+    chipActiveText: '#ffffff',
+    chipActiveBorder: '#ffffff66',
+    sectionLine: '#5ca2ed66',
+    cardStart: '#f2fbff',
+    cardEnd: '#edf2ff',
+    cardGlow: '#29d3ff2b',
+    cardBorder: '#ffffffad',
+    iconBg: '#dcf6ff',
+    iconColor: '#1683b8',
+    badgeBg: '#dcf6ff',
+    badgeBorder: '#a8e5ff',
+    badgeText: '#146a95',
+    resolvedBg: '#e9f5ff',
+    resolvedBorder: '#c4ddff',
+    resolvedText: '#3d6494',
+    dotColor: '#2b9cd2',
+  },
+  labResults: {
+    screenTop: '#f3f1ff',
+    screenBottom: '#edf8ff',
+    auraColor: '#9f7dff24',
+    chipActiveTop: '#7e64f6',
+    chipActiveBottom: '#3bbdd4',
+    chipActiveText: '#ffffff',
+    chipActiveBorder: '#ffffff66',
+    sectionLine: '#8f7de966',
+    cardStart: '#f7f4ff',
+    cardEnd: '#ecf8ff',
+    cardGlow: '#967bff2b',
+    cardBorder: '#ffffffad',
+    iconBg: '#ece7ff',
+    iconColor: '#6651ba',
+    badgeBg: '#ece7ff',
+    badgeBorder: '#d0c5ff',
+    badgeText: '#5f4ba8',
+    resolvedBg: '#e8f4ff',
+    resolvedBorder: '#c8deff',
+    resolvedText: '#47618f',
+    dotColor: '#6a59ce',
+  },
 };
 
 type HealthRecordsScreenProps = {
@@ -148,7 +246,8 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
     historySeverity: 'Orta',
     addRecord: 'Kayıt Ekle',
   } : baseCopy;
-  const [activeSegment, setActiveSegment] = useState<'allergies' | 'diagnoses' | 'labResults'>('allergies');
+  const [activeSegment, setActiveSegment] = useState<HealthRecordsSegment>('allergies');
+  const activePalette = SEGMENT_PALETTES[activeSegment];
 
   // â”€â”€â”€ Fallback content with correct UTF-8 Turkish strings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -225,17 +324,47 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
       ? (isTr ? 'İlk kayıt eklendiğinde bu alan otomatik olarak dolacaktır.' : 'This area will populate automatically once the first record is added.')
       : (isTr ? 'Bağlantıyı kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
 
-  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true });
+  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true, enterVariant: 'snappy' });
 
   // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: activePalette.screenBottom }]}>
       {backPreview ? (
         <Animated.View pointerEvents="none" style={[styles.backLayer, swipePanResponder.backLayerStyle]}>
           {backPreview}
         </Animated.View>
       ) : null}
       <Animated.View style={[styles.frontLayer, swipePanResponder.frontLayerStyle]} {...swipePanResponder.panHandlers}>
+        <View pointerEvents="none" style={styles.screenGradient}>
+          <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+            <Defs>
+              <LinearGradient id="healthRecordsScreenBg" x1="0" y1="0" x2="1" y2="1">
+                <Stop offset="0%" stopColor={activePalette.screenTop} />
+                <Stop offset="100%" stopColor={activePalette.screenBottom} />
+              </LinearGradient>
+            </Defs>
+            <Rect x="0" y="0" width="100" height="100" fill="url(#healthRecordsScreenBg)" />
+            <Circle cx="20" cy="12" r="18" fill={activePalette.auraColor} />
+            <Circle cx="80" cy="24" r="16" fill={activePalette.auraColor} />
+          </Svg>
+          <View style={styles.mesh105}>
+            <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+              <Defs>
+                <LinearGradient id="mesh105Base" x1="0" y1="0" x2="1" y2="1">
+                  <Stop offset="0%" stopColor={activePalette.cardStart} />
+                  <Stop offset="100%" stopColor={activePalette.cardEnd} />
+                </LinearGradient>
+                <LinearGradient id="mesh105Accent" x1="0" y1="1" x2="1" y2="0">
+                  <Stop offset="0%" stopColor={activePalette.cardGlow} />
+                  <Stop offset="100%" stopColor={activePalette.auraColor} />
+                </LinearGradient>
+              </Defs>
+              <Rect x="0" y="0" width="100" height="100" fill="url(#mesh105Base)" />
+              <Circle cx="24" cy="26" r="26" fill="url(#mesh105Accent)" />
+              <Circle cx="78" cy="64" r="30" fill={activePalette.cardGlow} />
+            </Svg>
+          </View>
+        </View>
         <StatusBar style="dark" />
         <ScrollView
           contentContainerStyle={styles.content}
@@ -288,7 +417,14 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
                   return (
                     <Pressable
                       key={seg}
-                      style={[styles.segmentChip, isActive && styles.segmentChipActive]}
+                      style={[
+                        styles.segmentChip,
+                        isActive && styles.segmentChipActive,
+                        isActive && {
+                          backgroundColor: activePalette.chipActiveBottom,
+                          borderColor: activePalette.chipActiveBorder,
+                        },
+                      ]}
                       onPress={() => setActiveSegment(seg)}
                     >
                       <Text style={[styles.segmentChipText, isActive && styles.segmentChipTextActive]}>
@@ -302,35 +438,49 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
               {/* â”€â”€ Active section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <View style={styles.sectionHead}>
                 <Text style={styles.sectionHeadText}>{copy.activeSection}</Text>
-                <View style={styles.sectionLine} />
+                <View style={[styles.sectionLine, { backgroundColor: activePalette.sectionLine }]} />
               </View>
 
-              <View style={styles.recordCard}>
-                <View style={styles.cardTopRow}>
-                  <View style={styles.cardIconBoxDanger}>
-                    <Icon kind="alert" size={22} color="#c96a6a" />
-                  </View>
-                  <View style={styles.cardTitleBlock}>
-                    <Text style={styles.cardTitle}>{segmentContent.activeTitle}</Text>
-                    <Text style={styles.cardDate}>{segmentContent.activeDate}</Text>
-                  </View>
+              <View style={[styles.recordCard, { borderColor: activePalette.cardBorder }]}>
+                <View pointerEvents="none" style={styles.cardGradientBackdrop}>
+                  <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <Defs>
+                      <LinearGradient id="healthRecordsActiveCard" x1="0" y1="0" x2="1" y2="1">
+                        <Stop offset="0%" stopColor={activePalette.cardStart} />
+                        <Stop offset="100%" stopColor={activePalette.cardEnd} />
+                      </LinearGradient>
+                    </Defs>
+                    <Rect x="0" y="0" width="100" height="100" fill="url(#healthRecordsActiveCard)" />
+                    <Circle cx="86" cy="20" r="22" fill={activePalette.cardGlow} />
+                  </Svg>
                 </View>
-
-                <Text style={styles.cardBody}>{segmentContent.activeBody}</Text>
-
-                <View style={styles.cardDivider} />
-
-                <View style={styles.cardBottomRow}>
-                  <View style={styles.activeBadgePill}>
-                    <Text style={styles.activeBadgePillText}>{segmentContent.activeBadge}</Text>
-                  </View>
-                  <View style={styles.severityWrap}>
-                    <View style={styles.severityDots}>
-                      <View style={styles.dotDanger} />
-                      <View style={styles.dotDanger} />
-                      <View style={styles.dotDanger} />
+                <View style={styles.cardContent}>
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.cardIconBoxDanger, { backgroundColor: activePalette.iconBg }]}>
+                      <Icon kind="alert" size={22} color={activePalette.iconColor} />
                     </View>
-                    <Text style={styles.severityText}>{segmentContent.activeSeverity}</Text>
+                    <View style={styles.cardTitleBlock}>
+                      <Text style={styles.cardTitle}>{segmentContent.activeTitle}</Text>
+                      <Text style={styles.cardDate}>{segmentContent.activeDate}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.cardBody}>{segmentContent.activeBody}</Text>
+
+                  <View style={styles.cardDivider} />
+
+                  <View style={styles.cardBottomRow}>
+                    <View style={[styles.activeBadgePill, { backgroundColor: activePalette.badgeBg, borderColor: activePalette.badgeBorder }]}>
+                      <Text style={[styles.activeBadgePillText, { color: activePalette.badgeText }]}>{segmentContent.activeBadge}</Text>
+                    </View>
+                    <View style={styles.severityWrap}>
+                      <View style={styles.severityDots}>
+                        <View style={[styles.dotDanger, { backgroundColor: activePalette.dotColor }]} />
+                        <View style={[styles.dotDanger, { backgroundColor: activePalette.dotColor }]} />
+                        <View style={[styles.dotDanger, { backgroundColor: activePalette.dotColor }]} />
+                      </View>
+                      <Text style={styles.severityText}>{segmentContent.activeSeverity}</Text>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -338,35 +488,49 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
               {/* â”€â”€ History section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
               <View style={styles.sectionHead}>
                 <Text style={styles.sectionHeadText}>{copy.historySection}</Text>
-                <View style={styles.sectionLine} />
+                <View style={[styles.sectionLine, { backgroundColor: activePalette.sectionLine }]} />
               </View>
 
-              <View style={[styles.recordCard, styles.recordCardMuted]}>
-                <View style={styles.cardTopRow}>
-                  <View style={styles.cardIconBoxNeutral}>
-                    <Icon kind="alert" size={22} color="#9a9a9a" />
-                  </View>
-                  <View style={styles.cardTitleBlock}>
-                    <Text style={styles.cardTitleMuted}>{segmentContent.historyTitle}</Text>
-                    <Text style={styles.cardDateMuted}>{segmentContent.historyDate}</Text>
-                  </View>
+              <View style={[styles.recordCard, styles.recordCardMuted, { borderColor: activePalette.cardBorder }]}>
+                <View pointerEvents="none" style={styles.cardGradientBackdrop}>
+                  <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                    <Defs>
+                      <LinearGradient id="healthRecordsHistoryCard" x1="0" y1="0" x2="1" y2="1">
+                        <Stop offset="0%" stopColor={activePalette.cardStart} />
+                        <Stop offset="100%" stopColor={activePalette.cardEnd} />
+                      </LinearGradient>
+                    </Defs>
+                    <Rect x="0" y="0" width="100" height="100" fill="url(#healthRecordsHistoryCard)" />
+                    <Circle cx="12" cy="80" r="20" fill={activePalette.cardGlow} />
+                  </Svg>
                 </View>
-
-                <Text style={styles.cardBodyMuted}>{segmentContent.historyBody}</Text>
-
-                <View style={styles.cardDivider} />
-
-                <View style={styles.cardBottomRow}>
-                  <View style={styles.resolvedBadgePill}>
-                    <Text style={styles.resolvedBadgePillText}>{segmentContent.resolvedBadge}</Text>
-                  </View>
-                  <View style={[styles.severityWrap, { opacity: 0.7 }]}>
-                    <View style={styles.severityDots}>
-                      <View style={styles.dotWarn} />
-                      <View style={styles.dotWarn} />
-                      <View style={styles.dotEmpty} />
+                <View style={styles.cardContent}>
+                  <View style={styles.cardTopRow}>
+                    <View style={[styles.cardIconBoxNeutral, { backgroundColor: activePalette.resolvedBg }]}>
+                      <Icon kind="alert" size={22} color={activePalette.resolvedText} />
                     </View>
-                    <Text style={styles.severityText}>{segmentContent.historySeverity}</Text>
+                    <View style={styles.cardTitleBlock}>
+                      <Text style={styles.cardTitleMuted}>{segmentContent.historyTitle}</Text>
+                      <Text style={styles.cardDateMuted}>{segmentContent.historyDate}</Text>
+                    </View>
+                  </View>
+
+                  <Text style={styles.cardBodyMuted}>{segmentContent.historyBody}</Text>
+
+                  <View style={styles.cardDivider} />
+
+                  <View style={styles.cardBottomRow}>
+                    <View style={[styles.resolvedBadgePill, { backgroundColor: activePalette.resolvedBg, borderColor: activePalette.resolvedBorder }]}>
+                      <Text style={[styles.resolvedBadgePillText, { color: activePalette.resolvedText }]}>{segmentContent.resolvedBadge}</Text>
+                    </View>
+                    <View style={[styles.severityWrap, { opacity: 0.7 }]}>
+                      <View style={styles.severityDots}>
+                        <View style={[styles.dotWarn, { backgroundColor: activePalette.dotColor }]} />
+                        <View style={[styles.dotWarn, { backgroundColor: activePalette.dotColor }]} />
+                        <View style={styles.dotEmpty} />
+                      </View>
+                      <Text style={styles.severityText}>{segmentContent.historySeverity}</Text>
+                    </View>
                   </View>
                 </View>
               </View>
@@ -426,6 +590,22 @@ const styles = StyleSheet.create({
   frontLayer: {
     flex: 1,
     overflow: 'hidden',
+  },
+  screenGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  mesh105: {
+    position: 'absolute',
+    width: 200,
+    height: 200,
+    top: -48,
+    right: -72,
+    borderWidth: 10,
+    borderColor: '#ffffff',
+    transform: [{ rotate: '-90deg' }],
+    borderRadius: 28,
+    overflow: 'hidden',
+    opacity: 0.9,
   },
   content: {
     paddingTop: 32,
@@ -533,7 +713,9 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 42,
     borderRadius: 12,
-    backgroundColor: '#eeeee8',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.75)',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
@@ -575,8 +757,12 @@ const styles = StyleSheet.create({
 
   // Record cards
   recordCard: {
+    position: 'relative',
+    overflow: 'hidden',
     borderRadius: 20,
     backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.72)',
     paddingHorizontal: 18,
     paddingTop: 18,
     paddingBottom: 14,
@@ -587,7 +773,14 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   recordCardMuted: {
-    opacity: 0.88,
+    opacity: 0.93,
+  },
+  cardGradientBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  cardContent: {
+    position: 'relative',
+    zIndex: 1,
   },
   cardTopRow: {
     flexDirection: 'row',

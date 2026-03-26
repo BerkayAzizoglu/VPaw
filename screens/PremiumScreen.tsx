@@ -1,7 +1,6 @@
 ﻿import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
-  ImageBackground,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,10 +12,9 @@ import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 
-const HERO_IMAGE = 'https://www.figma.com/api/mcp/asset/a2048b0f-f9f0-482d-a0fe-39eacf8fd35e';
-
 type PremiumScreenProps = {
   onBack: () => void;
+  onUpgrade: () => void;
 };
 
 type FeatureIcon = 'pets' | 'shield' | 'passport' | 'ai' | 'reminder';
@@ -126,7 +124,7 @@ function CheckPill() {
   );
 }
 
-export default function PremiumScreen({ onBack }: PremiumScreenProps) {
+export default function PremiumScreen({ onBack, onUpgrade }: PremiumScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).premium;
   const features: Array<{ title: string; desc: string; icon: FeatureIcon; tall?: boolean }> = [
@@ -137,7 +135,7 @@ export default function PremiumScreen({ onBack }: PremiumScreenProps) {
     { title: copy.features.remindersTitle, desc: copy.features.remindersDesc, icon: 'reminder' },
   ];
 
-  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true });
+  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: false });
 
   const comparisonRows: CompareRow[] = [
     { label: copy.table.petProfiles, free: copy.table.one, pro: copy.table.unlimited, proAccent: true },
@@ -151,9 +149,7 @@ export default function PremiumScreen({ onBack }: PremiumScreenProps) {
       <StatusBar style="light" />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <ImageBackground source={{ uri: HERO_IMAGE }} style={styles.heroImage} imageStyle={styles.heroImageInner}>
-          <View style={styles.heroOverlay} />
-        </ImageBackground>
+        <View style={styles.heroImage} />
 
         <View style={styles.mainContent}>
           <View style={styles.badge}>
@@ -201,7 +197,7 @@ export default function PremiumScreen({ onBack }: PremiumScreenProps) {
 
       <View pointerEvents="box-none" style={styles.bottomOverlay}>
         <View style={styles.bottomGradient} />
-        <Pressable style={styles.upgradeBtn}>
+        <Pressable style={styles.upgradeBtn} onPress={onUpgrade}>
           <PremiumIcon name="sparkles" size={18} color="#faf8f5" />
           <Text style={styles.upgradeText}>{copy.upgrade}</Text>
         </Pressable>
@@ -224,13 +220,7 @@ const styles = StyleSheet.create({
   heroImage: {
     height: 384,
     width: '100%',
-  },
-  heroImageInner: {
-    resizeMode: 'cover',
-  },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(31, 21, 12, 0.18)',
+    backgroundColor: '#c9a96e',
   },
   mainContent: {
     marginTop: -80,
@@ -486,4 +476,3 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
-
