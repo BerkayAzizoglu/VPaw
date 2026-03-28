@@ -1599,12 +1599,23 @@ export default function AuthGate() {
     return fallback.length > 0 ? fallback : 'VP';
   }, [session?.user?.email, session?.user?.user_metadata]);
 
+  const userDisplayName = useMemo(() => {
+    const meta = session?.user?.user_metadata as Record<string, unknown> | undefined;
+    const fullName = typeof meta?.full_name === 'string' ? meta.full_name.trim() : '';
+    if (fullName.length > 0) return fullName;
+    const email = (session?.user?.email ?? '').trim();
+    if (email.length > 0) return email.split('@')[0];
+    return undefined;
+  }, [session?.user?.email, session?.user?.user_metadata]);
+
   const isPremium = useMemo(() => {
     const meta = session?.user?.user_metadata as Record<string, unknown> | undefined;
     return meta?.is_premium === true;
   }, [session?.user?.user_metadata]);
 
-  const canAddPet = isPremium ? petList.length < 10 : petList.length < 1;
+  const PREMIUM_PET_LIMIT = 8;
+  const FREE_PET_LIMIT = 1;
+  const canAddPet = isPremium ? petList.length < PREMIUM_PET_LIMIT : petList.length < FREE_PET_LIMIT;
 
   const addPet = (pet: PetProfile) => {
     const nowIso = new Date().toISOString();
@@ -1754,16 +1765,20 @@ export default function AuthGate() {
     });
   };
 
-  const openAddPet = () => {
-    if (!canAddPet) {
-      Alert.alert(
-        locale === 'tr' ? 'Limit doldu' : 'Limit reached',
-        locale === 'tr'
-          ? 'Free planda yalnizca 1 pet ekleyebilirsin. Daha fazla pet icin Premium gerekli.'
-          : 'Free plan allows only 1 pet. Premium is required for more pets.',
-      );
-      return;
-    }
+    const openAddPet = () => {
+      if (!canAddPet) {
+        Alert.alert(
+          locale === 'tr' ? 'Limit doldu' : 'Limit reached',
+          isPremium
+            ? (locale === 'tr'
+                ? `Premium planda en fazla ${PREMIUM_PET_LIMIT} pet ekleyebilirsin.`
+                : `Premium plan allows up to ${PREMIUM_PET_LIMIT} pets.`)
+            : (locale === 'tr'
+                ? `Free planda yalnizca ${FREE_PET_LIMIT} pet ekleyebilirsin. Daha fazla pet icin Premium gerekli.`
+                : `Free plan allows only ${FREE_PET_LIMIT} pet. Premium is required for more pets.`),
+        );
+        return;
+      }
     const id = `pet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setNewPetTemplate({
       id,
@@ -2878,7 +2893,7 @@ export default function AuthGate() {
   if (route === 'petProfile') {
     const activePet = petProfiles[activePetId];
     if (!activePet) return null;
-    return (
+    return renderPrimaryChrome(
       <PetDetailScreen
         pet={activePet}
         weightEntries={weightsByPet[activePetId]}
@@ -2893,7 +2908,7 @@ export default function AuthGate() {
         onOpenHealthRecords={() => openSubRoute('healthRecords', 'petProfile')}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'petProfile')}
         onOpenVaccinations={() => openSubRoute('vaccinations', 'petProfile')}
-      />
+      />,
     );
   }
 
@@ -3251,7 +3266,7 @@ export default function AuthGate() {
   }
 
   if (route === 'pets') {
-    return (
+    return renderPrimaryChrome(
       <PetsScreen
         pets={Object.values(petProfiles).filter((pet) => pet?.name?.trim())}
         activePetId={activePetId}
@@ -3260,10 +3275,13 @@ export default function AuthGate() {
         canAddPet={canAddPet}
         isPremiumPlan={isPremium}
         onBack={() => setRoute('profile')}
+        onOpenProfile={() => setRoute('profile')}
+        userAvatarUri={userAvatarUri}
+        userName={userDisplayName}
         onOpenPet={(petId) => openPetProfile(petId, 'pets')}
         onAddPet={openAddPet}
         onRefresh={refreshPetsFromCloud}
-      />
+      />,
     );
   }
 
@@ -3313,8 +3331,7 @@ export default function AuthGate() {
       }}
       onOpenPetEdit={(petId) => {
         if (petId) setActivePetWithPersist(petId);
-        setPetEditBackRoute('home');
-        setRoute('petEdit');
+        openPetProfile(petId || activePetId, 'home');
       }}
       onOpenPetPassport={(petId) => {
         if (petId) setActivePetWithPersist(petId);

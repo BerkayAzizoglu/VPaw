@@ -6,7 +6,7 @@ export default function BackgroundBlobs() {
   return (
     <View pointerEvents="none" style={styles.fill}>
       <LinearGradient
-        colors={['#DCFCF5', '#F4ECD6']}
+        colors={['#CDEFE7', '#E3F6EF', '#F4ECD6']}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={StyleSheet.absoluteFill}

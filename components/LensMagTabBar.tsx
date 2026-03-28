@@ -50,14 +50,14 @@ const TABS: TabDef[] = [
   { key: 'insights',  labelTr: 'Analiz',    labelEn: 'Insights',  Icon: HeartPulse  },
 ];
 
-const COLOR_ACTIVE   = '#47664a';
-const COLOR_INACTIVE = '#9a9c95';
+const COLOR_ACTIVE   = '#446a63';
+const COLOR_INACTIVE = '#96a09c';
 
 // Glass lens appearance
-const BAR_BG         = 'rgba(242, 239, 235, 0.62)';
-const BAR_BORDER     = 'rgba(76, 86, 73, 0.14)';
-const PILL_BG        = 'rgba(233, 235, 231, 0.86)';
-const PILL_BORDER    = 'rgba(68, 74, 66, 0.10)';
+const BAR_BG         = 'rgba(248, 245, 238, 0.78)';
+const BAR_BORDER     = 'rgba(96, 112, 105, 0.10)';
+const PILL_BG        = 'rgba(255, 255, 255, 0.72)';
+const PILL_BORDER    = 'rgba(86, 104, 97, 0.08)';
 
 const BAR_HEIGHT  = 82;
 const BAR_MARGIN  = 18;
@@ -411,7 +411,7 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
         return (
           <Animated.View key={tab.key} style={styles.tabItem}>
             <Pressable
-              style={styles.tabPressable}
+              style={[styles.tabPressable, isActive && styles.tabPressableActive]}
               onPressIn={() => {
                 if (isActive && !isDragging.current) {
                   animateDragBar(true);
@@ -427,22 +427,24 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
                 onTabPress(tab.key);
               }}
             >
-              {tab.key === 'home' ? (
-                <HomeStackIcon strength={highlightStrength} />
-              ) : tab.key === 'healthHub' ? (
-                <HealthSolidIcon strength={highlightStrength} />
-              ) : tab.key === 'reminders' ? (
-                <BellSolidIcon strength={highlightStrength} />
-              ) : tab.key === 'insights' ? (
-                <InsightSolidIcon strength={highlightStrength} />
-              ) : (
-                <Icon
-                  size={25}
-                  color={iconColor}
-                  strokeWidth={2 + highlightStrength * 0.5}
-                  fill="none"
-                />
-              )}
+              <View style={isActive ? styles.activeTabIcon : styles.inactiveTabIcon}>
+                {tab.key === 'home' ? (
+                  <HomeStackIcon strength={highlightStrength} />
+                ) : tab.key === 'healthHub' ? (
+                  <HealthSolidIcon strength={highlightStrength} />
+                ) : tab.key === 'reminders' ? (
+                  <BellSolidIcon strength={highlightStrength} />
+                ) : tab.key === 'insights' ? (
+                  <InsightSolidIcon strength={highlightStrength} />
+                ) : (
+                  <Icon
+                    size={25}
+                    color={iconColor}
+                    strokeWidth={2 + highlightStrength * 0.5}
+                    fill="none"
+                  />
+                )}
+              </View>
               <Text style={[styles.tabText, { color: textColor }, isStrong && styles.tabTextBold]}>
                 {locale === 'tr' ? tab.labelTr : tab.labelEn}
               </Text>
@@ -470,11 +472,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    shadowColor: '#30332e',
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 4,
+    shadowColor: '#5f736d',
+    shadowOpacity: 0.055,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 3,
   },
 
   pill: {
@@ -483,13 +485,13 @@ const styles = StyleSheet.create({
     left: 0,
     height: PILL_HEIGHT,
     borderRadius: PILL_RADIUS,
-    backgroundColor: PILL_BG,
+    backgroundColor: 'rgba(255, 255, 255, 0.78)',
     borderWidth: 1,
-    borderColor: PILL_BORDER,
-    shadowColor: '#000',
+    borderColor: 'rgba(123, 144, 136, 0.10)',
+    shadowColor: '#6d837d',
     shadowOpacity: 0.05,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 1 },
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 3,
   },
 
@@ -508,16 +510,34 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
     paddingHorizontal: 8,
   },
+  tabPressableActive: {
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(86,104,97,0.07)',
+    paddingHorizontal: 13,
+    shadowColor: '#71867f',
+    shadowOpacity: 0.02,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 0,
+  },
 
   tabText: {
     fontSize: 11,
     lineHeight: 13,
     fontWeight: '600',
-    letterSpacing: 0.25,
+    letterSpacing: 0.2,
   },
 
   tabTextBold: {
     fontWeight: '700',
+  },
+  activeTabIcon: {
+    opacity: 1,
+  },
+  inactiveTabIcon: {
+    opacity: 0.62,
   },
   homeIconWrap: {
     width: 25,

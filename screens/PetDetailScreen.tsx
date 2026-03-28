@@ -10,9 +10,8 @@ import {
 import { ChevronLeft, ChevronRight, Edit2, Mars, Venus } from 'lucide-react-native';
 import type { PetProfile, RoutineCareRecord } from '../lib/petProfileTypes';
 import type { WeightPoint } from '../lib/healthMvpModel';
+import BackgroundBlobs from '../components/pets/BackgroundBlobs';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 type PetDetailScreenProps = {
   pet: PetProfile;
@@ -27,8 +26,6 @@ type PetDetailScreenProps = {
   onOpenVaccinations?: () => void;
 };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function formatAge(birthDate: string, isTr: boolean): string {
   const now = new Date();
   const [ry, rm, rd] = birthDate.split('-').map(Number);
@@ -38,45 +35,46 @@ function formatAge(birthDate: string, isTr: boolean): string {
   let years = now.getFullYear() - y;
   let months = now.getMonth() + 1 - m;
   if (now.getDate() < d) months--;
-  if (months < 0) { years--; months += 12; }
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
   years = Math.max(0, years);
   months = Math.max(0, months);
-  return isTr ? `${years} yıl ${months} ay` : `${years}y ${months}m`;
+  return isTr ? `${years} yil ${months} ay` : `${years}y ${months}m`;
 }
 
 function fmtDate(value: string, isTr: boolean): string {
   const ms = new Date(value).getTime();
-  if (!Number.isFinite(ms)) return value || '—';
+  if (!Number.isFinite(ms)) return value || '-';
   const d = new Date(ms);
-  const M_TR = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
-  const M_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-  return `${d.getDate()} ${isTr ? M_TR[d.getMonth()] : M_EN[d.getMonth()]} ${d.getFullYear()}`;
+  const monthsTr = ['Oca', 'Sub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Agu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+  const monthsEn = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${d.getDate()} ${isTr ? monthsTr[d.getMonth()] : monthsEn[d.getMonth()]} ${d.getFullYear()}`;
 }
 
 function nextRoutineDue(record: RoutineCareRecord, isTr: boolean): string {
-  if (!record.enabled || !record.lastDate) return isTr ? 'Kayıt yok' : 'No record';
+  if (!record.enabled || !record.lastDate) return isTr ? 'Kayit yok' : 'No record';
   const ms = new Date(record.lastDate).getTime();
-  if (!Number.isFinite(ms)) return isTr ? 'Kayıt yok' : 'No record';
+  if (!Number.isFinite(ms)) return isTr ? 'Kayit yok' : 'No record';
   const dueMs = ms + record.intervalDays * 86400000;
   const diffDays = Math.round((dueMs - Date.now()) / 86400000);
-  if (diffDays < 0) return isTr ? `${Math.abs(diffDays)} gün gecikti` : `${Math.abs(diffDays)}d overdue`;
-  if (diffDays === 0) return isTr ? 'Bugün' : 'Today';
-  if (diffDays === 1) return isTr ? 'Yarın' : 'Tomorrow';
-  return isTr ? `${diffDays} gün sonra` : `In ${diffDays} days`;
+  if (diffDays < 0) return isTr ? `${Math.abs(diffDays)} gun gecikti` : `${Math.abs(diffDays)}d overdue`;
+  if (diffDays === 0) return isTr ? 'Bugun' : 'Today';
+  if (diffDays === 1) return isTr ? 'Yarin' : 'Tomorrow';
+  return isTr ? `${diffDays} gun sonra` : `In ${diffDays} days`;
 }
 
 function routineDueColor(record: RoutineCareRecord): string {
-  if (!record.enabled || !record.lastDate) return '#9a9c95';
+  if (!record.enabled || !record.lastDate) return '#8a948f';
   const ms = new Date(record.lastDate).getTime();
-  if (!Number.isFinite(ms)) return '#9a9c95';
+  if (!Number.isFinite(ms)) return '#8a948f';
   const dueMs = ms + record.intervalDays * 86400000;
   const diffDays = Math.round((dueMs - Date.now()) / 86400000);
-  if (diffDays < 0) return '#c05050';
-  if (diffDays <= 7) return '#c97b3a';
-  return '#4a7a54';
+  if (diffDays < 0) return '#c56767';
+  if (diffDays <= 7) return '#b98045';
+  return '#4c8a66';
 }
-
-// ─── Section component ───────────────────────────────────────────────────────
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -100,12 +98,10 @@ function NavRow({ label, onPress }: { label: string; onPress?: () => void }) {
   return (
     <Pressable style={styles.navRow} onPress={onPress}>
       <Text style={styles.navRowText}>{label}</Text>
-      <ChevronRight size={16} color="#9a9c95" strokeWidth={2.2} />
+      <ChevronRight size={16} color="#6f817d" strokeWidth={2.2} />
     </Pressable>
   );
 }
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function PetDetailScreen({
   pet,
@@ -120,6 +116,9 @@ export default function PetDetailScreen({
   onOpenVaccinations,
 }: PetDetailScreenProps) {
   const isTr = locale === 'tr';
+  const profileTitle = isTr
+    ? `${pet.name} Profili`
+    : `${pet.name}${pet.name.trim().toLowerCase().endsWith('s') ? "'" : "'s"} Profile`;
   const swipePanResponder = useEdgeSwipeBack({
     onBack,
     fullScreenGestureEnabled: false,
@@ -131,7 +130,7 @@ export default function PetDetailScreen({
   const goalRatio = weightGoal && weightGoal > 0 && currentKg != null
     ? Math.min(1, Math.max(0, currentKg / weightGoal))
     : null;
-  const onTarget = goalRatio != null && currentKg != null && currentKg <= weightGoal!;
+  const onTarget = goalRatio != null && currentKg != null && weightGoal != null && currentKg <= weightGoal;
 
   const vaccineCount = (pet.vaccinations ?? []).length;
   const lastVaccine = [...(pet.vaccinations ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
@@ -140,487 +139,515 @@ export default function PetDetailScreen({
   const surgeryCount = (pet.surgeriesLog ?? []).length;
 
   return (
-    <View style={styles.screen} {...swipePanResponder.panHandlers}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        scrollEnabled={!swipePanResponder.isSwiping}
-      >
-
-        {/* ── Header ── */}
-        <View style={styles.topRow}>
-          <Pressable style={styles.iconBtn} onPress={onBack}>
-            <ChevronLeft size={20} color="#5b5b5b" strokeWidth={2.4} />
-          </Pressable>
-          <Text style={styles.screenTitle}>{isTr ? 'Profil Detayı' : 'Pet Profile'}</Text>
-          {onEdit ? (
-            <Pressable style={styles.iconBtn} onPress={onEdit}>
-              <Edit2 size={17} color="#5b5b5b" strokeWidth={2.2} />
-            </Pressable>
-          ) : (
-            <View style={styles.iconGhost} />
-          )}
-        </View>
-
-        {/* ── Pet Hero Card ── */}
-        <View style={styles.heroCard}>
-          <Image source={{ uri: pet.image }} style={styles.heroImage} />
-          <View style={styles.heroBody}>
-            <View style={styles.heroNameRow}>
-              <Text style={styles.heroName}>{pet.name}</Text>
-              <View style={styles.genderPill}>
-                {pet.gender === 'male'
-                  ? <Mars size={12} color="#6a6a6a" strokeWidth={2.2} />
-                  : <Venus size={12} color="#6a6a6a" strokeWidth={2.2} />}
-                <Text style={styles.genderText}>{pet.gender === 'male' ? (isTr ? 'Erkek' : 'Male') : (isTr ? 'Dişi' : 'Female')}</Text>
-              </View>
+    <View style={styles.root}>
+      <BackgroundBlobs />
+      <View style={styles.screen} {...swipePanResponder.panHandlers}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!swipePanResponder.isSwiping}
+        >
+          <View style={styles.headerBlock}>
+            <View style={styles.topRow}>
+              <Pressable style={styles.iconBtn} onPress={onBack}>
+                <ChevronLeft size={20} color="#305855" strokeWidth={2.4} />
+              </Pressable>
+              {onEdit ? (
+                <Pressable style={styles.iconBtn} onPress={onEdit}>
+                  <Edit2 size={17} color="#305855" strokeWidth={2.2} />
+                </Pressable>
+              ) : (
+                <View style={styles.iconGhost} />
+              )}
             </View>
-            <Text style={styles.heroBreed}>{pet.breed}</Text>
-            <Text style={styles.heroMeta}>{formatAge(pet.birthDate, isTr)}</Text>
-            {pet.microchip ? (
-              <View style={styles.chipPill}>
-                <Text style={styles.chipText}>🔖 {pet.microchip}</Text>
-              </View>
-            ) : null}
+            <Text style={styles.headerEyebrow}>{isTr ? 'PET PROFILI' : 'PET PROFILE'}</Text>
+            <Text style={styles.screenTitle}>{profileTitle}</Text>
           </View>
-        </View>
 
-        {/* ── Weight ── */}
-        <Section title={isTr ? 'KİLO' : 'WEIGHT'}>
+          <View style={styles.heroCard}>
+            <Image source={{ uri: pet.image }} style={styles.heroImage} />
+            <View style={styles.heroBody}>
+              <View style={styles.heroNameRow}>
+                <Text style={styles.heroName}>{pet.name}</Text>
+                <View style={styles.genderPill}>
+                  {pet.gender === 'male' ? (
+                    <Mars size={12} color="#5f7874" strokeWidth={2.2} />
+                  ) : (
+                    <Venus size={12} color="#5f7874" strokeWidth={2.2} />
+                  )}
+                  <Text style={styles.genderText}>{pet.gender === 'male' ? (isTr ? 'Erkek' : 'Male') : (isTr ? 'Disi' : 'Female')}</Text>
+                </View>
+              </View>
+              <Text style={styles.heroBreed}>{pet.breed}</Text>
+              <Text style={styles.heroMeta}>{formatAge(pet.birthDate, isTr)}</Text>
+              {pet.microchip ? (
+                <View style={styles.chipPill}>
+                  <Text style={styles.chipText}>Chip {pet.microchip}</Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+
+        <Section title={isTr ? 'KILO' : 'WEIGHT'}>
           <View style={styles.weightRow}>
             <View style={styles.weightLeft}>
               <Text style={styles.weightValue}>
-                {currentKg != null ? `${currentKg.toFixed(1)} kg` : '—'}
+                {currentKg != null ? `${currentKg.toFixed(1)} kg` : '-'}
               </Text>
+                {goalRatio != null ? (
+                  <Text style={[styles.goalLabel, { color: onTarget ? '#4c8a66' : '#c56767' }]}>
+                    {isTr ? `Hedef: ${weightGoal!.toFixed(1)} kg` : `Goal: ${weightGoal!.toFixed(1)} kg`}
+                  </Text>
+                ) : (
+                  <Text style={styles.goalLabel}>{isTr ? 'Hedef belirlenmemis' : 'No goal set'}</Text>
+                )}
+              </View>
               {goalRatio != null ? (
-                <Text style={[styles.goalLabel, { color: onTarget ? '#4a7a54' : '#c05050' }]}>
-                  {isTr ? `Hedef: ${weightGoal!.toFixed(1)} kg` : `Goal: ${weightGoal!.toFixed(1)} kg`}
-                </Text>
-              ) : (
-                <Text style={styles.goalLabel}>{isTr ? 'Hedef belirlenmemiş' : 'No goal set'}</Text>
-              )}
-            </View>
-            {goalRatio != null && (
-              <View style={styles.goalProgress}>
-                <View style={styles.goalTrack}>
-                  <View style={[styles.goalFill, { width: `${Math.round(goalRatio * 100)}%`, backgroundColor: onTarget ? '#6b9e6b' : '#c96a6a' }]} />
+                <View style={styles.goalProgress}>
+                  <View style={styles.goalBadge}>
+                    <Text style={styles.goalBadgeText}>
+                      {onTarget ? (isTr ? 'Dengede' : 'On track') : (isTr ? 'Izleniyor' : 'Tracking')}
+                    </Text>
+                  </View>
+                  <View style={styles.goalTrack}>
+                    <View
+                      style={[
+                        styles.goalFill,
+                        {
+                          width: `${Math.round(goalRatio * 100)}%`,
+                          backgroundColor: onTarget ? '#66a07c' : '#c96a6a',
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text style={styles.goalPercent}>{Math.round(goalRatio * 100)}%</Text>
                 </View>
-                <Text style={styles.goalPercent}>{Math.round(goalRatio * 100)}%</Text>
-              </View>
-            )}
-          </View>
-          <Pressable style={styles.inlineLink} onPress={onOpenWeightTracking}>
-            <Text style={styles.inlineLinkText}>{isTr ? 'Kilo takibine git' : 'Open weight tracking'}</Text>
-            <ChevronRight size={14} color="#47664a" strokeWidth={2.2} />
-          </Pressable>
-        </Section>
-
-        {/* ── Vaccinations ── */}
-        <Section title={isTr ? 'AŞILAR' : 'VACCINATIONS'}>
-          <InfoRow
-            label={isTr ? 'Kayıtlı aşı' : 'Recorded vaccines'}
-            value={vaccineCount > 0 ? String(vaccineCount) : (isTr ? 'Kayıt yok' : 'None')}
-          />
-          {lastVaccine ? (
-            <InfoRow
-              label={isTr ? 'Son aşı' : 'Latest vaccine'}
-              value={`${lastVaccine.name} — ${fmtDate(lastVaccine.date, isTr)}`}
-            />
-          ) : null}
-          <NavRow label={isTr ? 'Tüm aşıları gör' : 'View all vaccines'} onPress={onOpenVaccinations} />
-        </Section>
-
-        {/* ── Health Conditions ── */}
-        {(hasAllergies || hasDiabetes || surgeryCount > 0) && (
-          <Section title={isTr ? 'SAĞLIK DURUMU' : 'HEALTH CONDITIONS'}>
-            {hasAllergies && (
-              <View style={styles.conditionRow}>
-                <View style={[styles.conditionDot, { backgroundColor: '#c97b3a' }]} />
-                <Text style={styles.conditionText}>{isTr ? 'Alerji kaydı mevcut' : 'Allergy records present'}</Text>
-              </View>
-            )}
-            {hasDiabetes && (
-              <View style={styles.conditionRow}>
-                <View style={[styles.conditionDot, { backgroundColor: '#3a7ac9' }]} />
-                <Text style={styles.conditionText}>{isTr ? 'Diyabet kaydı mevcut' : 'Diabetes records present'}</Text>
-              </View>
-            )}
-            {surgeryCount > 0 && (
-              <InfoRow
-                label={isTr ? 'Ameliyat kaydı' : 'Surgeries'}
-                value={String(surgeryCount)}
-              />
-            )}
-            <NavRow label={isTr ? 'Sağlık kayıtlarına git' : 'View health records'} onPress={onOpenHealthRecords} />
+              ) : null}
+            </View>
+            <Pressable style={styles.inlineLink} onPress={onOpenWeightTracking}>
+              <Text style={styles.inlineLinkText}>{isTr ? 'Kilo takibine git' : 'Open weight tracking'}</Text>
+              <ChevronRight size={14} color="#476f67" strokeWidth={2.2} />
+            </Pressable>
           </Section>
-        )}
 
-        {/* ── Routine Care (P2 #2) ── */}
-        <Section title={isTr ? 'RUTİN BAKIM' : 'ROUTINE CARE'}>
-          {/* Internal parasite */}
-          <View style={styles.routineRow}>
-            <View style={styles.routineLeft}>
-              <Text style={styles.routineTitle}>{isTr ? 'İç Parazit' : 'Internal Parasite'}</Text>
-              {pet.routineCare.internalParasite.lastDate ? (
-                <Text style={styles.routineSub}>
-                  {isTr ? 'Son: ' : 'Last: '}{fmtDate(pet.routineCare.internalParasite.lastDate, isTr)}
-                </Text>
+          <Section title={isTr ? 'ASILAR' : 'VACCINATIONS'}>
+            <InfoRow
+              label={isTr ? 'Kayitli asi' : 'Recorded vaccines'}
+              value={vaccineCount > 0 ? String(vaccineCount) : (isTr ? 'Kayit yok' : 'None')}
+            />
+            {lastVaccine ? (
+              <InfoRow
+                label={isTr ? 'Son asi' : 'Latest vaccine'}
+                value={`${lastVaccine.name} - ${fmtDate(lastVaccine.date, isTr)}`}
+              />
+            ) : null}
+            <NavRow label={isTr ? 'Tum asilari gor' : 'View all vaccines'} onPress={onOpenVaccinations} />
+          </Section>
+
+          {(hasAllergies || hasDiabetes || surgeryCount > 0) ? (
+            <Section title={isTr ? 'SAGLIK DURUMU' : 'HEALTH CONDITIONS'}>
+              {hasAllergies ? (
+                <View style={styles.conditionRow}>
+                  <View style={[styles.conditionDot, { backgroundColor: '#c97b3a' }]} />
+                  <Text style={styles.conditionText}>{isTr ? 'Alerji kaydi mevcut' : 'Allergy records present'}</Text>
+                </View>
               ) : null}
-            </View>
-            <View style={styles.routineRight}>
-              <Text style={[styles.routineDue, { color: routineDueColor(pet.routineCare.internalParasite) }]}>
-                {nextRoutineDue(pet.routineCare.internalParasite, isTr)}
-              </Text>
-              {pet.routineCare.internalParasite.enabled && (
-                <Text style={styles.routineInterval}>
-                  {isTr ? `Her ${pet.routineCare.internalParasite.intervalDays} gün` : `Every ${pet.routineCare.internalParasite.intervalDays}d`}
-                </Text>
-              )}
-            </View>
-          </View>
-
-          <View style={styles.routineDivider} />
-
-          {/* External parasite */}
-          <View style={styles.routineRow}>
-            <View style={styles.routineLeft}>
-              <Text style={styles.routineTitle}>{isTr ? 'Dış Parazit' : 'External Parasite'}</Text>
-              {pet.routineCare.externalParasite.lastDate ? (
-                <Text style={styles.routineSub}>
-                  {isTr ? 'Son: ' : 'Last: '}{fmtDate(pet.routineCare.externalParasite.lastDate, isTr)}
-                </Text>
+              {hasDiabetes ? (
+                <View style={styles.conditionRow}>
+                  <View style={[styles.conditionDot, { backgroundColor: '#3a7ac9' }]} />
+                  <Text style={styles.conditionText}>{isTr ? 'Diyabet kaydi mevcut' : 'Diabetes records present'}</Text>
+                </View>
               ) : null}
-            </View>
-            <View style={styles.routineRight}>
-              <Text style={[styles.routineDue, { color: routineDueColor(pet.routineCare.externalParasite) }]}>
-                {nextRoutineDue(pet.routineCare.externalParasite, isTr)}
-              </Text>
-              {pet.routineCare.externalParasite.enabled && (
-                <Text style={styles.routineInterval}>
-                  {isTr ? `Her ${pet.routineCare.externalParasite.intervalDays} gün` : `Every ${pet.routineCare.externalParasite.intervalDays}d`}
+              {surgeryCount > 0 ? (
+                <InfoRow label={isTr ? 'Ameliyat kaydi' : 'Surgeries'} value={String(surgeryCount)} />
+              ) : null}
+              <NavRow label={isTr ? 'Saglik kayitlarina git' : 'View health records'} onPress={onOpenHealthRecords} />
+            </Section>
+          ) : null}
+
+          <Section title={isTr ? 'RUTIN BAKIM' : 'ROUTINE CARE'}>
+            <View style={styles.routineRow}>
+              <View style={styles.routineLeft}>
+                <Text style={styles.routineTitle}>{isTr ? 'Ic Parazit' : 'Internal Parasite'}</Text>
+                {pet.routineCare.internalParasite.lastDate ? (
+                  <Text style={styles.routineSub}>{isTr ? 'Son: ' : 'Last: '}{fmtDate(pet.routineCare.internalParasite.lastDate, isTr)}</Text>
+                ) : null}
+              </View>
+              <View style={styles.routineRight}>
+                <Text style={[styles.routineDue, { color: routineDueColor(pet.routineCare.internalParasite) }]}>
+                  {nextRoutineDue(pet.routineCare.internalParasite, isTr)}
                 </Text>
-              )}
+                {pet.routineCare.internalParasite.enabled ? (
+                  <Text style={styles.routineInterval}>
+                    {isTr ? `Her ${pet.routineCare.internalParasite.intervalDays} gun` : `Every ${pet.routineCare.internalParasite.intervalDays}d`}
+                  </Text>
+                ) : null}
+              </View>
             </View>
-          </View>
-        </Section>
 
-        {/* ── Quick Links ── */}
-        <Section title={isTr ? 'HIZLI ERİŞİM' : 'QUICK ACCESS'}>
-          <NavRow label={isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits'} onPress={onOpenVetVisits} />
-          <View style={styles.navDivider} />
-          <NavRow label={isTr ? 'Sağlık Kayıtları' : 'Health Records'} onPress={onOpenHealthRecords} />
-          <View style={styles.navDivider} />
-          <NavRow label={isTr ? 'Kilo Takibi' : 'Weight Tracking'} onPress={onOpenWeightTracking} />
-        </Section>
+            <View style={styles.routineDivider} />
 
-      </ScrollView>
+            <View style={styles.routineRow}>
+              <View style={styles.routineLeft}>
+                <Text style={styles.routineTitle}>{isTr ? 'Dis Parazit' : 'External Parasite'}</Text>
+                {pet.routineCare.externalParasite.lastDate ? (
+                  <Text style={styles.routineSub}>{isTr ? 'Son: ' : 'Last: '}{fmtDate(pet.routineCare.externalParasite.lastDate, isTr)}</Text>
+                ) : null}
+              </View>
+              <View style={styles.routineRight}>
+                <Text style={[styles.routineDue, { color: routineDueColor(pet.routineCare.externalParasite) }]}>
+                  {nextRoutineDue(pet.routineCare.externalParasite, isTr)}
+                </Text>
+                {pet.routineCare.externalParasite.enabled ? (
+                  <Text style={styles.routineInterval}>
+                    {isTr ? `Her ${pet.routineCare.externalParasite.intervalDays} gun` : `Every ${pet.routineCare.externalParasite.intervalDays}d`}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </Section>
+
+          <Section title={isTr ? 'HIZLI ERISIM' : 'QUICK ACCESS'}>
+            <NavRow label={isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits'} onPress={onOpenVetVisits} />
+            <View style={styles.navDivider} />
+            <NavRow label={isTr ? 'Saglik Kayitlari' : 'Health Records'} onPress={onOpenHealthRecords} />
+            <View style={styles.navDivider} />
+            <NavRow label={isTr ? 'Kilo Takibi' : 'Weight Tracking'} onPress={onOpenWeightTracking} />
+          </Section>
+        </ScrollView>
+      </View>
     </View>
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#98D6D1',
+  },
   screen: {
     flex: 1,
-    backgroundColor: '#faf9f8',
+    backgroundColor: 'transparent',
   },
   content: {
-    paddingHorizontal: 20,
-    paddingTop: 56,
-    paddingBottom: 40,
-    gap: 16,
+    paddingHorizontal: 22,
+    paddingTop: 52,
+    paddingBottom: 156,
+    gap: 18,
   },
-
-  // Header
+  headerBlock: {
+    marginBottom: 6,
+  },
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 4,
+    marginBottom: 18,
   },
   iconBtn: {
-    width: 36, height: 36,
-    borderRadius: 18,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.52)',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-  },
-  iconGhost: { width: 36, height: 36 },
-  screenTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#2d2d2d',
-  },
-
-  // Hero card
-  heroCard: {
-    backgroundColor: '#fff',
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    padding: 14,
-    flexDirection: 'row',
-    gap: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
+    borderColor: 'rgba(74,108,103,0.14)',
+    shadowColor: '#6f8f89',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
+  iconGhost: {
+    width: 42,
+    height: 42,
+  },
+  headerEyebrow: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: 'rgba(39,86,81,0.82)',
+    letterSpacing: 1.4,
+    marginBottom: 8,
+  },
+  screenTitle: {
+    fontSize: 42,
+    lineHeight: 46,
+    fontWeight: '900',
+    color: '#163c39',
+    letterSpacing: -1.2,
+  },
+  heroCard: {
+    backgroundColor: 'rgba(248,251,250,0.76)',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.62)',
+    padding: 18,
+    flexDirection: 'row',
+    gap: 16,
+    shadowColor: '#163a36',
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
   heroImage: {
-    width: 88,
-    height: 88,
-    borderRadius: 18,
+    width: 96,
+    height: 96,
+    borderRadius: 24,
     backgroundColor: '#ececec',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.5)',
   },
   heroBody: {
     flex: 1,
     justifyContent: 'center',
-    gap: 4,
+    gap: 6,
   },
   heroNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
+    flexWrap: 'wrap',
   },
   heroName: {
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '800',
-    color: '#2d2d2d',
-    letterSpacing: -0.5,
+    color: '#163c39',
+    letterSpacing: -0.7,
   },
   genderPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 10,
-    backgroundColor: '#f5f5f3',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
+    borderColor: 'rgba(132,161,154,0.18)',
   },
   genderText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#666',
+    color: '#5f7874',
   },
   heroBreed: {
-    fontSize: 14,
-    color: '#555',
+    fontSize: 15,
+    color: '#5d716e',
     fontWeight: '500',
   },
   heroMeta: {
     fontSize: 13,
-    color: '#888',
+    color: '#7c8e8b',
     fontWeight: '500',
   },
   chipPill: {
     alignSelf: 'flex-start',
-    marginTop: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 8,
-    backgroundColor: '#f0f0ea',
+    marginTop: 2,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(132,161,154,0.14)',
   },
   chipText: {
     fontSize: 11,
-    color: '#5d605a',
-    fontWeight: '500',
+    color: '#60716d',
+    fontWeight: '600',
   },
-
-  // Section
   section: {
-    gap: 8,
+    gap: 10,
   },
   sectionLabel: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 1.4,
-    color: '#9a9c95',
+    letterSpacing: 1.8,
+    color: '#80908b',
     textTransform: 'uppercase',
-    marginLeft: 2,
+    marginLeft: 4,
   },
   sectionCard: {
-    backgroundColor: '#fff',
-    borderRadius: 18,
+    backgroundColor: 'rgba(251,253,252,0.86)',
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
+    borderColor: 'rgba(255,255,255,0.72)',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    shadowColor: '#173b37',
+    shadowOpacity: 0.055,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
   },
-
-  // Weight section
   weightRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 14,
-    paddingBottom: 8,
-    gap: 12,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 12,
+    gap: 14,
   },
   weightLeft: {
-    gap: 3,
+    gap: 4,
   },
   weightValue: {
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: '800',
-    color: '#2d2d2d',
-    letterSpacing: -0.8,
+    color: '#20393a',
+    letterSpacing: -1,
   },
   goalLabel: {
     fontSize: 12,
-    fontWeight: '500',
-    color: '#9a9c95',
+    fontWeight: '600',
+    color: '#7b8783',
   },
   goalProgress: {
     flex: 1,
-    maxWidth: 100,
-    gap: 4,
+    maxWidth: 122,
+    gap: 8,
     alignItems: 'flex-end',
+  },
+  goalBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(126,154,147,0.16)',
+  },
+  goalBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#55736c',
   },
   goalTrack: {
     width: '100%',
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: 'rgba(0,0,0,0.07)',
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(34,57,55,0.09)',
     overflow: 'hidden',
   },
   goalFill: {
-    height: 6,
-    borderRadius: 3,
+    height: 8,
+    borderRadius: 999,
   },
   goalPercent: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#9a9c95',
+    color: '#70827d',
   },
   inlineLink: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 11,
+    paddingHorizontal: 18,
+    paddingVertical: 13,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.05)',
+    borderTopColor: 'rgba(30,50,48,0.05)',
   },
   inlineLinkText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#47664a',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#476f67',
   },
-
-  // Info rows
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 11,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.04)',
+    borderBottomColor: 'rgba(30,50,48,0.04)',
   },
   infoLabel: {
-    fontSize: 13,
-    color: '#757575',
+    fontSize: 14,
+    color: '#657572',
     fontWeight: '500',
   },
   infoValue: {
-    fontSize: 13,
-    color: '#2d2d2d',
-    fontWeight: '600',
+    fontSize: 14,
+    color: '#1f3534',
+    fontWeight: '700',
     flexShrink: 1,
     textAlign: 'right',
     maxWidth: '60%',
   },
-
-  // Nav rows
   navRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingHorizontal: 18,
+    paddingVertical: 15,
   },
   navRowText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2d2d2d',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#20393a',
   },
   navDivider: {
     height: 1,
-    backgroundColor: 'rgba(0,0,0,0.04)',
-    marginHorizontal: 16,
+    backgroundColor: 'rgba(30,50,48,0.04)',
+    marginHorizontal: 18,
   },
-
-  // Conditions
   conditionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.04)',
+    borderBottomColor: 'rgba(30,50,48,0.04)',
   },
   conditionDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 9,
+    height: 9,
+    borderRadius: 999,
   },
   conditionText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '500',
-    color: '#3d3d3d',
+    color: '#405250',
   },
-
-  // Routine care
   routineRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 13,
-    gap: 8,
+    paddingHorizontal: 18,
+    paddingVertical: 15,
+    gap: 10,
   },
   routineLeft: {
     flex: 1,
-    gap: 2,
+    gap: 3,
   },
   routineRight: {
     alignItems: 'flex-end',
-    gap: 2,
+    gap: 3,
   },
   routineTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#2d2d2d',
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#20393a',
   },
   routineSub: {
-    fontSize: 11,
-    color: '#9a9c95',
+    fontSize: 12,
+    color: '#7f8c88',
     fontWeight: '500',
   },
   routineDue: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
   },
   routineInterval: {
     fontSize: 11,
-    color: '#9a9c95',
+    color: '#86948f',
     fontWeight: '500',
   },
   routineDivider: {
     height: 1,
-    backgroundColor: 'rgba(0,0,0,0.05)',
-    marginHorizontal: 16,
+    backgroundColor: 'rgba(30,50,48,0.05)',
+    marginHorizontal: 18,
   },
 });

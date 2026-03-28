@@ -10,9 +10,9 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { SvgUri } from 'react-native-svg';
-import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from 'react-native-svg';
+import * as Haptics from 'expo-haptics';
+import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { WeightPoint } from '../lib/healthMvpModel';
 import type { PetProfile } from '../lib/petProfileTypes';
@@ -27,7 +27,10 @@ type PetsScreenProps = {
   locale?: 'en' | 'tr';
   canAddPet: boolean;
   isPremiumPlan?: boolean;
+  userAvatarUri?: string;
+  userName?: string;
   onBack: () => void;
+  onOpenProfile?: () => void;
   onOpenPet: (petId: string) => void;
   onAddPet: () => void;
   onRefresh?: () => Promise<void> | void;
@@ -42,8 +45,6 @@ type PetsViewItem = {
   imageUri?: string;
   isActive: boolean;
 };
-
-const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
 
 function localizeType(type: PetProfile['petType'], locale: 'en' | 'tr') {
   if (locale === 'tr') return type === 'Dog' ? 'Kopek' : type === 'Cat' ? 'Kedi' : type;
@@ -65,7 +66,10 @@ export default function PetsScreen({
   locale = 'en',
   canAddPet,
   isPremiumPlan = false,
+  userAvatarUri,
+  userName,
   onBack,
+  onOpenProfile,
   onOpenPet,
   onAddPet,
   onRefresh,
@@ -97,6 +101,8 @@ export default function PetsScreen({
       isActive: pet.id === activePetId,
     };
   });
+  const mediumDenseList = viewItems.length >= 4;
+  const maxDenseList = viewItems.length >= 7;
 
   const screenTitle = isTr ? 'Pet Genel Bakis' : 'Pet Overview';
   const ctaLabel = isTr ? 'Yeni Pet Ekle' : 'Add Pet';
@@ -116,11 +122,15 @@ export default function PetsScreen({
     }
   }, [onRefresh, refreshing]);
   const handleAddPet = React.useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onAddPet();
   }, [onAddPet]);
   const handleBack = React.useCallback(() => {
     onBack();
   }, [onBack]);
+  const handleOpenProfile = React.useCallback(() => {
+    onOpenProfile?.();
+  }, [onOpenProfile]);
 
   const swipePanResponder = useEdgeSwipeBack({
     onBack,
@@ -138,11 +148,11 @@ export default function PetsScreen({
             styles.scrollContent,
             {
               paddingTop: 0,
-              paddingBottom: 24 + insets.bottom,
+              paddingBottom: 214 + insets.bottom,
             },
           ]}
           showsVerticalScrollIndicator={false}
-          scrollIndicatorInsets={{ bottom: 140 }}
+          scrollIndicatorInsets={{ bottom: 214 }}
           bounces
           contentInsetAdjustmentBehavior="never"
           automaticallyAdjustContentInsets={false}
@@ -157,13 +167,24 @@ export default function PetsScreen({
           }
         >
           <View style={styles.headerBlock}>
-            <View style={styles.headerTopRow}>
+            <View style={styles.topRow}>
               <Pressable onPress={handleBack} style={styles.backButton}>
                 <Text style={styles.backButtonText}>{'\u2039'}</Text>
               </Pressable>
-              <View pointerEvents="none" style={styles.headerLogoWrap}>
-                <SvgUri uri={logoUri} width={24} height={24} />
-              </View>
+              <Pressable onPress={handleOpenProfile} style={styles.profileButton}>
+                {userAvatarUri ? (
+                  <Image
+                    source={{ uri: userAvatarUri }}
+                    style={styles.profileAvatar}
+                  />
+                ) : (
+                  <View style={styles.profileAvatarFallback}>
+                    <Text style={styles.profileAvatarFallbackText}>
+                      {userName?.[0]?.toUpperCase?.() ?? 'B'}
+                    </Text>
+                  </View>
+                )}
+              </Pressable>
             </View>
             <Text style={styles.eyebrow}>{isTr ? 'PETLERIN' : 'YOUR PETS'}</Text>
             <Text style={styles.title}>{screenTitle}</Text>
@@ -172,7 +193,13 @@ export default function PetsScreen({
           <View style={[styles.stack, compact && styles.stackCompact]}>
             <View style={styles.mainContent}>
               {viewItems.length > 0 ? (
-                <View style={styles.cardList}>
+                <View
+                  style={[
+                    styles.petsList,
+                    mediumDenseList && styles.petsListDense,
+                    maxDenseList && styles.petsListMaxDense,
+                  ]}
+                >
                   {viewItems.map((pet, index) => (
                     <PetListCard
                       key={pet.id}
@@ -182,55 +209,53 @@ export default function PetsScreen({
                       updatedLabel={pet.updatedLabel}
                       imageUri={pet.imageUri}
                       highlighted={pet.isActive || index === 0}
-                      compact={compact}
+                      compact={compact || mediumDenseList}
                       onPress={() => onOpenPet(pet.id)}
                     />
                   ))}
                 </View>
-              ) : (
-                <View style={styles.emptyCard}>
-                  <Text style={styles.emptyTitle}>{isTr ? 'Henuz pet yok' : 'No pets yet'}</Text>
-                  <Text style={styles.emptySub}>
-                    {isTr
-                      ? 'Ilk pet eklendiginde burada ayni premium duzende gorunecek.'
-                      : 'Your pets will appear here in the same premium layout after the first one is added.'}
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.bottomCtaWrap}>
-                <Pressable
-                  onPress={handleAddPet}
-                  style={({ pressed }) => [
-                    styles.bottomCtaPressable,
-                    (!canAddPet && !isPremiumPlan) && styles.bottomCtaDisabled,
-                    pressed && styles.bottomCtaPressed,
-                  ]}
-                  disabled={!canAddPet && !isPremiumPlan}
-                >
-                  <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-                    <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-                      <Defs>
-                        <SvgLinearGradient id="petsBottomCtaGrad" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse">
-                          <Stop offset="0%" stopColor="#4FB3A5" />
-                          <Stop offset="100%" stopColor="#2F9E8F" />
-                        </SvgLinearGradient>
-                      </Defs>
-                      <Rect x="0" y="0" width="100" height="100" fill="url(#petsBottomCtaGrad)" />
-                    </Svg>
+                ) : (
+                  <View style={styles.emptyCard}>
+                    <Text style={styles.emptyTitle}>{isTr ? 'Henuz pet yok' : 'No pets yet'}</Text>
+                    <Text style={styles.emptySub}>
+                      {isTr
+                        ? 'Ilk pet eklendiginde burada ayni premium duzende gorunecek.'
+                        : 'Your pets will appear here in the same premium layout after the first one is added.'}
+                    </Text>
                   </View>
-                  <View style={styles.bottomCtaGradient}>
-                    <Text style={styles.bottomCtaText}>{ctaLabel}</Text>
-                    <MaterialCommunityIcons name="paw" size={16} color="rgba(255,255,255,0.9)" style={styles.bottomCtaIcon} />
-                  </View>
-                </Pressable>
-                <Text style={styles.helperText}>
-                  Add another pet to unlock full tracking experience
-                </Text>
+                )}
               </View>
             </View>
+          </ScrollView>
+        <View
+          style={[
+            styles.bottomCtaWrap,
+            { bottom: insets.bottom + 118 },
+          ]}
+          pointerEvents="box-none"
+        >
+          <View style={styles.ctaContainer}>
+            <Pressable
+              onPress={handleAddPet}
+              style={({ pressed }) => [
+                styles.ctaButton,
+                pressed && styles.ctaButtonPressed,
+              ]}
+            >
+              <LinearGradient
+                colors={['#35AE9D', '#1F7F73']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.ctaButtonInner}
+              >
+                <Text style={styles.ctaText}>{ctaLabel}</Text>
+              </LinearGradient>
+            </Pressable>
+            <Text style={styles.ctaSubtext}>
+              Add another pet to manage all profiles in one place
+            </Text>
           </View>
-        </ScrollView>
+        </View>
       </View>
       </SafeAreaView>
     </View>
@@ -256,12 +281,13 @@ const styles = StyleSheet.create({
   },
   headerBlock: {
     paddingTop: 8,
-    marginBottom: 18,
+    marginBottom: 12,
   },
-  headerTopRow: {
-    height: 42,
-    justifyContent: 'center',
-    marginBottom: 14,
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 26,
   },
   backButton: {
     width: 42,
@@ -270,26 +296,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(35,76,71,0.22)',
-    backgroundColor: 'rgba(255,255,255,0.42)',
+    borderColor: 'rgba(74,108,103,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.52)',
+    shadowColor: '#6f8f89',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
     alignSelf: 'flex-start',
   },
-  headerLogoWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
+  profileButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.2,
+    borderColor: 'rgba(28, 56, 53, 0.10)',
+    backgroundColor: 'rgba(255,255,255,0.28)',
   },
-  headerLogo: {
-    width: 24,
-    height: 24,
-    opacity: 0.96,
+  profileAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  profileAvatarFallback: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#E8DDE3',
+  },
+  profileAvatarFallbackText: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#214B46',
   },
   backButtonText: {
     fontSize: 25,
     lineHeight: 25,
-    color: '#24534C',
+    color: '#2B5D56',
     marginTop: -1,
   },
   eyebrow: {
@@ -316,55 +363,66 @@ const styles = StyleSheet.create({
   mainContent: {
     gap: 8,
   },
-  cardList: {
-    gap: 0,
+  petsList: {
+    marginTop: 18,
+    gap: 16,
+  },
+  petsListDense: {
+    gap: 12,
+  },
+  petsListMaxDense: {
+    gap: 10,
   },
   bottomCtaWrap: {
-    marginTop: 12,
-    alignItems: 'center',
+    position: 'absolute',
+    left: 20,
+    right: 20,
+    zIndex: 30,
   },
-  bottomCtaPressable: {
-    borderRadius: 999,
+  ctaContainer: {
+    marginTop: 18,
+    alignSelf: 'stretch',
+  },
+  ctaButton: {
+    height: 62,
+    borderRadius: 31,
     overflow: 'hidden',
-    shadowColor: '#1E3348',
-    shadowOpacity: 0.16,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#238B80',
+    shadowColor: '#238B80',
+    shadowOpacity: 0.22,
     shadowRadius: 18,
-    shadowOffset: { width: 0, height: 9 },
+    shadowOffset: { width: 0, height: 10 },
     elevation: 7,
   },
-  bottomCtaDisabled: {
-    opacity: 0.55,
+  ctaButtonPressed: {
+    transform: [{ scale: 0.985 }],
+    opacity: 0.94,
   },
-  bottomCtaPressed: {
-    transform: [{ scale: 0.992 }],
-    opacity: 0.98,
-  },
-  bottomCtaGradient: {
-    paddingVertical: 17,
-    borderRadius: 999,
-    paddingHorizontal: 22,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  bottomCtaText: {
-    color: '#FFFFFF',
+  ctaText: {
     fontSize: 17,
     fontWeight: '700',
-    letterSpacing: 0.18,
+    color: '#FFFFFF',
+    letterSpacing: -0.2,
+    marginTop: 0,
   },
-  bottomCtaIcon: {
-    marginLeft: 8,
-    marginTop: 1,
+  ctaButtonInner: {
+    flex: 1,
+    width: '100%',
+    borderRadius: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
   },
-  helperText: {
-    marginTop: 12,
-    fontSize: 13,
-    color: '#2F5D5A',
-    opacity: 0.6,
+  ctaSubtext: {
+    marginTop: 8,
     textAlign: 'center',
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '400',
+    color: '#7A8B88',
   },
   emptyCard: {
     borderRadius: 20,
