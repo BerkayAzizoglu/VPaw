@@ -31,8 +31,8 @@ export default function PrimaryGradientButton({ label, disabled = false, onPress
         <Svg width="100%" height="100%" viewBox="0 0 1 1" preserveAspectRatio="none">
           <Defs>
             <SvgLinearGradient id="btnGradPets2025" x1="0" y1="0" x2="1" y2="0">
-              <Stop offset="0%" stopColor="#05386B" />
-              <Stop offset="100%" stopColor="#5CDB95" />
+              <Stop offset="0%" stopColor="#6F8FB8" />
+              <Stop offset="100%" stopColor="#82DDB8" />
             </SvgLinearGradient>
           </Defs>
           <Rect x="0" y="0" width="1" height="1" fill="url(#btnGradPets2025)" />
@@ -49,29 +49,29 @@ const styles = StyleSheet.create({
   shell: {
     position: 'relative',
     overflow: 'hidden',
-    height: 62,
-    borderRadius: 31,
+    minHeight: 72,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#0A7AA8',
-    shadowOpacity: 0.48,
-    shadowRadius: 28,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 16,
+    shadowColor: '#21466B',
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
   },
   shellDisabled: {
     shadowOpacity: 0.18,
   },
   shellPressed: {
-    transform: [{ scale: 1.014 }, { translateY: -2 }],
-    opacity: 1,
+    transform: [{ scale: 0.99 }],
+    opacity: 0.97,
   },
   label: {
-    fontSize: 17,
+    fontSize: 18,
     lineHeight: 22,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.2,
+    fontWeight: '800',
+    color: '#F7FAFC',
+    letterSpacing: -0.1,
   },
   labelDisabled: {
     color: 'rgba(255,255,255,0.86)',

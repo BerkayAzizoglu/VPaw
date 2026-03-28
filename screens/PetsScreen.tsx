@@ -3,7 +3,6 @@ import { PanResponder, ScrollView, StyleSheet, Text, View, useWindowDimensions }
 import type { WeightPoint } from '../lib/healthMvpModel';
 import type { PetProfile } from '../lib/petProfileTypes';
 import BackgroundBlobs from '../components/pets/BackgroundBlobs';
-import HeroInfoCard from '../components/pets/HeroInfoCard';
 import PetListCard from '../components/pets/PetListCard';
 import PetsHeader from '../components/pets/PetsHeader';
 import PrimaryGradientButton from '../components/pets/PrimaryGradientButton';
@@ -24,19 +23,32 @@ type PetsViewItem = {
   id: string;
   name: string;
   meta: string;
-  weightText: string;
+  weightValue: number | null;
+  updatedLabel?: string | null;
+  latestWeightValue: number | null;
+  latestWeightDateMs: number | null;
+  hasWeight: boolean;
   imageUri?: string;
   isActive: boolean;
 };
 
-function formatWeight(value: number | null, locale: 'en' | 'tr') {
-  if (value == null) return locale === 'tr' ? 'Son kilo: -' : 'Last weight: -';
-  return `${locale === 'tr' ? 'Son kilo' : 'Last weight'}: ${value.toFixed(1)} kg`;
-}
-
 function localizeType(type: PetProfile['petType'], locale: 'en' | 'tr') {
   if (locale === 'tr') return type === 'Dog' ? 'Kopek' : type === 'Cat' ? 'Kedi' : type;
   return type;
+}
+
+function parseDateMs(value: string | undefined) {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function formatShortDate(value: string | undefined, locale: 'en' | 'tr') {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const lang = locale === 'tr' ? 'tr-TR' : 'en-US';
+  return new Intl.DateTimeFormat(lang, { day: 'numeric', month: 'short' }).format(date);
 }
 
 export default function PetsScreen({
@@ -55,25 +67,58 @@ export default function PetsScreen({
   const sortedPets = [...pets].sort((a, b) => (a.id === activePetId ? -1 : b.id === activePetId ? 1 : a.name.localeCompare(b.name)));
 
   const viewItems: PetsViewItem[] = sortedPets.map((pet) => {
-    const latestWeight = (weightsByPet?.[pet.id] ?? []).at(-1)?.value ?? null;
+    const latestWeightPoint = (weightsByPet?.[pet.id] ?? []).at(-1);
+    const latestWeight = latestWeightPoint?.value ?? null;
     const typeLabel = localizeType(pet.petType, locale);
     const meta = [typeLabel, pet.breed?.trim()].filter(Boolean).join(' / ') || (isTr ? 'Profil hazir' : 'Profile ready');
+    const latestDateMs = parseDateMs(latestWeightPoint?.date);
+
     return {
       id: pet.id,
       name: pet.name,
       meta,
-      weightText: formatWeight(latestWeight, locale),
+      weightValue: latestWeight,
+      updatedLabel: formatShortDate(latestWeightPoint?.date, locale),
+      latestWeightValue: latestWeight,
+      latestWeightDateMs: latestDateMs,
+      hasWeight: latestWeight != null,
       imageUri: pet.image || undefined,
       isActive: pet.id === activePetId,
     };
   });
 
-  const activeCountLabel = `${viewItems.length} ${isTr ? 'Aktif' : 'Active'}`;
-  const heroTitle = isTr ? 'Tum petlerin tek yerde' : 'All your pets in one place';
-  const heroBody = isTr
-    ? 'Aktif pet en ustte kalir. Herhangi bir karti acip detaylari oradan yonetebilirsin.'
-    : 'Your active pet stays on top. Open any card to manage details from there.';
-  const ctaLabel = isTr ? 'Pet Ekle / Yonet' : 'Add / Manage Pets';
+  const trackedPets = viewItems.filter((pet) => pet.hasWeight).length;
+  const petCount = pets.length;
+  const primaryPet = sortedPets[0];
+  const primaryWeightPoint = primaryPet ? (weightsByPet?.[primaryPet.id] ?? []).at(-1) : undefined;
+  const primaryWeightValue = primaryWeightPoint?.value ?? null;
+  const primaryUpdatedLabel = formatShortDate(primaryWeightPoint?.date, locale);
+
+  const lastWeightText =
+    primaryWeightValue != null ? `${primaryWeightValue.toFixed(1)} kg` : 'No weight data';
+  const lastUpdatedText = primaryUpdatedLabel ?? 'No recent updates';
+
+  const snapshotTitle =
+    petCount === 1 && primaryPet?.name
+      ? `${primaryPet.name} snapshot`
+      : 'Care snapshot';
+
+  const snapshotHeadline =
+    petCount === 1
+      ? `${primaryPet?.name ?? 'Your pet'} is being tracked`
+      : `${petCount} pets in care`;
+
+  const snapshotSubtext =
+    primaryWeightValue != null
+      ? `Latest weight recorded: ${lastWeightText}`
+      : 'Add the first health record to build a clearer care overview.';
+
+  const activeCountLabel = isTr ? 'Bakim Paneli' : 'Care Overview';
+  const heroTitle = snapshotTitle;
+  const heroBody = `${snapshotHeadline}\n${snapshotSubtext}`;
+  const heroSupporting = `Last updated ${lastUpdatedText}`;
+  const ctaLabel = isTr ? 'Petleri Yonet' : 'Manage Pets';
+
   const stackMinHeight = Math.max(560, screenHeight - 210);
   const swipeBackGuard = React.useRef(false);
   const panResponder = React.useMemo(
@@ -106,15 +151,44 @@ export default function PetsScreen({
     <View style={styles.screen} {...panResponder.panHandlers}>
       <BackgroundBlobs />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <PetsHeader
-          label={isTr ? 'Petlerin' : 'Your Pets'}
-          title={activeCountLabel}
-          onBack={onBack}
-        />
+        <PetsHeader label={isTr ? 'Petlerin' : 'Your Pets'} title={activeCountLabel} onBack={onBack} />
 
         <View style={[styles.stack, { minHeight: stackMinHeight }]}>
           <View style={styles.mainContent}>
-            <HeroInfoCard title={heroTitle} body={heroBody} />
+            <View style={styles.snapshotCard}>
+              <View style={styles.snapshotHeaderRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.snapshotEyebrow}>YOUR PETS</Text>
+                  <Text style={styles.snapshotTitle}>{snapshotTitle}</Text>
+                </View>
+
+                <View style={styles.snapshotIconWrap}>
+                  <Text style={styles.snapshotIcon}>⌁</Text>
+                </View>
+              </View>
+
+              <Text style={styles.snapshotHeadline}>{snapshotHeadline}</Text>
+              <Text style={styles.snapshotSubtext}>{snapshotSubtext}</Text>
+
+              <View style={styles.snapshotStatsRow}>
+                <View style={styles.snapshotStatPill}>
+                  <Text style={styles.snapshotStatValue}>{petCount}</Text>
+                  <Text style={styles.snapshotStatLabel}>Pets</Text>
+                </View>
+
+                <View style={styles.snapshotStatPill}>
+                  <Text style={styles.snapshotStatValue}>
+                    {primaryWeightValue != null ? 'Tracked' : 'No data'}
+                  </Text>
+                  <Text style={styles.snapshotStatLabel}>Weight</Text>
+                </View>
+
+                <View style={styles.snapshotStatPill}>
+                  <Text style={styles.snapshotStatValue}>{lastUpdatedText}</Text>
+                  <Text style={styles.snapshotStatLabel}>Updated</Text>
+                </View>
+              </View>
+            </View>
 
             {viewItems.length > 0 ? (
               <View style={styles.cardList}>
@@ -123,10 +197,9 @@ export default function PetsScreen({
                     key={pet.id}
                     name={pet.name}
                     meta={pet.meta}
-                    weightText={pet.weightText}
+                    weightValue={pet.weightValue}
+                    updatedLabel={pet.updatedLabel}
                     imageUri={pet.imageUri}
-                    badge={pet.isActive ? (isTr ? 'Aktif' : 'Active') : undefined}
-                    actionLabel={isTr ? 'Ac' : 'Open'}
                     highlighted={pet.isActive || index === 0}
                     onPress={() => onOpenPet(pet.id)}
                   />
@@ -162,15 +235,15 @@ const styles = StyleSheet.create({
     paddingBottom: 72,
   },
   stack: {
-    marginTop: 10,
+    marginTop: 8,
     paddingHorizontal: 20,
     justifyContent: 'space-between',
   },
   mainContent: {
-    gap: 14,
+    gap: 16,
   },
   cardList: {
-    gap: 12,
+    gap: 10,
   },
   buttonWrap: {
     marginTop: 46,
@@ -197,5 +270,95 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: '400',
     color: 'rgba(26,30,46,0.55)',
+  },
+  snapshotCard: {
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    borderRadius: 28,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.45)',
+    shadowColor: '#16324F',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 3,
+  },
+  snapshotHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  snapshotEyebrow: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    color: 'rgba(18,52,86,0.6)',
+    marginBottom: 6,
+  },
+  snapshotTitle: {
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '900',
+    color: '#10243E',
+  },
+  snapshotIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(129, 223, 190, 0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  snapshotIcon: {
+    fontSize: 18,
+    lineHeight: 20,
+    fontWeight: '700',
+    color: '#1496A6',
+  },
+  snapshotHeadline: {
+    fontSize: 18,
+    lineHeight: 24,
+    fontWeight: '700',
+    color: '#17314D',
+    marginBottom: 8,
+  },
+  snapshotSubtext: {
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: '500',
+    color: 'rgba(23,49,77,0.72)',
+    marginBottom: 18,
+  },
+  snapshotStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  snapshotStatPill: {
+    flex: 1,
+    minHeight: 64,
+    borderRadius: 18,
+    paddingHorizontal: 10,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(255,255,255,0.52)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+    justifyContent: 'center',
+  },
+  snapshotStatValue: {
+    fontSize: 16,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#157C92',
+    marginBottom: 4,
+  },
+  snapshotStatLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: 'rgba(23,49,77,0.58)',
   },
 });

@@ -5,10 +5,9 @@ import * as Haptics from 'expo-haptics';
 type PetListCardProps = {
   name: string;
   meta: string;
-  weightText: string;
+  weightValue: number | null;
+  updatedLabel?: string | null;
   imageUri?: string;
-  badge?: string;
-  actionLabel: string;
   highlighted?: boolean;
   onPress: () => void;
 };
@@ -25,10 +24,9 @@ function InitialAvatar({ name }: { name: string }) {
 export default function PetListCard({
   name,
   meta,
-  weightText,
+  weightValue,
+  updatedLabel,
   imageUri,
-  badge,
-  actionLabel,
   highlighted = false,
   onPress,
 }: PetListCardProps) {
@@ -38,138 +36,129 @@ export default function PetListCard({
   };
 
   return (
-    <Pressable style={({ pressed }) => [styles.shell, pressed && styles.shellPressed]} onPress={handlePress}>
-      <View style={[styles.avatarRing, highlighted && styles.avatarRingActive]}>
-        {imageUri ? <Image source={{ uri: imageUri }} style={styles.avatar} /> : <InitialAvatar name={name} />}
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [
+        styles.petCard,
+        highlighted ? styles.petCardActive : styles.petCardDefault,
+        pressed && styles.petCardPressed,
+      ]}
+    >
+      {imageUri ? <Image source={{ uri: imageUri }} style={styles.petAvatar} /> : <InitialAvatar name={name} />}
+
+      <View style={styles.petCardBody}>
+        <Text style={styles.petName}>{name}</Text>
+        <Text style={styles.petMeta}>{meta}</Text>
+        <Text style={styles.petWeightLine}>
+          {weightValue != null ? `Weight: ${weightValue.toFixed(1)} kg` : 'No weight record'}
+        </Text>
+        <Text style={styles.petUpdatedLine}>{updatedLabel ?? 'No recent updates'}</Text>
       </View>
 
-      <View style={styles.copyBlock}>
-        <View style={styles.nameRow}>
-          <Text style={styles.name}>{name}</Text>
-          {badge ? (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{badge}</Text>
-            </View>
-          ) : null}
-        </View>
-        <Text style={styles.meta}>{meta}</Text>
-        <Text style={styles.weight}>{weightText}</Text>
+      <View style={styles.chevronWrap}>
+        <Text style={styles.chevron}>{'›'}</Text>
       </View>
-
-      <Text style={[styles.openText, highlighted && styles.openTextActive]}>{actionLabel}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  shell: {
-    position: 'relative',
-    overflow: 'hidden',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  petCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    backgroundColor: 'rgba(255,255,255,0.40)',
+    backgroundColor: 'rgba(255,255,255,0.74)',
+    borderRadius: 26,
+    padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.55)',
-    shadowColor: '#8090B0',
-    shadowOpacity: 0.10,
+    borderColor: 'rgba(255,255,255,0.45)',
+    shadowColor: '#16324F',
+    shadowOpacity: 0.06,
     shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 2,
   },
-  shellPressed: {
-    transform: [{ scale: 0.992 }],
-    opacity: 0.90,
-  },
-  avatarRing: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(255,255,255,0.52)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(255,255,255,0.68)',
+  petCardDefault: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  avatarRingActive: {
-    borderColor: 'rgba(14,180,168,0.28)',
+  petCardActive: {
+    borderColor: 'rgba(220,236,243,0.92)',
   },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  petCardPressed: {
+    transform: [{ scale: 0.992 }],
+    opacity: 0.95,
+  },
+  petAvatar: {
+    width: 74,
+    height: 74,
+    borderRadius: 37,
+    marginRight: 14,
+    borderWidth: 1.4,
+    borderColor: 'rgba(210,235,240,0.95)',
   },
   initialAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 74,
+    height: 74,
+    borderRadius: 37,
     backgroundColor: '#7090B8',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 14,
+    borderWidth: 3,
+    borderColor: 'rgba(210,235,240,0.95)',
   },
   initialText: {
     fontSize: 22,
-    lineHeight: 26,
+    lineHeight: 25,
     fontWeight: '700',
     color: '#FFFFFF',
   },
-  copyBlock: {
+  petCardBody: {
     flex: 1,
     justifyContent: 'center',
   },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  name: {
-    fontSize: 18,
-    lineHeight: 22,
+  petName: {
+    fontSize: 22,
+    lineHeight: 26,
     fontWeight: '800',
-    color: '#0E1118',
-    letterSpacing: -0.3,
+    color: '#10243E',
+    marginBottom: 4,
   },
-  badge: {
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 3,
-    backgroundColor: 'rgba(14,180,168,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(14,180,168,0.18)',
+  petMeta: {
+    fontSize: 15,
+    lineHeight: 21,
+    color: 'rgba(23,49,77,0.66)',
+    marginBottom: 8,
   },
-  badgeText: {
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '700',
-    color: '#0DA89A',
-    letterSpacing: 0.2,
-  },
-  meta: {
-    marginTop: 3,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500',
-    color: 'rgba(14,17,24,0.58)',
-  },
-  weight: {
-    marginTop: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '500',
-    color: 'rgba(14,17,24,0.58)',
-  },
-  openText: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
+  petWeightLine: {
     fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '600',
-    color: 'rgba(40,55,75,0.40)',
+    lineHeight: 22,
+    fontWeight: '700',
+    color: '#17314D',
+    marginBottom: 2,
   },
-  openTextActive: {
-    color: '#0EB4A8',
+  petUpdatedLine: {
+    fontSize: 12,
+    lineHeight: 20,
+    fontWeight: '600',
+    color: '#1C8596',
+  },
+  chevronWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(240,246,248,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(208,220,228,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 12,
+  },
+  chevron: {
+    fontSize: 30,
+    lineHeight: 32,
+    color: '#177D90',
+    fontWeight: '500',
+    marginTop: -2,
   },
 });
