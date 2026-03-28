@@ -1788,6 +1788,61 @@ export default function AuthGate() {
     setRoute('addPet');
   };
 
+  const refreshPetsFromCloud = React.useCallback(async () => {
+    if (!session?.user?.id) return;
+
+    const remote = await fetchPetProfilesFromCloud();
+    if (!remote) return;
+
+    setCloudMetadataReady(true);
+    const nextProfiles: Record<string, PetProfile> = { ...petProfiles };
+    const nextUpdatedAt: PerPetUpdatedAt = { ...petProfilesUpdatedAt };
+    const nextCloudUpdatedAt: PerPetUpdatedAt = { ...cloudPetProfilesUpdatedAt, ...remote.updatedAt };
+
+    const allCloudPetIds = Object.keys(remote.profiles);
+    allCloudPetIds.forEach((petId) => {
+      const cloudProfile = remote.profiles[petId];
+      if (!cloudProfile) return;
+
+      const localUpdatedAt = petProfilesUpdatedAt[petId];
+      const cloudUpdatedAt = remote.updatedAt[petId];
+      const localMs = parseUpdatedAtMs(localUpdatedAt);
+      const cloudMs = parseUpdatedAtMs(cloudUpdatedAt);
+
+      const winner = localMs != null && cloudMs != null && cloudMs > localMs ? 'cloud' : 'local';
+      if (winner !== 'cloud') return;
+
+      const normalized = normalizePetProfiles({ [petId]: cloudProfile })[petId];
+      if (!normalized) return;
+      nextProfiles[petId] = normalized;
+      nextUpdatedAt[petId] = cloudUpdatedAt ?? localUpdatedAt ?? new Date().toISOString();
+    });
+
+    const cloudOnlyPetIds = Object.keys(nextProfiles).filter((petId) => {
+      const profile = nextProfiles[petId];
+      return Boolean(profile && typeof profile.name === 'string' && profile.name.trim().length > 0);
+    });
+
+    const nextPetList = [
+      ...petList.filter((petId) => cloudOnlyPetIds.includes(petId)),
+      ...cloudOnlyPetIds.filter((petId) => !petList.includes(petId)),
+    ];
+
+    setPetProfiles(nextProfiles);
+    setPetProfilesUpdatedAt(nextUpdatedAt);
+    setCloudPetProfilesUpdatedAt(nextCloudUpdatedAt);
+    setPetList(nextPetList);
+    if (!nextPetList.includes(activePetRef.current)) {
+      setActivePetWithPersist(nextPetList[0] ?? '');
+    }
+  }, [
+    cloudPetProfilesUpdatedAt,
+    petList,
+    petProfiles,
+    petProfilesUpdatedAt,
+    session?.user?.id,
+  ]);
+
   const reminderSuggestions = useMemo<ReminderSuggestion[]>(() => {
     const result: ReminderSuggestion[] = [];
 
@@ -3207,6 +3262,7 @@ export default function AuthGate() {
         onBack={() => setRoute('profile')}
         onOpenPet={(petId) => openPetProfile(petId, 'pets')}
         onAddPet={openAddPet}
+        onRefresh={refreshPetsFromCloud}
       />
     );
   }

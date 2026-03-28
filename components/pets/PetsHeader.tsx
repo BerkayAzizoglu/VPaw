@@ -1,24 +1,28 @@
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { ChevronLeft } from 'lucide-react-native';
 
 type PetsHeaderProps = {
   label: string;
   title: string;
   caption?: string;
   onBack: () => void;
+  compact?: boolean;
 };
 
-export default function PetsHeader({ label, title, caption, onBack }: PetsHeaderProps) {
+export default function PetsHeader({ label, title, caption, onBack, compact = false }: PetsHeaderProps) {
   return (
-    <View style={styles.container}>
-      <Pressable style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]} onPress={onBack}>
-        <ChevronLeft size={18} color="#EAF7FF" strokeWidth={2.4} />
+    <View style={[styles.container, compact && styles.containerCompact]}>
+      <Pressable
+        style={({ pressed }) => [styles.backButton, compact && styles.backButtonCompact, pressed && styles.backButtonPressed]}
+        onPress={onBack}
+        hitSlop={8}
+      >
+        <Text style={[styles.backButtonText, compact && styles.backButtonTextCompact]}>{'\u2039'}</Text>
       </Pressable>
 
-      <View style={styles.copyBlock}>
-        <Text style={styles.label}>{label.toUpperCase()}</Text>
-        <Text style={styles.title}>{title}</Text>
+      <View style={[styles.copyBlock, compact && styles.copyBlockCompact]}>
+        <Text style={[styles.eyebrow, compact && styles.eyebrowCompact]}>{label.toUpperCase()}</Text>
+        <Text style={[styles.title, compact && styles.titleCompact]}>{title}</Text>
         {caption ? <Text style={styles.caption}>{caption}</Text> : null}
       </View>
     </View>
@@ -27,45 +31,79 @@ export default function PetsHeader({ label, title, caption, onBack }: PetsHeader
 
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 22,
-    paddingTop: 46,
-    paddingBottom: 10,
+    paddingHorizontal: 0,
+    paddingTop: 4,
+    paddingBottom: 6,
+  },
+  containerCompact: {
+    paddingTop: 2,
+    paddingBottom: 2,
   },
   backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.32)',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.36)',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    marginBottom: 14,
+    alignSelf: 'flex-start',
+  },
+  backButtonCompact: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginBottom: 12,
+  },
+  backButtonText: {
+    fontSize: 24,
+    lineHeight: 24,
+    color: '#F5FAFA',
+    marginTop: -1,
+  },
+  backButtonTextCompact: {
+    fontSize: 22,
+    lineHeight: 22,
   },
   backButtonPressed: {
     opacity: 0.9,
-    transform: [{ scale: 0.96 }],
+    transform: [{ scale: 0.97 }],
   },
   copyBlock: {
-    marginTop: 14,
+    marginTop: 0,
   },
-  label: {
+  copyBlockCompact: {
+    marginTop: 0,
+  },
+  eyebrow: {
     fontSize: 14,
-    lineHeight: 18,
     fontWeight: '800',
     letterSpacing: 1.2,
     color: 'rgba(255,255,255,0.92)',
-    marginBottom: 8,
+    marginBottom: 5,
+  },
+  eyebrowCompact: {
+    fontSize: 13,
+    letterSpacing: 1.1,
+    marginBottom: 5,
   },
   title: {
-    fontSize: 52,
-    lineHeight: 54,
+    fontSize: 36,
+    lineHeight: 40,
     fontWeight: '900',
-    color: '#F4FAFA',
-    letterSpacing: -1.8,
-    marginBottom: 22,
+    letterSpacing: -1.05,
+    color: '#F5FAFA',
+    marginBottom: 18,
+  },
+  titleCompact: {
+    fontSize: 32,
+    lineHeight: 36,
+    marginBottom: 16,
   },
   caption: {
-    marginTop: 6,
+    marginTop: 4,
     fontSize: 13,
     lineHeight: 18,
     fontWeight: '600',

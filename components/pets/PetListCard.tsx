@@ -9,14 +9,15 @@ type PetListCardProps = {
   updatedLabel?: string | null;
   imageUri?: string;
   highlighted?: boolean;
+  compact?: boolean;
   onPress: () => void;
 };
 
-function InitialAvatar({ name }: { name: string }) {
+function InitialAvatar({ name, compact = false }: { name: string; compact?: boolean }) {
   const initial = (name || '?').slice(0, 1).toUpperCase();
   return (
-    <View style={styles.initialAvatar}>
-      <Text style={styles.initialText}>{initial}</Text>
+    <View style={[styles.initialAvatar, compact && styles.initialAvatarCompact]}>
+      <Text style={[styles.initialText, compact && styles.initialTextCompact]}>{initial}</Text>
     </View>
   );
 }
@@ -28,6 +29,7 @@ export default function PetListCard({
   updatedLabel,
   imageUri,
   highlighted = false,
+  compact = false,
   onPress,
 }: PetListCardProps) {
   const handlePress = () => {
@@ -39,73 +41,115 @@ export default function PetListCard({
     <Pressable
       onPress={handlePress}
       style={({ pressed }) => [
-        styles.petCard,
+        styles.petCardWrap,
+        compact && styles.petCardCompact,
         highlighted ? styles.petCardActive : styles.petCardDefault,
         pressed && styles.petCardPressed,
       ]}
     >
-      {imageUri ? <Image source={{ uri: imageUri }} style={styles.petAvatar} /> : <InitialAvatar name={name} />}
+      <View style={[styles.petCard, compact && styles.petCardCompactInner]}>
+        {imageUri ? (
+          <Image source={{ uri: imageUri }} style={[styles.petAvatar, compact && styles.petAvatarCompact]} />
+        ) : (
+          <InitialAvatar name={name} compact={compact} />
+        )}
 
-      <View style={styles.petCardBody}>
-        <Text style={styles.petName}>{name}</Text>
-        <Text style={styles.petMeta}>{meta}</Text>
-        <Text style={styles.petWeightLine}>
-          {weightValue != null ? `Weight: ${weightValue.toFixed(1)} kg` : 'No weight record'}
-        </Text>
-        <Text style={styles.petUpdatedLine}>{updatedLabel ?? 'No recent updates'}</Text>
-      </View>
+        <View style={styles.petCardBody}>
+          <Text style={[styles.petName, compact && styles.petNameCompact]}>{name}</Text>
+          <Text style={[styles.petMeta, compact && styles.petMetaCompact]}>{meta}</Text>
 
-      <View style={styles.chevronWrap}>
-        <Text style={styles.chevron}>{'›'}</Text>
+          <View style={styles.petInfoRow}>
+            <Text style={[styles.petWeight, compact && styles.petWeightCompact]}>
+              {weightValue != null ? `Weight: ${weightValue.toFixed(1)} kg` : 'No weight record'}
+            </Text>
+          </View>
+
+          <Text style={[styles.petUpdated, compact && styles.petUpdatedCompact]}>
+            {weightValue != null ? 'Updated recently' : (updatedLabel ?? 'No recent updates')}
+          </Text>
+        </View>
+
+        <View style={styles.petChevronWrap}>
+          <Text style={[styles.petChevron, compact && styles.petChevronCompact]}>{'\u203A'}</Text>
+        </View>
       </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
+  petCardWrap: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 30,
+    marginBottom: 18,
+  },
   petCard: {
+    position: 'relative',
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.74)',
-    borderRadius: 26,
-    padding: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.45)',
-    shadowColor: '#16324F',
+    borderColor: '#EEF3F6',
+    shadowColor: '#0F2A3D',
     shadowOpacity: 0.06,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
+    elevation: 4,
+  },
+  petCardCompact: {
+    borderRadius: 24,
+  },
+  petCardCompactInner: {
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   petCardDefault: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   petCardActive: {
-    borderColor: 'rgba(220,236,243,0.92)',
+    borderColor: 'rgba(223,242,238,0.95)',
+    shadowOpacity: 0.08,
   },
   petCardPressed: {
-    transform: [{ scale: 0.992 }],
-    opacity: 0.95,
+    transform: [{ scale: 0.988 }],
+    opacity: 0.98,
   },
   petAvatar: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    marginRight: 14,
-    borderWidth: 1.4,
-    borderColor: 'rgba(210,235,240,0.95)',
+    width: 76,
+    height: 76,
+    borderRadius: 38,
+    marginRight: 16,
+    borderWidth: 3,
+    borderColor: 'rgba(255,255,255,0.95)',
+  },
+  petAvatarCompact: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    marginRight: 10,
   },
   initialAvatar: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
+    width: 76,
+    height: 76,
+    borderRadius: 38,
     backgroundColor: '#7090B8',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 14,
+    marginRight: 16,
     borderWidth: 3,
-    borderColor: 'rgba(210,235,240,0.95)',
+    borderColor: 'rgba(255,255,255,0.95)',
+  },
+  initialAvatarCompact: {
+    width: 68,
+    height: 68,
+    borderRadius: 34,
+    marginRight: 10,
   },
   initialText: {
     fontSize: 22,
@@ -113,52 +157,76 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FFFFFF',
   },
+  initialTextCompact: {
+    fontSize: 19,
+    lineHeight: 22,
+  },
   petCardBody: {
     flex: 1,
     justifyContent: 'center',
   },
   petName: {
-    fontSize: 22,
-    lineHeight: 26,
+    fontSize: 21,
+    lineHeight: 25,
     fontWeight: '800',
-    color: '#10243E',
+    color: '#17344F',
     marginBottom: 4,
+  },
+  petNameCompact: {
+    fontSize: 19,
+    lineHeight: 23,
+    marginBottom: 3,
   },
   petMeta: {
     fontSize: 15,
-    lineHeight: 21,
-    color: 'rgba(23,49,77,0.66)',
-    marginBottom: 8,
-  },
-  petWeightLine: {
-    fontSize: 14,
-    lineHeight: 22,
-    fontWeight: '700',
-    color: '#17314D',
-    marginBottom: 2,
-  },
-  petUpdatedLine: {
-    fontSize: 12,
     lineHeight: 20,
-    fontWeight: '600',
-    color: '#1C8596',
+    color: 'rgba(35,67,95,0.7)',
+    marginBottom: 7,
   },
-  chevronWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: 'rgba(240,246,248,0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(208,220,228,0.9)',
+  petMetaCompact: {
+    fontSize: 14,
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  petInfoRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 12,
+    marginBottom: 3,
   },
-  chevron: {
+  petWeight: {
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '800',
+    color: '#17344F',
+  },
+  petWeightCompact: {
+    fontSize: 15,
+    lineHeight: 19,
+  },
+  petUpdated: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: 'rgba(32,123,126,0.85)',
+  },
+  petUpdatedCompact: {
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  petChevronWrap: {
+    width: 30,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    marginLeft: 10,
+  },
+  petChevron: {
     fontSize: 30,
-    lineHeight: 32,
-    color: '#177D90',
-    fontWeight: '500',
-    marginTop: -2,
+    lineHeight: 30,
+    color: '#1A7280',
+    fontWeight: '600',
+  },
+  petChevronCompact: {
+    fontSize: 26,
+    lineHeight: 26,
   },
 });

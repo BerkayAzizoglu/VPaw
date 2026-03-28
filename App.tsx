@@ -1,4 +1,5 @@
-﻿import React from 'react';
+import React from 'react';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider } from './hooks/useAuth';
 import { LocaleProvider, useLocale } from './hooks/useLocale';
 import { AppSettingsProvider } from './hooks/useAppSettings';
@@ -18,8 +19,10 @@ function AppShell() {
 
 export default function App() {
   return (
-    <LocaleProvider>
-      <AppShell />
-    </LocaleProvider>
+    <SafeAreaProvider>
+      <LocaleProvider>
+        <AppShell />
+      </LocaleProvider>
+    </SafeAreaProvider>
   );
 }

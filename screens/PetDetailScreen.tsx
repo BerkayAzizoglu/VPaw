@@ -10,6 +10,7 @@ import {
 import { ChevronLeft, ChevronRight, Edit2, Mars, Venus } from 'lucide-react-native';
 import type { PetProfile, RoutineCareRecord } from '../lib/petProfileTypes';
 import type { WeightPoint } from '../lib/healthMvpModel';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -119,6 +120,11 @@ export default function PetDetailScreen({
   onOpenVaccinations,
 }: PetDetailScreenProps) {
   const isTr = locale === 'tr';
+  const swipePanResponder = useEdgeSwipeBack({
+    onBack,
+    fullScreenGestureEnabled: false,
+    enterVariant: 'soft',
+  });
 
   const latestWeight = weightEntries[weightEntries.length - 1];
   const currentKg = latestWeight?.value ?? null;
@@ -134,8 +140,12 @@ export default function PetDetailScreen({
   const surgeryCount = (pet.surgeriesLog ?? []).length;
 
   return (
-    <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+    <View style={styles.screen} {...swipePanResponder.panHandlers}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!swipePanResponder.isSwiping}
+      >
 
         {/* ── Header ── */}
         <View style={styles.topRow}>

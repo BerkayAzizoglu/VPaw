@@ -1,11 +1,24 @@
 import React from 'react';
-import { PanResponder, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import {
+  Image,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { SvgUri } from 'react-native-svg';
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from 'react-native-svg';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { WeightPoint } from '../lib/healthMvpModel';
 import type { PetProfile } from '../lib/petProfileTypes';
 import BackgroundBlobs from '../components/pets/BackgroundBlobs';
 import PetListCard from '../components/pets/PetListCard';
-import PetsHeader from '../components/pets/PetsHeader';
-import PrimaryGradientButton from '../components/pets/PrimaryGradientButton';
+import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 
 type PetsScreenProps = {
   pets: PetProfile[];
@@ -17,6 +30,7 @@ type PetsScreenProps = {
   onBack: () => void;
   onOpenPet: (petId: string) => void;
   onAddPet: () => void;
+  onRefresh?: () => Promise<void> | void;
 };
 
 type PetsViewItem = {
@@ -25,22 +39,15 @@ type PetsViewItem = {
   meta: string;
   weightValue: number | null;
   updatedLabel?: string | null;
-  latestWeightValue: number | null;
-  latestWeightDateMs: number | null;
-  hasWeight: boolean;
   imageUri?: string;
   isActive: boolean;
 };
 
+const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
+
 function localizeType(type: PetProfile['petType'], locale: 'en' | 'tr') {
   if (locale === 'tr') return type === 'Dog' ? 'Kopek' : type === 'Cat' ? 'Kedi' : type;
   return type;
-}
-
-function parseDateMs(value: string | undefined) {
-  if (!value) return null;
-  const ms = new Date(value).getTime();
-  return Number.isFinite(ms) ? ms : null;
 }
 
 function formatShortDate(value: string | undefined, locale: 'en' | 'tr') {
@@ -61,17 +68,24 @@ export default function PetsScreen({
   onBack,
   onOpenPet,
   onAddPet,
+  onRefresh,
 }: PetsScreenProps) {
-  const { height: screenHeight } = useWindowDimensions();
+  const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const isTr = locale === 'tr';
-  const sortedPets = [...pets].sort((a, b) => (a.id === activePetId ? -1 : b.id === activePetId ? 1 : a.name.localeCompare(b.name)));
+  const insets = useSafeAreaInsets();
+  const [refreshing, setRefreshing] = React.useState(false);
+  const compact = screenHeight <= 820 || screenWidth <= 380;
+  const sortedPets = [...pets].sort((a, b) =>
+    a.id === activePetId ? -1 : b.id === activePetId ? 1 : a.name.localeCompare(b.name)
+  );
 
   const viewItems: PetsViewItem[] = sortedPets.map((pet) => {
     const latestWeightPoint = (weightsByPet?.[pet.id] ?? []).at(-1);
     const latestWeight = latestWeightPoint?.value ?? null;
     const typeLabel = localizeType(pet.petType, locale);
-    const meta = [typeLabel, pet.breed?.trim()].filter(Boolean).join(' / ') || (isTr ? 'Profil hazir' : 'Profile ready');
-    const latestDateMs = parseDateMs(latestWeightPoint?.date);
+    const meta =
+      [typeLabel, pet.breed?.trim()].filter(Boolean).join(' / ') ||
+      (isTr ? 'Profil hazir' : 'Profile ready');
 
     return {
       id: pet.id,
@@ -79,175 +93,278 @@ export default function PetsScreen({
       meta,
       weightValue: latestWeight,
       updatedLabel: formatShortDate(latestWeightPoint?.date, locale),
-      latestWeightValue: latestWeight,
-      latestWeightDateMs: latestDateMs,
-      hasWeight: latestWeight != null,
       imageUri: pet.image || undefined,
       isActive: pet.id === activePetId,
     };
   });
 
-  const trackedPets = viewItems.filter((pet) => pet.hasWeight).length;
-  const petCount = pets.length;
-  const primaryPet = sortedPets[0];
-  const primaryWeightPoint = primaryPet ? (weightsByPet?.[primaryPet.id] ?? []).at(-1) : undefined;
-  const primaryWeightValue = primaryWeightPoint?.value ?? null;
-  const primaryUpdatedLabel = formatShortDate(primaryWeightPoint?.date, locale);
+  const screenTitle = isTr ? 'Pet Genel Bakis' : 'Pet Overview';
+  const ctaLabel = isTr ? 'Yeni Pet Ekle' : 'Add Pet';
+  const refreshOffset = Platform.OS === 'ios' ? 36 : 0;
 
-  const lastWeightText =
-    primaryWeightValue != null ? `${primaryWeightValue.toFixed(1)} kg` : 'No weight data';
-  const lastUpdatedText = primaryUpdatedLabel ?? 'No recent updates';
+  const handleRefresh = React.useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      if (onRefresh) {
+        await Promise.resolve(onRefresh());
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 650));
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  }, [onRefresh, refreshing]);
+  const handleAddPet = React.useCallback(() => {
+    onAddPet();
+  }, [onAddPet]);
+  const handleBack = React.useCallback(() => {
+    onBack();
+  }, [onBack]);
 
-  const snapshotTitle =
-    petCount === 1 && primaryPet?.name
-      ? `${primaryPet.name} snapshot`
-      : 'Care snapshot';
-
-  const snapshotHeadline =
-    petCount === 1
-      ? `${primaryPet?.name ?? 'Your pet'} is being tracked`
-      : `${petCount} pets in care`;
-
-  const snapshotSubtext =
-    primaryWeightValue != null
-      ? `Latest weight recorded: ${lastWeightText}`
-      : 'Add the first health record to build a clearer care overview.';
-
-  const activeCountLabel = isTr ? 'Bakim Paneli' : 'Care Overview';
-  const heroTitle = snapshotTitle;
-  const heroBody = `${snapshotHeadline}\n${snapshotSubtext}`;
-  const heroSupporting = `Last updated ${lastUpdatedText}`;
-  const ctaLabel = isTr ? 'Petleri Yonet' : 'Manage Pets';
-
-  const stackMinHeight = Math.max(560, screenHeight - 210);
-  const swipeBackGuard = React.useRef(false);
-  const panResponder = React.useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gestureState) =>
-          gestureState.dx > 10 && Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.6,
-        onPanResponderMove: (_, gestureState) => {
-          if (
-            !swipeBackGuard.current &&
-            gestureState.dx > 64 &&
-            Math.abs(gestureState.dy) < 36 &&
-            gestureState.vx > 0.2
-          ) {
-            swipeBackGuard.current = true;
-            onBack();
-          }
-        },
-        onPanResponderRelease: () => {
-          swipeBackGuard.current = false;
-        },
-        onPanResponderTerminate: () => {
-          swipeBackGuard.current = false;
-        },
-      }),
-    [onBack]
-  );
+  const swipePanResponder = useEdgeSwipeBack({
+    onBack,
+    fullScreenGestureEnabled: false,
+    enterVariant: 'snappy',
+  });
 
   return (
-    <View style={styles.screen} {...panResponder.panHandlers}>
+    <View style={styles.root}>
       <BackgroundBlobs />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <PetsHeader label={isTr ? 'Petlerin' : 'Your Pets'} title={activeCountLabel} onBack={onBack} />
-
-        <View style={[styles.stack, { minHeight: stackMinHeight }]}>
-          <View style={styles.mainContent}>
-            <View style={styles.snapshotCard}>
-              <View style={styles.snapshotHeaderRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.snapshotEyebrow}>YOUR PETS</Text>
-                  <Text style={styles.snapshotTitle}>{snapshotTitle}</Text>
-                </View>
-
-                <View style={styles.snapshotIconWrap}>
-                  <Text style={styles.snapshotIcon}>⌁</Text>
-                </View>
-              </View>
-
-              <Text style={styles.snapshotHeadline}>{snapshotHeadline}</Text>
-              <Text style={styles.snapshotSubtext}>{snapshotSubtext}</Text>
-
-              <View style={styles.snapshotStatsRow}>
-                <View style={styles.snapshotStatPill}>
-                  <Text style={styles.snapshotStatValue}>{petCount}</Text>
-                  <Text style={styles.snapshotStatLabel}>Pets</Text>
-                </View>
-
-                <View style={styles.snapshotStatPill}>
-                  <Text style={styles.snapshotStatValue}>
-                    {primaryWeightValue != null ? 'Tracked' : 'No data'}
-                  </Text>
-                  <Text style={styles.snapshotStatLabel}>Weight</Text>
-                </View>
-
-                <View style={styles.snapshotStatPill}>
-                  <Text style={styles.snapshotStatValue}>{lastUpdatedText}</Text>
-                  <Text style={styles.snapshotStatLabel}>Updated</Text>
-                </View>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <View style={styles.screen} {...swipePanResponder.panHandlers}>
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop: 0,
+              paddingBottom: 24 + insets.bottom,
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+          scrollIndicatorInsets={{ bottom: 140 }}
+          bounces
+          contentInsetAdjustmentBehavior="never"
+          automaticallyAdjustContentInsets={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              tintColor="#2A6A88"
+              colors={['#2D6D8A']}
+              progressViewOffset={refreshOffset}
+            />
+          }
+        >
+          <View style={styles.headerBlock}>
+            <View style={styles.headerTopRow}>
+              <Pressable onPress={handleBack} style={styles.backButton}>
+                <Text style={styles.backButtonText}>{'\u2039'}</Text>
+              </Pressable>
+              <View pointerEvents="none" style={styles.headerLogoWrap}>
+                <SvgUri uri={logoUri} width={24} height={24} />
               </View>
             </View>
+            <Text style={styles.eyebrow}>{isTr ? 'PETLERIN' : 'YOUR PETS'}</Text>
+            <Text style={styles.title}>{screenTitle}</Text>
+          </View>
 
-            {viewItems.length > 0 ? (
-              <View style={styles.cardList}>
-                {viewItems.map((pet, index) => (
-                  <PetListCard
-                    key={pet.id}
-                    name={pet.name}
-                    meta={pet.meta}
-                    weightValue={pet.weightValue}
-                    updatedLabel={pet.updatedLabel}
-                    imageUri={pet.imageUri}
-                    highlighted={pet.isActive || index === 0}
-                    onPress={() => onOpenPet(pet.id)}
-                  />
-                ))}
-              </View>
-            ) : (
-              <View style={styles.emptyCard}>
-                <Text style={styles.emptyTitle}>{isTr ? 'Henuz pet yok' : 'No pets yet'}</Text>
-                <Text style={styles.emptySub}>
-                  {isTr
-                    ? 'Ilk pet eklendiginde burada ayni premium duzende gorunecek.'
-                    : 'Your pets will appear here in the same premium layout after the first one is added.'}
+          <View style={[styles.stack, compact && styles.stackCompact]}>
+            <View style={styles.mainContent}>
+              {viewItems.length > 0 ? (
+                <View style={styles.cardList}>
+                  {viewItems.map((pet, index) => (
+                    <PetListCard
+                      key={pet.id}
+                      name={pet.name}
+                      meta={pet.meta}
+                      weightValue={pet.weightValue}
+                      updatedLabel={pet.updatedLabel}
+                      imageUri={pet.imageUri}
+                      highlighted={pet.isActive || index === 0}
+                      compact={compact}
+                      onPress={() => onOpenPet(pet.id)}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyTitle}>{isTr ? 'Henuz pet yok' : 'No pets yet'}</Text>
+                  <Text style={styles.emptySub}>
+                    {isTr
+                      ? 'Ilk pet eklendiginde burada ayni premium duzende gorunecek.'
+                      : 'Your pets will appear here in the same premium layout after the first one is added.'}
+                  </Text>
+                </View>
+              )}
+
+              <View style={styles.bottomCtaWrap}>
+                <Pressable
+                  onPress={handleAddPet}
+                  style={({ pressed }) => [
+                    styles.bottomCtaPressable,
+                    (!canAddPet && !isPremiumPlan) && styles.bottomCtaDisabled,
+                    pressed && styles.bottomCtaPressed,
+                  ]}
+                  disabled={!canAddPet && !isPremiumPlan}
+                >
+                  <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+                    <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+                      <Defs>
+                        <SvgLinearGradient id="petsBottomCtaGrad" x1="0" y1="0" x2="100" y2="0" gradientUnits="userSpaceOnUse">
+                          <Stop offset="0%" stopColor="#4FB3A5" />
+                          <Stop offset="100%" stopColor="#2F9E8F" />
+                        </SvgLinearGradient>
+                      </Defs>
+                      <Rect x="0" y="0" width="100" height="100" fill="url(#petsBottomCtaGrad)" />
+                    </Svg>
+                  </View>
+                  <View style={styles.bottomCtaGradient}>
+                    <Text style={styles.bottomCtaText}>{ctaLabel}</Text>
+                    <MaterialCommunityIcons name="paw" size={16} color="rgba(255,255,255,0.9)" style={styles.bottomCtaIcon} />
+                  </View>
+                </Pressable>
+                <Text style={styles.helperText}>
+                  Add another pet to unlock full tracking experience
                 </Text>
               </View>
-            )}
+            </View>
           </View>
-
-          <View style={styles.buttonWrap}>
-            <PrimaryGradientButton label={ctaLabel} disabled={!canAddPet && !isPremiumPlan} onPress={onAddPet} />
-          </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
+      </SafeAreaView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#98D6D1',
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: 'transparent',
+  },
   screen: {
     flex: 1,
-    backgroundColor: '#EDE8F2',
+    backgroundColor: 'transparent',
   },
-  content: {
-    paddingBottom: 72,
+  scrollContent: {
+    paddingHorizontal: 22,
+    paddingTop: 0,
+  },
+  headerBlock: {
+    paddingTop: 8,
+    marginBottom: 18,
+  },
+  headerTopRow: {
+    height: 42,
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  backButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(35,76,71,0.22)',
+    backgroundColor: 'rgba(255,255,255,0.42)',
+    alignSelf: 'flex-start',
+  },
+  headerLogoWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerLogo: {
+    width: 24,
+    height: 24,
+    opacity: 0.96,
+  },
+  backButtonText: {
+    fontSize: 25,
+    lineHeight: 25,
+    color: '#24534C',
+    marginTop: -1,
+  },
+  eyebrow: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(39,83,77,0.86)',
+    letterSpacing: 1.3,
+    marginBottom: 6,
+  },
+  title: {
+    fontSize: 34,
+    lineHeight: 37,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+    color: '#1C4741',
+    marginBottom: 10,
   },
   stack: {
-    marginTop: 8,
-    paddingHorizontal: 20,
-    justifyContent: 'space-between',
+    marginTop: 0,
+  },
+  stackCompact: {
+    marginTop: 0,
   },
   mainContent: {
-    gap: 16,
+    gap: 8,
   },
   cardList: {
-    gap: 10,
+    gap: 0,
   },
-  buttonWrap: {
-    marginTop: 46,
-    paddingBottom: 34,
+  bottomCtaWrap: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  bottomCtaPressable: {
+    borderRadius: 999,
+    overflow: 'hidden',
+    shadowColor: '#1E3348',
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 9 },
+    elevation: 7,
+  },
+  bottomCtaDisabled: {
+    opacity: 0.55,
+  },
+  bottomCtaPressed: {
+    transform: [{ scale: 0.992 }],
+    opacity: 0.98,
+  },
+  bottomCtaGradient: {
+    paddingVertical: 17,
+    borderRadius: 999,
+    paddingHorizontal: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  bottomCtaText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: 0.18,
+  },
+  bottomCtaIcon: {
+    marginLeft: 8,
+    marginTop: 1,
+  },
+  helperText: {
+    marginTop: 12,
+    fontSize: 13,
+    color: '#2F5D5A',
+    opacity: 0.6,
+    textAlign: 'center',
   },
   emptyCard: {
     borderRadius: 20,
@@ -270,95 +387,5 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: '400',
     color: 'rgba(26,30,46,0.55)',
-  },
-  snapshotCard: {
-    backgroundColor: 'rgba(255,255,255,0.78)',
-    borderRadius: 28,
-    padding: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.45)',
-    shadowColor: '#16324F',
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
-  },
-  snapshotHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  snapshotEyebrow: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    color: 'rgba(18,52,86,0.6)',
-    marginBottom: 6,
-  },
-  snapshotTitle: {
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: '900',
-    color: '#10243E',
-  },
-  snapshotIconWrap: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: 'rgba(129, 223, 190, 0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  snapshotIcon: {
-    fontSize: 18,
-    lineHeight: 20,
-    fontWeight: '700',
-    color: '#1496A6',
-  },
-  snapshotHeadline: {
-    fontSize: 18,
-    lineHeight: 24,
-    fontWeight: '700',
-    color: '#17314D',
-    marginBottom: 8,
-  },
-  snapshotSubtext: {
-    fontSize: 15,
-    lineHeight: 22,
-    fontWeight: '500',
-    color: 'rgba(23,49,77,0.72)',
-    marginBottom: 18,
-  },
-  snapshotStatsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  snapshotStatPill: {
-    flex: 1,
-    minHeight: 64,
-    borderRadius: 18,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    backgroundColor: 'rgba(255,255,255,0.52)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.4)',
-    justifyContent: 'center',
-  },
-  snapshotStatValue: {
-    fontSize: 16,
-    lineHeight: 16,
-    fontWeight: '800',
-    color: '#157C92',
-    marginBottom: 4,
-  },
-  snapshotStatLabel: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
-    color: 'rgba(23,49,77,0.58)',
   },
 });
