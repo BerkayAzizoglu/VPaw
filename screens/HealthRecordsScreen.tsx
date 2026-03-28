@@ -324,7 +324,7 @@ export default function HealthRecordsScreen({ onBack, backPreview, onAddRecord, 
       ? (isTr ? 'İlk kayıt eklendiğinde bu alan otomatik olarak dolacaktır.' : 'This area will populate automatically once the first record is added.')
       : (isTr ? 'Bağlantıyı kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
 
-  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true, enterVariant: 'snappy' });
+  const swipePanResponder = useEdgeSwipeBack({ onBack, enterVariant: 'snappy' });
 
   // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (

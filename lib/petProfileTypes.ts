@@ -30,6 +30,12 @@ export type RoutineCareRecord = {
   intervalDays: number;
 };
 
+export type PetTypeChangeLog = {
+  from: 'Dog' | 'Cat';
+  to: 'Dog' | 'Cat';
+  changedAt: string;
+};
+
 export type PetProfile = {
   id: PetId;
   name: string;
@@ -51,6 +57,8 @@ export type PetProfile = {
     internalParasite: RoutineCareRecord;
     externalParasite: RoutineCareRecord;
   };
+  petTypeChangeCount?: number;
+  petTypeChangeHistory?: PetTypeChangeLog[];
   chronicConditions: {
     allergies: boolean;
     diabetes: boolean;

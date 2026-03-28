@@ -39,6 +39,7 @@ type WeightTrackingScreenProps = {
   weightGoal?: number;
   onSetWeightGoal?: (goal: number) => void;
   totalExpenses?: { total: number; currency: string };
+  initialShowAdd?: boolean;
 };
 
 type WeightReference = {
@@ -215,6 +216,7 @@ export default function WeightTrackingScreen({
   weightGoal,
   onSetWeightGoal,
   totalExpenses,
+  initialShowAdd,
 }: WeightTrackingScreenProps) {
   const { locale } = useLocale();
   const isTr = locale === 'tr';
@@ -227,6 +229,7 @@ export default function WeightTrackingScreen({
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubX, setScrubX] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  useEffect(() => { if (initialShowAdd) setShowAdd(true); }, []);
   const [newWeight, setNewWeight] = useState('');
   const [entryDate, setEntryDate] = useState(toYmd(new Date()));
   const [entryNote, setEntryNote] = useState('');

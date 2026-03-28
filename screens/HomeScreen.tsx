@@ -9,7 +9,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -17,7 +16,7 @@ import {
 import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import LottieView from 'lottie-react-native';
-import { PawPrint, Pencil } from 'lucide-react-native';
+import { hap } from '../lib/haptics';
 import type { PetProfile } from '../lib/petProfileTypes';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
@@ -127,8 +126,12 @@ function formatPetAge(birthDate: string, locale: 'en' | 'tr') {
   }
   years = Math.max(0, years);
   months = Math.max(0, months);
-  if (locale === 'tr') return `${years} yıl ${months} ay`;
-  return `${years} years ${months} months`;
+  if (years <= 0) {
+    return locale === 'tr' ? `${months} ay` : `${months} mo`;
+  }
+  const decimalYears = years + months / 12;
+  const rounded = months === 0 ? `${years}` : decimalYears.toFixed(1).replace('.', locale === 'tr' ? ',' : '.');
+  return locale === 'tr' ? `${rounded} yas` : `${rounded} yrs`;
 }
 function parseWeightKg(value: string) {
   const parsed = Number(value.replace(',', '.').split(' ')[0]);
@@ -618,40 +621,41 @@ export default function HomeScreen({
             {...cardPanResponder.panHandlers}
             style={[styles.frontCardWrap, { opacity: switchFade, transform: [{ translateY: cardDragY }, { scale: switchScale }] }]}
           >
-            <ImageBackground key={`front-${activePet.id}-${activePet.heroImage}`} source={{ uri: activePet.heroImage }} style={styles.heroCard} imageStyle={styles.heroImage} onLoadEnd={() => setFrontImageLoaded(true)}>
-                            <Pressable style={styles.heroEditBtn} onPress={() => onOpenPetEdit?.(activePet.id)}>
-                <Pencil size={15} color="rgba(255,255,255,0.9)" strokeWidth={2.4} />
-              </Pressable>
-              <View style={styles.heroLockSwitchWrap}>
-                {isPetLockEnabled ? (
-                  <View style={styles.heroLockPawMark} pointerEvents="none">
-                    <PawPrint size={8} color="#5f7f59" strokeWidth={3.1} />
+            <Pressable
+              style={({ pressed }) => [styles.heroCard, pressed && styles.heroCardPressed]}
+              onPress={() => {
+                hap.light();
+                onOpenPetProfile?.(activePet.id);
+              }}
+            >
+              <ImageBackground
+                key={`front-${activePet.id}-${activePet.heroImage}`}
+                source={{ uri: activePet.heroImage }}
+                style={styles.heroCardImageWrap}
+                imageStyle={styles.heroImage}
+                onLoadEnd={() => setFrontImageLoaded(true)}
+              >
+                <View style={styles.heroBottom}>
+                  <Text style={styles.heroName}>{activePet.name}</Text>
+                  <View style={styles.heroMetaRow}>
+                    <Text style={styles.heroBreedPill}>{activePet.breed === 'Other' ? (activePet.coatPattern === 'Other' ? 'Other' : activePet.coatPattern) : activePet.breed}</Text>
+                    <Text style={styles.heroMeta}>{activePet.age}</Text>
                   </View>
-                ) : null}
-                <View style={styles.heroLockSwitchScale}>
-                  <Switch
-                    value={isPetLockEnabled}
-                    onValueChange={(next) => onChangePetLockEnabled?.(next)}
-                    thumbColor={isPetLockEnabled ? '#ffffff' : '#f4f4f4'}
-                    trackColor={{ false: '#d8d8d8', true: '#6e8f66' }}
-                    ios_backgroundColor="#d8d8d8"
-                  />
                 </View>
-              </View>
-<View style={styles.heroBottom}>
-                <Text style={styles.heroName}>{activePet.name}</Text>
-                <View style={styles.heroMetaRow}>
-                  <Text style={styles.heroBreedPill}>{activePet.breed === 'Other' ? (activePet.coatPattern === 'Other' ? 'Other' : activePet.coatPattern) : activePet.breed}</Text>
-                  <Text style={styles.heroMeta}>{activePet.age}</Text>
-                </View>
-              </View>
-            </ImageBackground>
+              </ImageBackground>
+            </Pressable>
           </Animated.View>
         </View>
 
         {/* ── PRIMARY HEALTH CARD (breathing animation) ── */}
         <Animated.View style={breathAnimStyle}>
-          <Pressable style={styles.weightCard} onPress={() => onOpenWeightTracking?.()}>
+          <Pressable
+            style={({ pressed }) => [styles.weightCard, pressed && styles.weightCardPressed]}
+            onPress={() => {
+              hap.light();
+              onOpenWeightTracking?.();
+            }}
+          >
             <View style={styles.weightHeader}>
               <Text style={styles.weightLabel}>{isTr ? 'AĞIRLIK PROFİLİ' : 'WEIGHT PROFILE'}</Text>
               <View style={[styles.weightDeltaBadge, { backgroundColor: weightStatusInfo.badgeBg }]}>
@@ -1126,29 +1130,30 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     overflow: 'hidden',
     justifyContent: 'flex-end',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.28)',
+    shadowColor: '#173a38',
+    shadowOpacity: 0.2,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 14 },
+    elevation: 10,
+  },
+  heroCardPressed: {
+    transform: [{ scale: 0.988 }],
+    opacity: 0.97,
+  },
+  heroCardImageWrap: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
   heroImage: {
     borderRadius: 20,
-  },
-  heroEditBtn: {
-    position: 'absolute',
-    zIndex: 5,
-    top: 12,
-    right: 12,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: 'rgba(28,28,28,0.22)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   heroBottom: {
     backgroundColor: 'transparent',
     paddingHorizontal: 18,
     paddingTop: 10,
-    paddingBottom: 14,
+    paddingBottom: 16,
   },
   heroName: {
     fontSize: 50,
@@ -1157,7 +1162,7 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   heroMetaRow: {
-    marginTop: 5,
+    marginTop: 7,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -1165,49 +1170,21 @@ const styles = StyleSheet.create({
   heroBreedPill: {
     fontSize: 13,
     lineHeight: 18,
-    color: 'rgba(255,255,255,0.92)',
+    color: 'rgba(255,255,255,0.95)',
     borderWidth: 1,
-    borderColor: 'rgba(220,220,220,0.55)',
-    backgroundColor: 'rgba(80,80,80,0.28)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    borderColor: 'rgba(240,245,244,0.42)',
+    backgroundColor: 'rgba(56,84,86,0.26)',
+    paddingHorizontal: 11,
+    paddingVertical: 5,
     borderRadius: 999,
     overflow: 'hidden',
+    fontWeight: '600',
   },
   heroMeta: {
-    fontSize: 13,
+    fontSize: 14,
     lineHeight: 18,
-    color: 'rgba(255,255,255,0.86)',
-  },
-  heroLockSwitchWrap: {
-    position: 'absolute',
-    zIndex: 6,
-    right: 12,
-    bottom: 14,
-    width: 42,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.35)',
-  },
-  heroLockSwitchScale: {
-    width: 42,
-    alignItems: 'flex-end',
-    transform: [{ scaleX: 0.72 }, { scaleY: 0.72 }],
-  },
-  heroLockPawMark: {
-    position: 'absolute',
-    right: -1,
-    top: 6,
-    width: 12,
-    height: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 2,
-    opacity: 1,
+    color: 'rgba(255,255,255,0.92)',
+    fontWeight: '600',
   },
   todayPulseCard: {
     borderRadius: 18,
@@ -1474,11 +1451,21 @@ const styles = StyleSheet.create({
   weightCard: {
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
-    backgroundColor: '#fff',
+    borderColor: 'rgba(255,255,255,0.78)',
+    backgroundColor: 'rgba(255,255,255,0.94)',
     paddingHorizontal: 14,
     paddingTop: 10,
     paddingBottom: 10,
+    shadowColor: '#8bcfc2',
+    shadowOpacity: 0.10,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
+  },
+  weightCardPressed: {
+    borderColor: 'rgba(255,255,255,0.9)',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
   },
   weightHeader: {
     flexDirection: 'row',

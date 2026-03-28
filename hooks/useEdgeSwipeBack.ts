@@ -33,6 +33,8 @@ export function useEdgeSwipeBack({
   }, [onBack]);
 
   useEffect(() => {
+    // Reset translateX on mount/remount so the screen is never stuck off-screen
+    translateX.setValue(0);
     const variantMap = {
       soft: { duration: 240, offset: 16, easing: Easing.bezier(0.22, 1, 0.36, 1) },
       snappy: { duration: 170, offset: 10, easing: Easing.out(Easing.cubic) },
@@ -46,7 +48,7 @@ export function useEdgeSwipeBack({
       easing: variant.easing,
       useNativeDriver: true,
     }).start();
-  }, [enterProgress, enterVariant]);
+  }, [enterProgress, enterVariant, translateX]);
 
   const responder = useMemo(
     () =>
@@ -90,7 +92,9 @@ export function useEdgeSwipeBack({
               useNativeDriver: true,
             }).start(({ finished }) => {
               if (finished) onBackRef.current();
-              translateX.setValue(0);
+              // Do NOT reset translateX here — resetting before the route change
+              // causes a one-frame flash where the screen briefly re-appears at
+              // position 0. The enter useEffect resets translateX on remount.
               hasTriggeredRef.current = false;
               navigatingRef.current = false;
               setIsSwiping(false);
@@ -126,9 +130,11 @@ export function useEdgeSwipeBack({
     [edgeWidth, enabled, fullScreenGestureEnabled, maxDy, screenWidth, translateX, triggerDx],
   );
 
+  // Back layer slides from ~16% behind its final position as the front reveals it,
+  // matching the iOS native parallax feel.
   const backReveal = translateX.interpolate({
     inputRange: [0, screenWidth],
-    outputRange: [-18, 0],
+    outputRange: [-Math.round(screenWidth * 0.16), 0],
     extrapolate: 'clamp',
   });
 

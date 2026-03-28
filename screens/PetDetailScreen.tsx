@@ -17,6 +17,8 @@ type PetDetailScreenProps = {
   pet: PetProfile;
   weightEntries?: WeightPoint[];
   weightGoal?: number;
+  /** Override vaccine count with the total from the health hub (medicalEvents), which may differ from pet.vaccinations[] */
+  vaccineCountOverride?: number;
   locale?: 'en' | 'tr';
   onBack: () => void;
   onEdit?: () => void;
@@ -79,7 +81,10 @@ function routineDueColor(record: RoutineCareRecord): string {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionLabel}>{title}</Text>
+      <View style={styles.sectionHeaderRow}>
+        <Text style={styles.sectionLabel}>{title}</Text>
+        <View style={styles.sectionHeaderLine} />
+      </View>
       <View style={styles.sectionCard}>{children}</View>
     </View>
   );
@@ -107,6 +112,7 @@ export default function PetDetailScreen({
   pet,
   weightEntries = [],
   weightGoal,
+  vaccineCountOverride,
   locale = 'en',
   onBack,
   onEdit,
@@ -130,9 +136,13 @@ export default function PetDetailScreen({
   const goalRatio = weightGoal && weightGoal > 0 && currentKg != null
     ? Math.min(1, Math.max(0, currentKg / weightGoal))
     : null;
+  // Uncapped percentage for display (shows >100% when goal is exceeded)
+  const goalDisplayPct = weightGoal && weightGoal > 0 && currentKg != null
+    ? Math.round((currentKg / weightGoal) * 100)
+    : null;
   const onTarget = goalRatio != null && currentKg != null && weightGoal != null && currentKg <= weightGoal;
 
-  const vaccineCount = (pet.vaccinations ?? []).length;
+  const vaccineCount = vaccineCountOverride ?? (pet.vaccinations ?? []).length;
   const lastVaccine = [...(pet.vaccinations ?? [])].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
   const hasAllergies = pet.chronicConditions?.allergies || (pet.allergiesLog ?? []).length > 0;
   const hasDiabetes = pet.chronicConditions?.diabetes || (pet.diabetesLog ?? []).length > 0;
@@ -188,47 +198,49 @@ export default function PetDetailScreen({
             </View>
           </View>
 
-        <Section title={isTr ? 'KILO' : 'WEIGHT'}>
-          <View style={styles.weightRow}>
-            <View style={styles.weightLeft}>
-              <Text style={styles.weightValue}>
-                {currentKg != null ? `${currentKg.toFixed(1)} kg` : '-'}
-              </Text>
-                {goalRatio != null ? (
-                  <Text style={[styles.goalLabel, { color: onTarget ? '#4c8a66' : '#c56767' }]}>
-                    {isTr ? `Hedef: ${weightGoal!.toFixed(1)} kg` : `Goal: ${weightGoal!.toFixed(1)} kg`}
+          <View style={styles.section}>
+            <Text style={styles.sectionLabel}>{isTr ? 'KILO' : 'WEIGHT'}</Text>
+            <Pressable
+              onPress={onOpenWeightTracking}
+              style={({ pressed }) => [styles.sectionCard, styles.weightCardPressable, pressed && styles.weightCardPressed]}
+            >
+              <View style={styles.weightRow}>
+                <View style={styles.weightLeft}>
+                  <Text style={styles.weightValue}>
+                    {currentKg != null ? `${currentKg.toFixed(1)} kg` : '-'}
                   </Text>
-                ) : (
-                  <Text style={styles.goalLabel}>{isTr ? 'Hedef belirlenmemis' : 'No goal set'}</Text>
-                )}
-              </View>
-              {goalRatio != null ? (
-                <View style={styles.goalProgress}>
-                  <View style={styles.goalBadge}>
-                    <Text style={styles.goalBadgeText}>
-                      {onTarget ? (isTr ? 'Dengede' : 'On track') : (isTr ? 'Izleniyor' : 'Tracking')}
+                  {goalRatio != null ? (
+                    <Text style={[styles.goalLabel, { color: onTarget ? '#4c8a66' : '#c56767' }]}>
+                      {isTr ? `Hedef: ${weightGoal!.toFixed(1)} kg` : `Goal: ${weightGoal!.toFixed(1)} kg`}
                     </Text>
-                  </View>
-                  <View style={styles.goalTrack}>
-                    <View
-                      style={[
-                        styles.goalFill,
-                        {
-                          width: `${Math.round(goalRatio * 100)}%`,
-                          backgroundColor: onTarget ? '#66a07c' : '#c96a6a',
-                        },
-                      ]}
-                    />
-                  </View>
-                  <Text style={styles.goalPercent}>{Math.round(goalRatio * 100)}%</Text>
+                  ) : (
+                    <Text style={styles.goalLabel}>{isTr ? 'Hedef belirlenmemis' : 'No goal set'}</Text>
+                  )}
                 </View>
-              ) : null}
-            </View>
-            <Pressable style={styles.inlineLink} onPress={onOpenWeightTracking}>
-              <Text style={styles.inlineLinkText}>{isTr ? 'Kilo takibine git' : 'Open weight tracking'}</Text>
-              <ChevronRight size={14} color="#476f67" strokeWidth={2.2} />
+                {goalRatio != null ? (
+                  <View style={styles.goalProgress}>
+                    <View style={styles.goalBadge}>
+                      <Text style={styles.goalBadgeText}>
+                        {onTarget ? (isTr ? 'Dengede' : 'On track') : (isTr ? 'Izleniyor' : 'Tracking')}
+                      </Text>
+                    </View>
+                    <View style={styles.goalTrack}>
+                      <View
+                        style={[
+                          styles.goalFill,
+                          {
+                            width: `${Math.round(goalRatio * 100)}%`,
+                            backgroundColor: onTarget ? '#66a07c' : '#c96a6a',
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.goalPercent}>{goalDisplayPct}%</Text>
+                  </View>
+                ) : null}
+              </View>
             </Pressable>
-          </Section>
+          </View>
 
           <Section title={isTr ? 'ASILAR' : 'VACCINATIONS'}>
             <InfoRow
@@ -241,7 +253,6 @@ export default function PetDetailScreen({
                 value={`${lastVaccine.name} - ${fmtDate(lastVaccine.date, isTr)}`}
               />
             ) : null}
-            <NavRow label={isTr ? 'Tum asilari gor' : 'View all vaccines'} onPress={onOpenVaccinations} />
           </Section>
 
           {(hasAllergies || hasDiabetes || surgeryCount > 0) ? (
@@ -332,8 +343,8 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 22,
     paddingTop: 52,
-    paddingBottom: 156,
-    gap: 18,
+    paddingBottom: 332,
+    gap: 16,
   },
   headerBlock: {
     marginBottom: 6,
@@ -368,14 +379,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(39,86,81,0.82)',
     letterSpacing: 1.4,
-    marginBottom: 8,
+    marginBottom: 6,
   },
   screenTitle: {
-    fontSize: 42,
-    lineHeight: 46,
-    fontWeight: '900',
+    fontSize: 33,
+    lineHeight: 37,
+    fontWeight: '700',
     color: '#163c39',
-    letterSpacing: -1.2,
+    letterSpacing: -0.7,
   },
   heroCard: {
     backgroundColor: 'rgba(248,251,250,0.76)',
@@ -458,7 +469,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   section: {
+    gap: 8,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
+    marginLeft: 4,
+    marginTop: 2,
+  },
+  sectionHeaderLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: 'rgba(108,145,138,0.18)',
   },
   sectionLabel: {
     fontSize: 11,
@@ -466,7 +489,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.8,
     color: '#80908b',
     textTransform: 'uppercase',
-    marginLeft: 4,
   },
   sectionCard: {
     backgroundColor: 'rgba(251,253,252,0.86)',
@@ -479,6 +501,13 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
+  },
+  weightCardPressable: {
+    overflow: 'hidden',
+  },
+  weightCardPressed: {
+    transform: [{ scale: 0.992 }],
+    opacity: 0.97,
   },
   weightRow: {
     flexDirection: 'row',
@@ -538,26 +567,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#70827d',
   },
-  inlineLink: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 18,
-    paddingVertical: 13,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(30,50,48,0.05)',
-  },
-  inlineLinkText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#476f67',
-  },
   infoRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingVertical: 13,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(30,50,48,0.04)',
   },
@@ -579,7 +594,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 18,
-    paddingVertical: 15,
+    paddingVertical: 14,
   },
   navRowText: {
     fontSize: 15,
@@ -615,7 +630,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 18,
-    paddingVertical: 15,
+    paddingVertical: 14,
     gap: 10,
   },
   routineLeft: {

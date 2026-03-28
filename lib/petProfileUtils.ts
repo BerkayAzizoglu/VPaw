@@ -52,6 +52,8 @@ export function normalizePetProfiles(raw: unknown): Record<string, PetProfile> {
       surgeriesLog: Array.isArray(incoming.surgeriesLog) ? incoming.surgeriesLog : [],
       allergiesLog: Array.isArray(incoming.allergiesLog) ? incoming.allergiesLog : [],
       diabetesLog: Array.isArray(incoming.diabetesLog) ? incoming.diabetesLog : [],
+      petTypeChangeCount: typeof incoming.petTypeChangeCount === 'number' ? incoming.petTypeChangeCount : 0,
+      petTypeChangeHistory: Array.isArray(incoming.petTypeChangeHistory) ? incoming.petTypeChangeHistory : [],
       chronicConditions: {
         allergies: incoming.chronicConditions?.allergies ?? false,
         diabetes: incoming.chronicConditions?.diabetes ?? false,

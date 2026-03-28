@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   Alert,
   Image,
@@ -11,8 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SvgUri } from 'react-native-svg';
-import { Check, ChevronRight, PawPrint, Pencil } from 'lucide-react-native';
+import { Check, ChevronRight, PawPrint, X } from 'lucide-react-native';
 import type { AllergyRecord, DiabetesRecord, PetProfile, SurgeryRecord, VaccinationRecord } from '../lib/petProfileTypes';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { useLocale } from '../hooks/useLocale';
@@ -535,54 +535,105 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
   const surgerySummary = draft.surgeriesLog.length === 0 ? 'None selected' : String(draft.surgeriesLog.length) + ' selected';
   const allergySummary = draft.allergiesLog.length === 0 ? 'No active records' : String(draft.allergiesLog.length) + ' selected';
   const diabetesSummary = draft.diabetesLog.length === 0 ? 'No active records' : String(draft.diabetesLog.length) + ' selected';
-  return (
-    <View style={styles.screen} {...swipePanResponder.panHandlers}>
-      <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.topRow}>
-          <View style={styles.brandWrap}>
-            <SvgUri uri={logoUri} width={24} height={24} />
-            <View>
-              <Text style={styles.brandTitle}>V-Paw</Text>
-              <Text style={styles.brandSub}>BY VIRNELO</Text>
-            </View>
-          </View>
-
-          <Pressable style={styles.backBtn} onPress={onBack}>
-            <Text style={styles.backBtnText}>{isTr ? 'Bitti' : 'Done'}</Text>
-          </Pressable>
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.profileHeading}>{isTr ? draft.name + ' Profili' : draft.name + ' Profile'}</Text>
-
-          <View style={styles.avatarWrap}>
-            <Image source={{ uri: draft.image }} style={styles.avatar} />
-            <Pressable style={styles.editAvatarBtn} onPress={() => setPickerField('photo')}>
-              <Pencil size={14} color="#f8f7f4" strokeWidth={2.6} />
+  const handleSave = () => {
+  // PET_EDIT_REWRITE_MARKER
+    const saved = {
+      ...draft,
+      vaccines: draft.vaccinations.length ? draft.vaccinations.map((v) => v.name).join(', ') : 'None',
+      surgeries: draft.surgeriesLog.length ? draft.surgeriesLog.map((s) => s.name).join(', ') : 'None',
+      chronicConditions: { allergies: draft.allergiesLog.length > 0, diabetes: draft.diabetesLog.length > 0 },
+    };
+    if (isNewPet && onCreated) {
+      onCreated(saved);
+    } else {
+      onSaved(saved);
+    }
+  };
+  const useFocusedEditLayout = true;
+  if (useFocusedEditLayout) {
+    return (
+      <View style={styles.screen} {...swipePanResponder.panHandlers}>
+        <StatusBar style="dark" />
+        <LinearGradient
+          colors={['#CDEFE7', '#E2F6EE', '#F4ECD6']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.editTopRow}>
+            <Pressable style={styles.editCircleAction} onPress={onBack}>
+              <X size={20} color="#2f605c" strokeWidth={2.4} />
+            </Pressable>
+            <Pressable style={[styles.editCircleAction, styles.editSaveAction]} onPress={handleSave}>
+              <Check size={20} color="#2f605c" strokeWidth={2.7} />
             </Pressable>
           </View>
 
-          <Text style={styles.sectionTitle}>{isTr ? 'Temel Bilgiler' : 'Basic Info'}</Text>
-          <View style={styles.sectionCard}>
-            <InfoRow label={isTr ? 'Ä°sim' : 'Name'} value={draft.name} onPress={() => { setNameDraft(draft.name); setPickerField('name'); }} />
-            <InfoRow label={isTr ? 'Hayvan TÃ¼rÃ¼' : 'Pet Type'} value={draft.petType} onPress={() => setPickerField('petType')} />
-            <InfoRow label={isTr ? 'Cinsiyet' : 'Gender'} value={draft.gender === 'female' ? (isTr ? 'DiÅŸi' : 'Female') : (isTr ? 'Erkek' : 'Male')} onPress={() => setPickerField('gender')} />
-            <InfoRow label={isTr ? 'Irk' : 'Breed'} value={draft.breed} onPress={() => setPickerField('breed')} />
-            <InfoRow label={isTr ? 'TÃ¼y Deseni' : 'Coat Pattern'} value={draft.coatPattern} onPress={() => setPickerField('coatPattern')} />
-            <InfoRow label={isTr ? 'YaÅŸ' : 'Age'} value={formatAgeLabel(draft.birthDate)} onPress={() => { setBirthPicker(parseBirthDate(draft.birthDate)); setPickerField('birthDate'); }} />
-            <InfoRow label={isTr ? 'MikroÃ§ip' : 'Microchip'} value={draft.microchip || '-'} onPress={() => { setMicrochipDraft(draft.microchip || ''); setPickerField('microchip'); }} noBorder />
+          <View style={styles.editHeaderBlock}>
+            <Text style={styles.editHeaderEyebrow}>{isTr ? 'PROFÝLÝ DÜZENLE' : 'EDIT PROFILE'}</Text>
+            <Text style={styles.editHeaderTitle}>{isTr ? `${draft.name} Düzenle` : `Edit ${draft.name}`}</Text>
+            <Text style={styles.editHeaderSub}>
+              {isTr
+                ? 'Temel profil alanlarýný sakin ve odaklý bir düzenleme akýþýnda güncelle.'
+                : 'Update core profile details in one calm, focused editing flow.'}
+            </Text>
           </View>
 
-          <Text style={styles.sectionTitle}>{isTr ? 'TÄ±bbi GeÃ§miÅŸ' : 'Medical History'}</Text>
-          <View style={styles.sectionCard}>
-            <InfoRow label={isTr ? 'AÅŸÄ±lar' : 'Vaccinations'} value={vaccineSummary} onPress={() => setPickerField('vaccines')} />
+          <View style={styles.editHeroCard}>
+            <View style={styles.editHeroTopRow}>
+              <Image source={{ uri: draft.image }} style={styles.editHeroAvatar} />
+              <View style={styles.editHeroTextCol}>
+                <Text style={styles.editHeroName}>{draft.name}</Text>
+                <View style={styles.editHeroMetaRow}>
+                  <View style={styles.editHeroChip}>
+                    <Text style={styles.editHeroChipText}>{draft.petType}</Text>
+                  </View>
+                  <View style={styles.editHeroChip}>
+                    <Text style={styles.editHeroChipText}>
+                      {draft.gender === 'female' ? (isTr ? 'Diþi' : 'Female') : (isTr ? 'Erkek' : 'Male')}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.editHeroBreed}>{draft.breed}</Text>
+                <Text style={styles.editHeroAge}>{formatAgeLabel(draft.birthDate)}</Text>
+              </View>
+            </View>
+
+            <View style={styles.editInsightCard}>
+              <Text style={styles.editInsightLabel}>PROFILE NOTE</Text>
+              <Text style={styles.editInsightText}>
+                {isTr
+                  ? 'Temel profil alanlarýný doðru tutmak, özetler, ýrk içgörüleri ve bakým önerileri için daha temiz veri saðlar.'
+                  : 'Keeping core profile fields accurate gives cleaner data for summaries, breed insights, and care suggestions.'}
+              </Text>
+            </View>
+          </View>
+
+          <Text style={styles.editSectionTitle}>{isTr ? 'Temel Bilgiler' : 'Basic Info'}</Text>
+          <View style={styles.editSectionCard}>
+            <InfoRow label={isTr ? 'Ýsim' : 'Name'} value={draft.name} onPress={() => { setNameDraft(draft.name); setPickerField('name'); }} />
+            <InfoRow label={isTr ? 'Hayvan Türü' : 'Pet Type'} value={draft.petType} onPress={() => setPickerField('petType')} />
+            <InfoRow label={isTr ? 'Cinsiyet' : 'Gender'} value={draft.gender === 'female' ? (isTr ? 'Diþi' : 'Female') : (isTr ? 'Erkek' : 'Male')} onPress={() => setPickerField('gender')} />
+            <InfoRow label={isTr ? 'Irk' : 'Breed'} value={draft.breed} onPress={() => setPickerField('breed')} />
+            <InfoRow label={isTr ? 'Tüy Deseni' : 'Coat Pattern'} value={draft.coatPattern} onPress={() => setPickerField('coatPattern')} noBorder />
+          </View>
+
+          <Text style={styles.editSectionTitle}>{isTr ? 'Kimlik Detaylarý' : 'Identity Details'}</Text>
+          <View style={styles.editSectionCard}>
+            <InfoRow label={isTr ? 'Yaþ' : 'Age'} value={formatAgeLabel(draft.birthDate)} onPress={() => { setBirthPicker(parseBirthDate(draft.birthDate)); setPickerField('birthDate'); }} />
+            <InfoRow label={isTr ? 'Mikroçip' : 'Microchip'} value={draft.microchip || '-'} onPress={() => { setMicrochipDraft(draft.microchip || ''); setPickerField('microchip'); }} noBorder />
+          </View>
+
+          <Text style={styles.editSectionTitle}>{isTr ? 'Saðlýk Seçimleri' : 'Health Selections'}</Text>
+          <View style={styles.editSectionCard}>
+            <InfoRow label={isTr ? 'Aþýlar' : 'Vaccinations'} value={vaccineSummary} onPress={() => setPickerField('vaccines')} />
             <InfoRow label={isTr ? 'Ameliyatlar' : 'Surgeries'} value={surgerySummary} onPress={() => setPickerField('surgeries')} />
             <InfoRow label={isTr ? 'Alerjiler' : 'Allergies'} value={allergySummary} onPress={() => setPickerField('allergies')} />
-            <InfoRow label={isTr ? 'Åžeker' : 'Diabetes'} value={diabetesSummary} onPress={() => setPickerField('diabetes')} />
+            <InfoRow label={isTr ? 'Þeker' : 'Diabetes'} value={diabetesSummary} onPress={() => setPickerField('diabetes')} />
 
             <View style={styles.toggleRow}>
-              <Text style={styles.label}>{isTr ? 'Ä°Ã§ Parazit Rutini' : 'Internal parasite routine'}</Text>
+              <Text style={styles.label}>{isTr ? 'Ýç parazit rutini' : 'Internal parasite routine'}</Text>
               <PawSwitch
                 value={draft.routineCare.internalParasite.enabled}
                 onValueChange={(v) =>
@@ -595,7 +646,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
             </View>
 
             <View style={[styles.toggleRow, styles.noBorder]}>
-              <Text style={styles.label}>{isTr ? 'DÄ±ÅŸ Parazit Rutini' : 'External parasite routine'}</Text>
+              <Text style={styles.label}>{isTr ? 'Dýþ parazit rutini' : 'External parasite routine'}</Text>
               <PawSwitch
                 value={draft.routineCare.externalParasite.enabled}
                 onValueChange={(v) =>
@@ -607,169 +658,160 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
               />
             </View>
           </View>
-          <Pressable style={styles.saveBtn} onPress={() => {
-            const saved = {
-              ...draft,
-              vaccines: draft.vaccinations.length ? draft.vaccinations.map((v) => v.name).join(', ') : 'None',
-              surgeries: draft.surgeriesLog.length ? draft.surgeriesLog.map((s) => s.name).join(', ') : 'None',
-              chronicConditions: { allergies: draft.allergiesLog.length > 0, diabetes: draft.diabetesLog.length > 0 },
-            };
-            if (isNewPet && onCreated) {
-              onCreated(saved);
-            } else {
-              onSaved(saved);
-            }
-          }}>
-            <Text style={styles.saveText}>{isNewPet ? (isTr ? 'HayvanÄ± Ekle' : 'Add Pet') : (isTr ? 'DeÄŸiÅŸiklikleri Kaydet' : 'Save Changes')}</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
 
-      <Modal transparent visible={pickerField !== null} animationType="fade" onRequestClose={() => setPickerField(null)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setPickerField(null)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>
-              {pickerField === 'name'
-                ? (isTr ? 'Ä°sim DÃ¼zenle' : 'Edit Name')
-                : pickerField === 'microchip'
-                  ? (isTr ? 'MikroÃ§ip DÃ¼zenle' : 'Edit Microchip')
-                : pickerField === 'birthDate'
-                  ? (isTr ? 'DoÄŸum Tarihi' : 'Birth Date')
-                  : pickerField === 'photo'
-                    ? (isTr ? 'FotoÄŸraf' : 'Photo')
-                    : pickerField === 'coatPattern'
-                      ? (isTr ? 'TÃ¼y Deseni' : 'Coat Pattern')
-                      : pickerField === 'vaccines'
-                        ? (isTr ? 'AÅŸÄ±lar' : 'Vaccinations')
-                        : pickerField === 'surgeries'
-                          ? (isTr ? 'Ameliyatlar' : 'Surgeries')
-                          : pickerField === 'allergies'
-                            ? (isTr ? 'Alerjiler' : 'Allergies')
-                            : pickerField === 'diabetes'
-                              ? (isTr ? 'Diyabet' : 'Diabetes')
-                              : (isTr ? 'SeÃ§im' : 'Option')}
-            </Text>
-            {pickerField === 'name' ? (
-              <View style={styles.nameEditorWrap}>
-                <Text style={styles.nameEditorHint}>{isTr ? 'Evcil dostunun adÄ±nÄ± gÃ¼ncelle.' : "Update your pet's display name."}</Text>
-                <TextInput
-                  value={nameDraft}
-                  onChangeText={setNameDraft}
-                  placeholder={isTr ? 'Ã–rn. Milo' : 'e.g. Milo'}
-                  placeholderTextColor="rgba(45,45,45,0.35)"
-                  autoFocus
-                  maxLength={24}
-                  returnKeyType="done"
-                  onSubmitEditing={() => applySelection(nameDraft)}
-                  style={styles.nameEditorInput}
-                />
-                <Pressable style={styles.applyDateBtn} onPress={() => applySelection(nameDraft)}>
-                  <Text style={styles.applyDateBtnText}>{isTr ? 'Ä°smi Uygula' : 'Apply Name'}</Text>
-                </Pressable>
-              </View>
-            ) : pickerField === 'microchip' ? (
-              <View style={styles.nameEditorWrap}>
-                <Text style={styles.nameEditorHint}>{isTr ? 'MikroÃ§ip numarasÄ±nÄ± gÃ¼ncelle.' : 'Update the microchip number.'}</Text>
-                <TextInput
-                  value={microchipDraft}
-                  onChangeText={setMicrochipDraft}
-                  placeholder={isTr ? 'Ã–rn. 985 112 004 883' : 'e.g. 985 112 004 883'}
-                  placeholderTextColor="rgba(45,45,45,0.35)"
-                  autoFocus
-                  maxLength={32}
-                  keyboardType="numbers-and-punctuation"
-                  returnKeyType="done"
-                  onSubmitEditing={() => applySelection(microchipDraft)}
-                  style={styles.nameEditorInput}
-                />
-                <Pressable style={styles.applyDateBtn} onPress={() => applySelection(microchipDraft)}>
-                  <Text style={styles.applyDateBtnText}>{isTr ? 'MikroÃ§ipi Uygula' : 'Apply Microchip'}</Text>
-                </Pressable>
-              </View>
-            ) : pickerField === 'birthDate' ? (
-              <View>
-                <View style={styles.dateHeadRow}>
-                  <Text style={styles.dateHeadLabel}>{isTr ? 'GÃ¼n' : 'Day'}</Text>
-                  <Text style={styles.dateHeadLabel}>{isTr ? 'Ay' : 'Month'}</Text>
-                  <Text style={styles.dateHeadLabel}>{isTr ? 'YÄ±l' : 'Year'}</Text>
-                </View>
+          <View style={{ height: 8 }} />
+        </ScrollView>
 
-                <View style={styles.datePickerRow}>
-                  <ScrollView style={styles.dateCol} showsVerticalScrollIndicator={false}>
-                    {Array.from({ length: daysInMonth(birthPicker.year, birthPicker.month) }, (_, i) => i + 1).map((day) => (
-                      <Pressable
-                        key={String(day)}
-                        style={[styles.dateItem, birthPicker.day === day && styles.dateItemActive]}
-                        onPress={() => setBirthPicker((prev) => ({ ...prev, day }))}
-                      >
-                        <Text style={[styles.dateItemText, birthPicker.day === day && styles.dateItemTextActive]}>{day}</Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-
-                  <ScrollView style={styles.dateCol} showsVerticalScrollIndicator={false}>
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                      <Pressable
-                        key={String(month)}
-                        style={[styles.dateItem, birthPicker.month === month && styles.dateItemActive]}
-                        onPress={() => setBirthPicker((prev) => clampBirthDateParts({ ...prev, month }))}
-                      >
-                        <Text style={[styles.dateItemText, birthPicker.month === month && styles.dateItemTextActive]}>{MONTH_LABELS[month - 1]}</Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-
-                  <ScrollView style={styles.dateCol} showsVerticalScrollIndicator={false}>
-                    {Array.from({ length: 26 }, (_, i) => new Date().getFullYear() - i).map((year) => (
-                      <Pressable
-                        key={String(year)}
-                        style={[styles.dateItem, birthPicker.year === year && styles.dateItemActive]}
-                        onPress={() => setBirthPicker((prev) => clampBirthDateParts({ ...prev, year }))}
-                      >
-                        <Text style={[styles.dateItemText, birthPicker.year === year && styles.dateItemTextActive]}>{year}</Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                </View>
-
-                <Pressable style={styles.applyDateBtn} onPress={() => applySelection(toBirthDateIso(birthPicker))}>
-                  <Text style={styles.applyDateBtnText}>{isTr ? 'DoÄŸum Tarihini Uygula' : 'Apply Birth Date'}</Text>
-                </Pressable>
-              </View>
-            ) : (
-              <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
-              {pickerItems.map((item) => {
-                const selected =
-                  (pickerField === 'petType' && draft.petType === item) ||
-                  (pickerField === 'gender' && draft.gender === item.toLowerCase()) ||
-                  (pickerField === 'breed' && draft.breed === item) ||
-                  (pickerField === 'coatPattern' && draft.coatPattern === item) ||
-                  (pickerField === 'vaccines' && draft.vaccinations.some((v) => v.name === item)) ||
-                  (pickerField === 'surgeries' && draft.surgeriesLog.some((s) => s.name === item)) ||
-                  (pickerField === 'allergies' && draft.allergiesLog.some((a) => a.category === item)) ||
-                  (pickerField === 'diabetes' && draft.diabetesLog.some((d) => d.type === item)) ||
-                  (pickerField === 'photo' && draft.image === item);
-
-                return (
-                  <Pressable key={item} style={styles.optionRow} onPress={() => applySelection(item)}>
-                    {pickerField === 'photo' ? <Image source={{ uri: item }} style={styles.optionThumb} /> : null}
-                    <Text style={styles.optionText} numberOfLines={1}>{item}</Text>
-                    {selected ? <Check size={16} color="#6e8f66" strokeWidth={2.7} /> : null}
+        <Modal transparent visible={pickerField !== null} animationType="fade" onRequestClose={() => setPickerField(null)}>
+          <Pressable style={styles.modalBackdrop} onPress={() => setPickerField(null)}>
+            <Pressable style={styles.modalCard} onPress={() => {}}>
+              <Text style={styles.modalTitle}>
+                {pickerField === 'name'
+                  ? (isTr ? 'Ýsim Düzenle' : 'Edit Name')
+                  : pickerField === 'microchip'
+                    ? (isTr ? 'Mikroçip Düzenle' : 'Edit Microchip')
+                    : pickerField === 'birthDate'
+                      ? (isTr ? 'Doðum Tarihi' : 'Birth Date')
+                      : pickerField === 'photo'
+                        ? (isTr ? 'Fotoðraf' : 'Photo')
+                        : pickerField === 'coatPattern'
+                          ? (isTr ? 'Tüy Deseni' : 'Coat Pattern')
+                          : pickerField === 'vaccines'
+                            ? (isTr ? 'Aþýlar' : 'Vaccinations')
+                            : pickerField === 'surgeries'
+                              ? (isTr ? 'Ameliyatlar' : 'Surgeries')
+                              : pickerField === 'allergies'
+                                ? (isTr ? 'Alerjiler' : 'Allergies')
+                                : pickerField === 'diabetes'
+                                  ? (isTr ? 'Diyabet' : 'Diabetes')
+                                  : (isTr ? 'Seçim' : 'Option')}
+              </Text>
+              {pickerField === 'name' ? (
+                <View style={styles.nameEditorWrap}>
+                  <Text style={styles.nameEditorHint}>{isTr ? 'Evcil dostunun adýný güncelle.' : "Update your pet's display name."}</Text>
+                  <TextInput
+                    value={nameDraft}
+                    onChangeText={setNameDraft}
+                    placeholder={isTr ? 'Örn. Milo' : 'e.g. Milo'}
+                    placeholderTextColor="rgba(45,45,45,0.35)"
+                    autoFocus
+                    maxLength={24}
+                    returnKeyType="done"
+                    onSubmitEditing={() => applySelection(nameDraft)}
+                    style={styles.nameEditorInput}
+                  />
+                  <Pressable style={styles.applyDateBtn} onPress={() => applySelection(nameDraft)}>
+                    <Text style={styles.applyDateBtnText}>{isTr ? 'Ýsmi Uygula' : 'Apply Name'}</Text>
                   </Pressable>
-                );
-              })}
-            </ScrollView>
-            )}
+                </View>
+              ) : pickerField === 'microchip' ? (
+                <View style={styles.nameEditorWrap}>
+                  <Text style={styles.nameEditorHint}>{isTr ? 'Mikroçip numarasýný güncelle.' : 'Update the microchip number.'}</Text>
+                  <TextInput
+                    value={microchipDraft}
+                    onChangeText={setMicrochipDraft}
+                    placeholder={isTr ? 'Örn. 985 112 004 883' : 'e.g. 985 112 004 883'}
+                    placeholderTextColor="rgba(45,45,45,0.35)"
+                    autoFocus
+                    maxLength={32}
+                    keyboardType="numbers-and-punctuation"
+                    returnKeyType="done"
+                    onSubmitEditing={() => applySelection(microchipDraft)}
+                    style={styles.nameEditorInput}
+                  />
+                  <Pressable style={styles.applyDateBtn} onPress={() => applySelection(microchipDraft)}>
+                    <Text style={styles.applyDateBtnText}>{isTr ? 'Mikroçipi Uygula' : 'Apply Microchip'}</Text>
+                  </Pressable>
+                </View>
+              ) : pickerField === 'birthDate' ? (
+                <View>
+                  <View style={styles.dateHeadRow}>
+                    <Text style={styles.dateHeadLabel}>{isTr ? 'Gün' : 'Day'}</Text>
+                    <Text style={styles.dateHeadLabel}>{isTr ? 'Ay' : 'Month'}</Text>
+                    <Text style={styles.dateHeadLabel}>{isTr ? 'Yýl' : 'Year'}</Text>
+                  </View>
+
+                  <View style={styles.datePickerRow}>
+                    <ScrollView style={styles.dateCol} showsVerticalScrollIndicator={false}>
+                      {Array.from({ length: daysInMonth(birthPicker.year, birthPicker.month) }, (_, i) => i + 1).map((day) => (
+                        <Pressable
+                          key={String(day)}
+                          style={[styles.dateItem, birthPicker.day === day && styles.dateItemActive]}
+                          onPress={() => setBirthPicker((prev) => ({ ...prev, day }))}
+                        >
+                          <Text style={[styles.dateItemText, birthPicker.day === day && styles.dateItemTextActive]}>{day}</Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+
+                    <ScrollView style={styles.dateCol} showsVerticalScrollIndicator={false}>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
+                        <Pressable
+                          key={String(month)}
+                          style={[styles.dateItem, birthPicker.month === month && styles.dateItemActive]}
+                          onPress={() => setBirthPicker((prev) => clampBirthDateParts({ ...prev, month }))}
+                        >
+                          <Text style={[styles.dateItemText, birthPicker.month === month && styles.dateItemTextActive]}>{MONTH_LABELS[month - 1]}</Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+
+                    <ScrollView style={styles.dateCol} showsVerticalScrollIndicator={false}>
+                      {Array.from({ length: 26 }, (_, i) => new Date().getFullYear() - i).map((year) => (
+                        <Pressable
+                          key={String(year)}
+                          style={[styles.dateItem, birthPicker.year === year && styles.dateItemActive]}
+                          onPress={() => setBirthPicker((prev) => clampBirthDateParts({ ...prev, year }))}
+                        >
+                          <Text style={[styles.dateItemText, birthPicker.year === year && styles.dateItemTextActive]}>{year}</Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  <Pressable style={styles.applyDateBtn} onPress={() => applySelection(toBirthDateIso(birthPicker))}>
+                    <Text style={styles.applyDateBtnText}>{isTr ? 'Doðum Tarihini Uygula' : 'Apply Birth Date'}</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+                  {pickerItems.map((item) => {
+                    const selected =
+                      (pickerField === 'petType' && draft.petType === item) ||
+                      (pickerField === 'gender' && draft.gender === item.toLowerCase()) ||
+                      (pickerField === 'breed' && draft.breed === item) ||
+                      (pickerField === 'coatPattern' && draft.coatPattern === item) ||
+                      (pickerField === 'vaccines' && draft.vaccinations.some((v) => v.name === item)) ||
+                      (pickerField === 'surgeries' && draft.surgeriesLog.some((s) => s.name === item)) ||
+                      (pickerField === 'allergies' && draft.allergiesLog.some((a) => a.category === item)) ||
+                      (pickerField === 'diabetes' && draft.diabetesLog.some((d) => d.type === item)) ||
+                      (pickerField === 'photo' && draft.image === item);
+
+                    return (
+                      <Pressable key={item} style={styles.optionRow} onPress={() => applySelection(item)}>
+                        {pickerField === 'photo' ? <Image source={{ uri: item }} style={styles.optionThumb} /> : null}
+                        <Text style={styles.optionText} numberOfLines={1}>{item}</Text>
+                        {selected ? <Check size={16} color="#6e8f66" strokeWidth={2.7} /> : null}
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              )}
+            </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
-    </View>
-  );
+        </Modal>
+      </View>
+    );
+  }
 }
 
 function InfoRow({ label, value, onPress, infoMessage, noBorder }: { label: string; value: string; onPress?: () => void; infoMessage?: string; noBorder?: boolean }) {
   return (
-    <Pressable style={[styles.row, noBorder && styles.noBorder]} onPress={onPress} disabled={!onPress && !infoMessage}>
+    <Pressable
+      style={({ pressed }) => [styles.row, noBorder && styles.noBorder, pressed && onPress && styles.rowPressed]}
+      onPress={onPress}
+      disabled={!onPress && !infoMessage}
+    >
       <View style={styles.labelRow}>
         <Text style={styles.label}>{label}</Text>
         {infoMessage ? (
@@ -784,7 +826,11 @@ function InfoRow({ label, value, onPress, infoMessage, noBorder }: { label: stri
       </View>
       <View style={styles.valueWrap}>
         <Text style={styles.value} numberOfLines={1}>{value}</Text>
-        {onPress ? <ChevronRight size={16} color="#b4b4b4" strokeWidth={2.4} /> : null}
+        {onPress ? (
+          <View style={styles.rowChevronWrap}>
+            <ChevronRight size={16} color="#4e7f79" strokeWidth={2.5} />
+          </View>
+        ) : null}
       </View>
     </Pressable>
   );
@@ -819,7 +865,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 22,
     paddingTop: 60,
-    paddingBottom: 28,
+    paddingBottom: 44,
   },
   topRow: {
     flexDirection: 'row',
@@ -922,13 +968,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   row: {
-    minHeight: 50,
+    minHeight: 56,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.07)',
+    borderBottomColor: 'rgba(56,92,88,0.08)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
+  },
+  rowPressed: {
+    opacity: 0.94,
+    transform: [{ scale: 0.995 }],
   },
   inlineInputRow: {
     minHeight: 50,
@@ -953,9 +1003,9 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   toggleRow: {
-    minHeight: 50,
+    minHeight: 56,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.07)',
+    borderBottomColor: 'rgba(56,92,88,0.08)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -995,8 +1045,8 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     lineHeight: 20,
-    color: '#2d2d2d',
-    fontWeight: '500',
+    color: '#365753',
+    fontWeight: '600',
   },
   infoDot: {
     width: 16,
@@ -1018,16 +1068,26 @@ const styles = StyleSheet.create({
   valueWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 8,
     maxWidth: '72%',
   },
   value: {
     fontSize: 15,
     lineHeight: 20,
-    color: '#2d2d2d',
-    fontWeight: '500',
+    color: '#5b7470',
+    fontWeight: '600',
     textAlign: 'right',
     flexShrink: 1,
+  },
+  rowChevronWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(236,245,241,0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(109,152,146,0.14)',
   },
   advancedHint: {
     marginTop: 2,
@@ -1057,6 +1117,167 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
   },
+  editTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  editCircleAction: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(30,74,71,0.10)',
+    shadowColor: '#7fc4b8',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  editSaveAction: {
+    backgroundColor: 'rgba(255,255,255,0.82)',
+  },
+  editHeaderBlock: {
+    marginBottom: 18,
+    gap: 4,
+  },
+  editHeaderEyebrow: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: 'rgba(49,97,93,0.78)',
+    fontWeight: '700',
+    letterSpacing: 1.8,
+  },
+  editHeaderTitle: {
+    fontSize: 36,
+    lineHeight: 40,
+    color: '#143c39',
+    fontWeight: '800',
+    letterSpacing: -1,
+  },
+  editHeaderSub: {
+    maxWidth: '88%',
+    fontSize: 14,
+    lineHeight: 21,
+    color: 'rgba(67,96,92,0.72)',
+    fontWeight: '500',
+  },
+  editHeroCard: {
+    borderRadius: 30,
+    backgroundColor: 'rgba(250,252,251,0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.84)',
+    padding: 20,
+    shadowColor: '#82c8bb',
+    shadowOpacity: 0.09,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 5,
+    marginBottom: 16,
+  },
+  editHeroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  editHeroAvatar: {
+    width: 104,
+    height: 104,
+    borderRadius: 28,
+  },
+  editHeroTextCol: {
+    flex: 1,
+    gap: 6,
+  },
+  editHeroName: {
+    fontSize: 30,
+    lineHeight: 34,
+    color: '#163c39',
+    fontWeight: '800',
+    letterSpacing: -0.7,
+  },
+  editHeroMetaRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editHeroChip: {
+    minHeight: 34,
+    borderRadius: 17,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(30,74,71,0.08)',
+  },
+  editHeroChipText: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#507470',
+    fontWeight: '700',
+  },
+  editHeroBreed: {
+    fontSize: 17,
+    lineHeight: 22,
+    color: '#5d7672',
+    fontWeight: '600',
+  },
+  editHeroAge: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#728784',
+    fontWeight: '600',
+  },
+  editInsightCard: {
+    marginTop: 14,
+    borderRadius: 22,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    backgroundColor: 'rgba(228,246,239,0.74)',
+    borderWidth: 1,
+    borderColor: 'rgba(117,183,171,0.16)',
+    gap: 8,
+  },
+  editInsightLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#3f7d73',
+    fontWeight: '800',
+    letterSpacing: 1.4,
+  },
+  editInsightText: {
+    fontSize: 15,
+    lineHeight: 23,
+    color: '#3d5d59',
+    fontWeight: '500',
+  },
+  editSectionTitle: {
+    marginTop: 4,
+    marginBottom: 10,
+    fontSize: 14,
+    lineHeight: 18,
+    color: 'rgba(83,111,107,0.82)',
+    fontWeight: '800',
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  editSectionCard: {
+    borderRadius: 24,
+    backgroundColor: 'rgba(250,252,251,0.90)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.84)',
+    paddingHorizontal: 16,
+    marginBottom: 16,
+    shadowColor: '#8bcfc2',
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 4,
+  },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.26)',
@@ -1065,9 +1286,11 @@ const styles = StyleSheet.create({
   },
   modalCard: {
     maxHeight: '72%',
-    borderRadius: 18,
-    backgroundColor: '#fff',
-    padding: 12,
+    borderRadius: 24,
+    backgroundColor: '#fbfcfb',
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.82)',
   },
   modalTitle: {
     fontSize: 16,
@@ -1217,6 +1440,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
 
 
 

@@ -198,6 +198,7 @@ export default function AuthGate() {
   const [passportBackRoute, setPassportBackRoute] = useState<AppRoute>('home');
   const [documentsBackRoute, setDocumentsBackRoute] = useState<AppRoute>('healthHub');
   const [notificationsBackRoute, setNotificationsBackRoute] = useState<AppRoute>('reminders');
+  const [weightQuickAdd, setWeightQuickAdd] = useState(false);
   const [vetVisitCreatePreset, setVetVisitCreatePreset] = useState<VetVisitCreatePreset | null>(null);
   const [petList, setPetList] = useState<string[]>([]);
   const [newPetTemplate, setNewPetTemplate] = useState<PetProfile | null>(null);
@@ -1432,8 +1433,20 @@ export default function AuthGate() {
         eventDate,
         title: payload.title,
         note: payload.note,
-        subcategory: payload.type,
-        metadataJson: { source: 'health_hub_form' },
+        subcategory: payload.visitReason ?? payload.status ?? payload.type,
+        dueDate: payload.dueDate,
+        valueNumber: payload.valueNumber,
+        valueUnit: payload.valueUnit,
+        metadataJson: {
+          source: 'health_hub_form',
+          visitReason: payload.visitReason,
+          clinicName: payload.clinicName,
+          vetName: payload.vetName,
+          fee: payload.fee,
+          feeCurrency: payload.feeCurrency,
+          batchNumber: payload.batchNumber,
+          status: payload.status,
+        },
       }).next,
     );
 
@@ -1609,12 +1622,15 @@ export default function AuthGate() {
   }, [session?.user?.email, session?.user?.user_metadata]);
 
   const isPremium = useMemo(() => {
+    if (__DEV__) return true; // TODO: remove before production
     const meta = session?.user?.user_metadata as Record<string, unknown> | undefined;
     return meta?.is_premium === true;
   }, [session?.user?.user_metadata]);
 
   const PREMIUM_PET_LIMIT = 8;
   const FREE_PET_LIMIT = 1;
+  const FREE_PET_TYPE_CHANGE_LIMIT = 2;
+  const PREMIUM_PET_TYPE_CHANGE_LIMIT = 5;
   const canAddPet = isPremium ? petList.length < PREMIUM_PET_LIMIT : petList.length < FREE_PET_LIMIT;
 
   const addPet = (pet: PetProfile) => {
@@ -2128,64 +2144,173 @@ export default function AuthGate() {
 
     const documentsCount = documentsVaultForActivePet.length;
     const latestDocument = documentsVaultForActivePet[0];
+    const latestRecord = [...records]
+      .sort((a, b) => (parseUpdatedAtMs(b.eventDate) ?? 0) - (parseUpdatedAtMs(a.eventDate) ?? 0))[0];
+    const nextVisit = [...visits]
+      .filter((visit) => visit.status === 'planned' && (parseUpdatedAtMs(visit.visitDate) ?? Number.MAX_SAFE_INTEGER) >= nowMs)
+      .sort((a, b) => (parseUpdatedAtMs(a.visitDate) ?? Number.MAX_SAFE_INTEGER) - (parseUpdatedAtMs(b.visitDate) ?? Number.MAX_SAFE_INTEGER))[0];
+    const latestVisit = [...visits]
+      .filter((visit) => parseUpdatedAtMs(visit.visitDate) != null)
+      .sort((a, b) => (parseUpdatedAtMs(b.visitDate) ?? 0) - (parseUpdatedAtMs(a.visitDate) ?? 0))[0];
+    const nextVaccine = [...vaccines]
+      .filter((event) => {
+        const dueMs = parseUpdatedAtMs(event.dueDate);
+        return dueMs != null && dueMs >= nowMs;
+      })
+      .sort((a, b) => (parseUpdatedAtMs(a.dueDate) ?? Number.MAX_SAFE_INTEGER) - (parseUpdatedAtMs(b.dueDate) ?? Number.MAX_SAFE_INTEGER))[0];
+    const latestVaccine = [...vaccines]
+      .filter((event) => parseUpdatedAtMs(event.eventDate ?? event.dueDate) != null)
+      .sort((a, b) => (parseUpdatedAtMs(b.eventDate ?? b.dueDate) ?? 0) - (parseUpdatedAtMs(a.eventDate ?? a.dueDate) ?? 0))[0];
 
-    const countText = (count: number, trOne: string, trMany: string, enOne: string, enMany: string) => {
-      if (locale === 'tr') return `${count} ${count === 1 ? trOne : trMany}`;
-      return `${count} ${count === 1 ? enOne : enMany}`;
+    const countText = (count: number) => {
+      if (locale === 'tr') return `${count} kayit`;
+      return `${count} ${count === 1 ? 'record' : 'records'}`;
+    };
+    const statusUpToDate = locale === 'tr' ? 'Guncel' : 'Up to date';
+    const statusActionNeeded = locale === 'tr' ? 'Aksiyon gerekli' : 'Action needed';
+    const statusLogged = locale === 'tr' ? 'Kayitli' : 'Logged';
+    const statusNoData = locale === 'tr' ? 'Veri yok' : 'No Data';
+    const formatShortDate = (raw?: string | null) => {
+      const ms = raw ? parseUpdatedAtMs(raw) : null;
+      if (ms == null) return null;
+      try {
+        return new Intl.DateTimeFormat(locale === 'tr' ? 'tr-TR' : 'en-US', {
+          month: 'short',
+          day: 'numeric',
+        }).format(new Date(ms));
+      } catch {
+        return raw ?? null;
+      }
+    };
+    const formatWeightValue = (value?: number | null) => {
+      if (value == null || Number.isNaN(value)) return null;
+      return `${value.toFixed(1)} kg`;
+    };
+    const formatVisitLabel = (visit?: VetVisit | null) => {
+      if (!visit) return locale === 'tr' ? 'Ziyaret kaydi' : 'Visit record';
+      if (visit.vetName?.trim()) return visit.vetName.trim();
+      const reasonLabels: Record<VetVisitReasonCategory, string> = locale === 'tr'
+        ? {
+            checkup: 'Genel kontrol',
+            vaccine: 'Asi kaydi',
+            illness: 'Hastalik',
+            injury: 'Yaralanma',
+            follow_up: 'Kontrol ziyareti',
+            other: 'Ziyaret kaydi',
+          }
+        : {
+            checkup: 'General checkup',
+            vaccine: 'Vaccine record',
+            illness: 'Illness visit',
+            injury: 'Injury visit',
+            follow_up: 'Follow-up visit',
+            other: 'Visit record',
+      };
+      return reasonLabels[visit.reasonCategory] ?? (locale === 'tr' ? 'Ziyaret kaydi' : 'Visit record');
+    };
+    const formatVaccineLabel = (event?: MvpMedicalEvent | null) => {
+      if (!event) return locale === 'tr' ? 'Asi kaydi' : 'Vaccine record';
+      if (event.title?.trim()) return event.title.trim();
+      return locale === 'tr' ? 'Asi kaydi' : 'Vaccine record';
+    };
+    const formatRecordLabel = (event?: MvpMedicalEvent | null) => {
+      if (!event) return locale === 'tr' ? 'Saglik kaydi' : 'Health record';
+      if (event.title?.trim()) return event.title.trim();
+      const fallbackByType: Partial<Record<MedicalEventType, string>> = locale === 'tr'
+        ? {
+            diagnosis: 'Tani kaydi',
+            procedure: 'Prosedur kaydi',
+            test: 'Test kaydi',
+            prescription: 'Recete kaydi',
+            note: 'Klinik not',
+            attachment: 'Ek belge',
+            other: 'Saglik kaydi',
+          }
+        : {
+            diagnosis: 'Diagnosis record',
+            procedure: 'Procedure record',
+            test: 'Test record',
+            prescription: 'Prescription record',
+            note: 'Clinical note',
+            attachment: 'Attachment record',
+            other: 'Health record',
+          };
+      return fallbackByType[event.type] ?? (locale === 'tr' ? 'Saglik kaydi' : 'Health record');
+    };
+    const formatDocumentLabel = (document?: { title?: string | null } | null) => {
+      if (!document) return locale === 'tr' ? 'Belge kaydi' : 'Document record';
+      if (document.title?.trim()) return document.title.trim();
+      return locale === 'tr' ? 'Belge kaydi' : 'Document record';
     };
 
     return {
       vet: {
-        countText: countText(visits.length, 'ziyaret', 'ziyaret', 'visit', 'visits'),
-        statusText: missedVisits > 0
-          ? (locale === 'tr' ? `${missedVisits} kaçırıldı` : `${missedVisits} missed`)
-          : upcomingVisits > 0
-            ? (locale === 'tr' ? `${upcomingVisits} yaklaşan` : `${upcomingVisits} upcoming`)
-            : (locale === 'tr' ? 'sakin' : 'clear'),
-        infoText: locale === 'tr' ? 'Ziyaret planı ve sonuçlar' : 'Visit schedule and outcomes',
+        countText: countText(visits.length),
+        statusText: visits.length === 0
+          ? statusNoData
+          : (missedVisits > 0 || upcomingVisits > 0)
+            ? statusActionNeeded
+            : statusLogged,
+        infoText: visits.length === 0
+          ? statusNoData
+          : nextVisit
+            ? (locale === 'tr'
+              ? `Siradaki ziyaret ${formatShortDate(nextVisit.visitDate)}`
+              : `Next visit ${formatShortDate(nextVisit.visitDate)}`)
+            : latestVisit
+              ? `${formatVisitLabel(latestVisit)}${formatShortDate(latestVisit.visitDate) ? ` • ${formatShortDate(latestVisit.visitDate)}` : ''}`
+              : statusNoData,
       },
       records: {
-        countText: countText(records.length, 'kayıt', 'kayıt', 'record', 'records'),
-        statusText: locale === 'tr' ? 'tıbbi geçmiş' : 'history',
-        infoText: locale === 'tr' ? 'Tanı, prosedür, test sonuçları' : 'Diagnosis, procedures, tests',
+        countText: countText(records.length),
+        statusText: records.length === 0 ? statusNoData : statusLogged,
+        infoText: latestRecord
+          ? `${formatRecordLabel(latestRecord)}${formatShortDate(latestRecord.eventDate) ? ` • ${formatShortDate(latestRecord.eventDate)}` : ''}`
+          : statusNoData,
       },
       vaccines: {
-        countText: countText(vaccines.length, 'aşı', 'aşı', 'vaccine', 'vaccines'),
-        statusText: overdueVaccines > 0
-          ? (locale === 'tr' ? `${overdueVaccines} gecikmiş` : `${overdueVaccines} overdue`)
-          : dueSoonVaccines > 0
-            ? (locale === 'tr' ? `${dueSoonVaccines} yakında` : `${dueSoonVaccines} due soon`)
-            : (locale === 'tr' ? 'güncel' : 'up to date'),
-        infoText: locale === 'tr' ? 'Uygulanan ve planlanan aşılar' : 'Administered and due vaccines',
+        countText: countText(vaccines.length),
+        statusText: vaccines.length === 0
+          ? statusNoData
+          : (overdueVaccines > 0 || dueSoonVaccines > 0)
+            ? statusActionNeeded
+            : statusUpToDate,
+        infoText: vaccines.length === 0
+          ? statusNoData
+          : nextVaccine
+            ? (locale === 'tr'
+              ? `Siradaki asi ${formatShortDate(nextVaccine.dueDate)}`
+              : `Next vaccine ${formatShortDate(nextVaccine.dueDate)}`)
+            : latestVaccine
+              ? `${formatVaccineLabel(latestVaccine)}${formatShortDate(latestVaccine.eventDate ?? latestVaccine.dueDate) ? ` • ${formatShortDate(latestVaccine.eventDate ?? latestVaccine.dueDate)}` : ''}`
+              : statusUpToDate,
       },
       reminders: {
-        countText: countText(reminders.length, 'hatırlatıcı', 'hatırlatıcı', 'reminder', 'reminders'),
+        countText: locale === 'tr'
+          ? `${reminders.length} hatirlatici`
+          : `${reminders.length} ${reminders.length === 1 ? 'reminder' : 'reminders'}`,
         statusText: locale === 'tr'
           ? `${medicalReminders} tıbbi · ${careReminders} bakım`
           : `${medicalReminders} medical · ${careReminders} care`,
         infoText: locale === 'tr' ? 'Bir sonraki aksiyonlar' : 'Next-step actions',
       },
       weight: {
-        countText: countText(weightEntries.length, 'kayıt', 'kayıt', 'entry', 'entries'),
+        countText: countText(weightEntries.length),
         statusText: weightDays == null
-          ? (locale === 'tr' ? 'kayıt yok' : 'no data')
+          ? statusNoData
           : weightDays > 14
-            ? (locale === 'tr' ? 'gecikmiş' : 'overdue')
-            : (locale === 'tr' ? 'güncel' : 'fresh'),
+            ? statusActionNeeded
+            : statusLogged,
         infoText: weightDays == null
-          ? (locale === 'tr' ? 'Henüz kilo girişi yok' : 'No weight logged yet')
-          : locale === 'tr'
-            ? `Son kayıt ${weightDays} gün önce`
-            : `Last entry ${weightDays} days ago`,
+          ? statusNoData
+          : `${formatWeightValue(latestWeight?.value)}${formatShortDate(latestWeight?.date) ? ` • ${formatShortDate(latestWeight?.date)}` : ''}`,
       },
       documents: {
-        countText: countText(documentsCount, 'belge', 'belge', 'document', 'documents'),
-        statusText: latestDocument
-          ? (locale === 'tr' ? 'son eklenen' : 'latest')
-          : (locale === 'tr' ? 'arşiv' : 'archive'),
+        countText: countText(documentsCount),
+        statusText: latestDocument ? statusLogged : statusNoData,
         infoText: latestDocument
-          ? `${latestDocument.title}`
-          : (locale === 'tr' ? 'PDF, laboratuvar, rapor kayıtları' : 'PDF, lab, report records'),
+          ? `${formatDocumentLabel(latestDocument)}${formatShortDate(latestDocument.date) ? ` • ${formatShortDate(latestDocument.date)}` : ''}`
+          : statusNoData,
       },
     };
   }, [activePetId, documentsVaultForActivePet, locale, medicalEventsByPet, remindersByPet, vetVisitsByPet, weightsByPet]);
@@ -2718,6 +2843,11 @@ export default function AuthGate() {
           onOpenDocuments={noop}
           onCompleteMedication={noop}
           onDeleteMedication={noop}
+          petBreed={petProfiles[activePetId]?.breed}
+          petType={petProfiles[activePetId]?.petType}
+          petName={petProfiles[activePetId]?.name}
+          petAvatarUri={petProfiles[activePetId]?.image || undefined}
+          isPremium={isPremium}
         />
       );
     }
@@ -2898,6 +3028,7 @@ export default function AuthGate() {
         pet={activePet}
         weightEntries={weightsByPet[activePetId]}
         weightGoal={weightGoalsByPet[activePetId]}
+        vaccineCountOverride={vaccinationsBridge?.historyItems?.length}
         locale={locale}
         onBack={() => setRoute(petProfileBackRoute)}
         onEdit={() => {
@@ -2916,8 +3047,9 @@ export default function AuthGate() {
     const activePet = petProfiles[activePetId];
     return (
       <WeightTrackingScreen
-        onBack={() => setRoute(petProfileBackRoute)}
+        onBack={() => { setWeightQuickAdd(false); setRoute(petProfileBackRoute); }}
         backPreview={renderBackPreview(petProfileBackRoute)}
+        initialShowAdd={weightQuickAdd}
         onOpenHealthRecords={() => openSubRoute('healthRecords', 'petProfile')}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'petProfile')}
         petName={activePet.name}
@@ -2962,18 +3094,54 @@ export default function AuthGate() {
         onSaved={(nextPet) => {
           hap.medium();
           const previousPet = petProfiles[nextPet.id];
+          const petTypeChanged = previousPet?.petType != null && previousPet.petType !== nextPet.petType;
+          const petTypeChangeLimit = isPremium ? PREMIUM_PET_TYPE_CHANGE_LIMIT : FREE_PET_TYPE_CHANGE_LIMIT;
+          const currentPetTypeChangeCount = previousPet?.petTypeChangeCount ?? 0;
+
+          if (petTypeChanged && currentPetTypeChangeCount >= petTypeChangeLimit) {
+            Alert.alert(
+              locale === 'tr' ? 'Tur degisimi siniri doldu' : 'Pet type change limit reached',
+              isPremium
+                ? (locale === 'tr'
+                    ? `Premium planda bir hayvanin turunu en fazla ${PREMIUM_PET_TYPE_CHANGE_LIMIT} kez degistirebilirsin.`
+                    : `Premium plan allows changing a pet type up to ${PREMIUM_PET_TYPE_CHANGE_LIMIT} times.`)
+                : (locale === 'tr'
+                    ? `Free planda bir hayvanin turunu en fazla ${FREE_PET_TYPE_CHANGE_LIMIT} kez degistirebilirsin.`
+                    : `Free plan allows changing a pet type up to ${FREE_PET_TYPE_CHANGE_LIMIT} times.`),
+            );
+            return;
+          }
+
+          const nextPetWithTypeGuard: PetProfile = petTypeChanged
+            ? {
+                ...nextPet,
+                petTypeChangeCount: currentPetTypeChangeCount + 1,
+                petTypeChangeHistory: [
+                  ...(previousPet?.petTypeChangeHistory ?? []),
+                  {
+                    from: previousPet.petType,
+                    to: nextPet.petType,
+                    changedAt: new Date().toISOString(),
+                  },
+                ],
+              }
+            : {
+                ...nextPet,
+                petTypeChangeCount: previousPet?.petTypeChangeCount ?? nextPet.petTypeChangeCount ?? 0,
+                petTypeChangeHistory: previousPet?.petTypeChangeHistory ?? nextPet.petTypeChangeHistory ?? [],
+              };
 
           const previousVaccinationSet = new Set((previousPet?.vaccinations ?? []).map((v) => `${v.name}|${v.date}`));
-          const addedVaccinations = (nextPet.vaccinations ?? []).filter((v) => !previousVaccinationSet.has(`${v.name}|${v.date}`));
+          const addedVaccinations = (nextPetWithTypeGuard.vaccinations ?? []).filter((v) => !previousVaccinationSet.has(`${v.name}|${v.date}`));
 
           const previousSurgerySet = new Set((previousPet?.surgeriesLog ?? []).map((s) => `${s.name}|${s.date}`));
-          const addedSurgeries = (nextPet.surgeriesLog ?? []).filter((s) => !previousSurgerySet.has(`${s.name}|${s.date}`));
+          const addedSurgeries = (nextPetWithTypeGuard.surgeriesLog ?? []).filter((s) => !previousSurgerySet.has(`${s.name}|${s.date}`));
 
           const previousAllergySet = new Set((previousPet?.allergiesLog ?? []).map((a) => `${a.category}|${a.date}|${a.status}`));
-          const addedAllergies = (nextPet.allergiesLog ?? []).filter((a) => !previousAllergySet.has(`${a.category}|${a.date}|${a.status}`));
+          const addedAllergies = (nextPetWithTypeGuard.allergiesLog ?? []).filter((a) => !previousAllergySet.has(`${a.category}|${a.date}|${a.status}`));
 
           const previousDiabetesSet = new Set((previousPet?.diabetesLog ?? []).map((d) => `${d.type}|${d.date}|${d.status}`));
-          const addedDiabetes = (nextPet.diabetesLog ?? []).filter((d) => !previousDiabetesSet.has(`${d.type}|${d.date}|${d.status}`));
+          const addedDiabetes = (nextPetWithTypeGuard.diabetesLog ?? []).filter((d) => !previousDiabetesSet.has(`${d.type}|${d.date}|${d.status}`));
 
           const nowIso = new Date().toISOString();
           const outcomes: VetVisitOutcomeInput[] = [
@@ -3020,7 +3188,7 @@ export default function AuthGate() {
             }, outcomes[0].eventDate);
 
             recordVetVisitWithOutcomes({
-              petId: nextPet.id,
+              petId: nextPetWithTypeGuard.id,
               visitDate: latestDate,
               reasonCategory: 'follow_up',
               status: 'completed',
@@ -3029,11 +3197,11 @@ export default function AuthGate() {
             });
           }
 
-          setPetProfilesWithPersist((prev) => ({ ...prev, [nextPet.id]: nextPet }));
+          setPetProfilesWithPersist((prev) => ({ ...prev, [nextPetWithTypeGuard.id]: nextPetWithTypeGuard }));
           setPetProfilesUpdatedAt((prev) => {
             return {
               ...prev,
-              [nextPet.id]: nowIso,
+              [nextPetWithTypeGuard.id]: nowIso,
             };
           });
           setRoute(petEditBackRoute);
@@ -3125,12 +3293,19 @@ export default function AuthGate() {
         onOpenHealthRecords={() => openSubRoute('healthRecords', 'healthHub')}
         onOpenVaccines={() => openSubRoute('vaccinations', 'healthHub')}
         onOpenWeightTracking={() => openWeightTracking(activePetId, 'healthHub')}
+        onAddWeightEntry={() => { setWeightQuickAdd(true); openWeightTracking(activePetId, 'healthHub'); }}
         onOpenDocuments={() => openDocuments('healthHub')}
         documentsPreview={documentsVaultPreview}
         medicationCourses={medicationCoursesByPet[activePetId] ?? []}
         onCompleteMedication={handleCompleteMedication}
         onDeleteMedication={handleDeleteMedication}
         weightGoal={weightGoalsByPet[activePetId]}
+        petBreed={petProfiles[activePetId]?.breed}
+        petType={petProfiles[activePetId]?.petType}
+        petName={petProfiles[activePetId]?.name}
+        petAvatarUri={petProfiles[activePetId]?.image || undefined}
+        isPremium={isPremium}
+        onUpgradePremium={() => setRoute('premium')}
       />,
     );
   }

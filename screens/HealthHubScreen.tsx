@@ -1,26 +1,36 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Image,
   Modal,
   PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
+import * as Haptics from 'expo-haptics';
+import { getBreedHealthEntry, type BreedHealthEntry, type DailyCareCategory } from '../lib/breedHealthData';
+import { generateBreedInsight } from '../lib/breedInsightsEngine';
+import AddRecordSheet, { type AddRecordMode } from '../components/AddRecordSheet';
 import {
+  Activity,
   CheckCircle,
   ChevronRight,
+  Droplets,
   FileText,
+  Home,
   Plus,
   Pill,
   Scale,
+  Scissors,
   Stethoscope,
   Syringe,
   Trash2,
   TrendingUp,
+  Utensils,
 } from 'lucide-react-native';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
@@ -67,6 +77,17 @@ export type AddHealthRecordPayload = {
   title: string;
   date: string;
   note?: string;
+  // Extended fields (v2)
+  visitReason?: string;
+  clinicName?: string;
+  vetName?: string;
+  fee?: number;
+  feeCurrency?: string;
+  batchNumber?: string;
+  status?: string;
+  valueNumber?: number;
+  valueUnit?: string;
+  dueDate?: string;
 };
 export type HealthHubExpenses = {
   total: number;
@@ -110,6 +131,7 @@ type HealthHubScreenProps = {
   onOpenHealthRecords?: () => void;
   onOpenVaccines?: () => void;
   onOpenWeightTracking?: () => void;
+  onAddWeightEntry?: () => void;
   onOpenDocuments?: () => void;
   domainOverview?: HealthHubDomainOverview;
   documentsPreview?: Array<{ id: string; title: string; date: string; type: string }>;
@@ -118,6 +140,12 @@ type HealthHubScreenProps = {
   onDeleteMedication?: (id: string) => void;
   weightGoal?: number;
   locale?: 'en' | 'tr';
+  petBreed?: string;
+  petType?: 'Dog' | 'Cat';
+  petName?: string;
+  petAvatarUri?: string;
+  isPremium?: boolean;
+  onUpgradePremium?: () => void;
 };
 type HealthHubIconKind = 'vet' | 'records' | 'vaccines' | 'weight' | 'documents';
 type AreaRowKey = HealthHubIconKind;
@@ -137,69 +165,69 @@ type AreaRowTheme = {
 
 const AREA_ROW_THEMES: Record<AreaRowKey, AreaRowTheme> = {
   vet: {
-    start: '#102736',
-    end: '#173f4a',
-    iconBg: 'rgba(255,255,255,0.08)',
+    start: '#112b36',
+    end: '#18444d',
+    iconBg: 'rgba(241,255,255,0.10)',
     iconTint: '#e7f8ff',
     titleColor: '#f2f8fb',
-    subColor: 'rgba(223,236,243,0.82)',
-    badgeBg: 'rgba(255,255,255,0.08)',
-    badgeText: '#6bb6c7',
-    statusText: 'rgba(189,216,227,0.92)',
-    chevron: '#6bb6c7',
-    divider: 'rgba(255,255,255,0.10)',
+    subColor: 'rgba(223,236,243,0.78)',
+    badgeBg: 'rgba(244,255,255,0.10)',
+    badgeText: '#88d3d2',
+    statusText: 'rgba(200,227,232,0.88)',
+    chevron: '#86d1cb',
+    divider: 'rgba(255,255,255,0.08)',
   },
   records: {
-    start: '#102736',
-    end: '#173f4a',
-    iconBg: 'rgba(255,255,255,0.08)',
+    start: '#112b36',
+    end: '#18444d',
+    iconBg: 'rgba(241,255,255,0.10)',
     iconTint: '#edf7ff',
     titleColor: '#f2f8fb',
-    subColor: 'rgba(223,236,243,0.82)',
-    badgeBg: 'rgba(255,255,255,0.08)',
-    badgeText: '#8eadc0',
-    statusText: 'rgba(189,216,227,0.92)',
-    chevron: '#8eadc0',
-    divider: 'rgba(255,255,255,0.10)',
+    subColor: 'rgba(223,236,243,0.78)',
+    badgeBg: 'rgba(244,255,255,0.10)',
+    badgeText: '#9fc0c8',
+    statusText: 'rgba(200,227,232,0.88)',
+    chevron: '#a0c6cc',
+    divider: 'rgba(255,255,255,0.08)',
   },
   vaccines: {
-    start: '#102736',
-    end: '#173f4a',
-    iconBg: 'rgba(255,255,255,0.08)',
+    start: '#112b36',
+    end: '#18444d',
+    iconBg: 'rgba(241,255,255,0.10)',
     iconTint: '#e4f7ff',
     titleColor: '#f2f8fb',
-    subColor: 'rgba(223,236,243,0.82)',
-    badgeBg: 'rgba(255,255,255,0.08)',
-    badgeText: '#75b9d6',
-    statusText: 'rgba(189,216,227,0.92)',
-    chevron: '#75b9d6',
-    divider: 'rgba(255,255,255,0.10)',
+    subColor: 'rgba(223,236,243,0.78)',
+    badgeBg: 'rgba(244,255,255,0.10)',
+    badgeText: '#91cdd8',
+    statusText: 'rgba(200,227,232,0.88)',
+    chevron: '#8bc8d1',
+    divider: 'rgba(255,255,255,0.08)',
   },
   weight: {
-    start: '#102736',
-    end: '#173f4a',
-    iconBg: 'rgba(255,255,255,0.08)',
+    start: '#112b36',
+    end: '#18444d',
+    iconBg: 'rgba(241,255,255,0.10)',
     iconTint: '#e6f8ff',
     titleColor: '#f2f8fb',
-    subColor: 'rgba(223,236,243,0.82)',
-    badgeBg: 'rgba(255,255,255,0.08)',
-    badgeText: '#88b7bf',
-    statusText: 'rgba(189,216,227,0.92)',
-    chevron: '#88b7bf',
-    divider: 'rgba(255,255,255,0.10)',
+    subColor: 'rgba(223,236,243,0.78)',
+    badgeBg: 'rgba(244,255,255,0.10)',
+    badgeText: '#9ec4c8',
+    statusText: 'rgba(200,227,232,0.88)',
+    chevron: '#95c5c1',
+    divider: 'rgba(255,255,255,0.08)',
   },
   documents: {
-    start: '#102736',
-    end: '#173f4a',
-    iconBg: 'rgba(255,255,255,0.14)',
+    start: '#13323d',
+    end: '#1d5059',
+    iconBg: 'rgba(244,255,255,0.12)',
     iconTint: '#ebf6fc',
     titleColor: '#f2f8fb',
-    subColor: 'rgba(223,236,243,0.82)',
-    badgeBg: 'rgba(255,255,255,0.08)',
-    badgeText: '#9eb3c0',
-    statusText: 'rgba(189,216,227,0.92)',
-    chevron: '#9eb3c0',
-    divider: 'rgba(255,255,255,0.10)',
+    subColor: 'rgba(226,238,244,0.82)',
+    badgeBg: 'rgba(244,255,255,0.10)',
+    badgeText: '#c2d6de',
+    statusText: 'rgba(212,232,236,0.9)',
+    chevron: '#b9d5de',
+    divider: 'rgba(255,255,255,0.08)',
   },
 };
 
@@ -319,8 +347,6 @@ function HealthHubCategoryIcon({
 }
 
 const RECORD_TYPES: AddHealthRecordType[] = ['vaccine', 'diagnosis', 'procedure', 'prescription', 'test'];
-const SWIPE_ACTION_WIDTH = 174;
-const SWIPE_OPEN_THRESHOLD = 28;
 
 function fmtShort(n: number): string {
   if (n >= 1000) return (n / 1000).toFixed(1).replace('.0', '') + 'k';
@@ -344,6 +370,533 @@ function fmtVisitDate(raw: string, isTr: boolean): string {
   return raw;
 }
 
+// ─── Breed Insights helpers ───────────────────────────────────────────────────
+function DailyCareIcon({ category, size = 16, color = '#7fc4b8' }: { category: DailyCareCategory; size?: number; color?: string }) {
+  const sw = 1.85;
+  if (category === 'grooming') return <Scissors size={size} color={color} strokeWidth={sw} />;
+  if (category === 'exercise') return <Activity size={size} color={color} strokeWidth={sw} />;
+  if (category === 'feeding') return <Utensils size={size} color={color} strokeWidth={sw} />;
+  if (category === 'environment') return <Home size={size} color={color} strokeWidth={sw} />;
+  return <Droplets size={size} color={color} strokeWidth={sw} />;
+}
+
+function BreedDnaIcon({ size = 22, color = '#7fc4b8' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M5.5 3C5.5 3 6 6.5 9 9.5C12 12.5 12.5 16 12.5 16" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+      <Path d="M18.5 3C18.5 3 18 6.5 15 9.5C12 12.5 11.5 16 11.5 16" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+      <Path d="M5.5 21C5.5 21 6 17.5 9 14.5C12 11.5 12.5 8 12.5 8" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+      <Path d="M18.5 21C18.5 21 18 17.5 15 14.5C12 11.5 11.5 8 11.5 8" stroke={color} strokeWidth={1.9} strokeLinecap="round" />
+      <Path d="M6 10H18" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+      <Path d="M6 14H18" stroke={color} strokeWidth={1.6} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+function LockIcon({ size = 24, color = '#e0f4f2' }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path d="M8 11V7a4 4 0 0 1 8 0v4" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <Path d="M5 11h14v11H5z" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+      <Path d="M12 16v2" stroke={color} strokeWidth={2.2} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+/** Breed teaser card shown in the Health Hub scroll view */
+function BreedTeaserRow({
+  entry,
+  isPremium,
+  onPress,
+  isTr,
+  avatarUri,
+  insightText,
+  petName,
+}: {
+  entry: BreedHealthEntry;
+  isPremium: boolean;
+  onPress: () => void;
+  isTr: boolean;
+  avatarUri?: string;
+  insightText?: string;
+  petName?: string;
+}) {
+  const typeLabel = entry.petType === 'Dog' ? (isTr ? 'Köpek' : 'Dog') : (isTr ? 'Kedi' : 'Cat');
+  const weightLabel = `${entry.weightRangeKg[0]}–${entry.weightRangeKg[1]} kg`;
+  const lifespanLabel = `${entry.lifespanYears[0]}–${entry.lifespanYears[1]} ${isTr ? 'yıl' : 'yrs'}`;
+  const topRisks = entry.healthRisks.slice(0, 3);
+  const pressScale = useRef(new Animated.Value(1)).current;
+
+  // When the avatar is the pet's photo, the header reads as the pet — not breed data.
+  // Primary = pet name, secondary = breed label. When no pet name, fall back to breed.
+  const hasPetIdentity = !!avatarUri && !!petName;
+  const primaryLabel = hasPetIdentity ? petName! : entry.breed;
+  const secondaryLabel = hasPetIdentity
+    ? `${isTr ? 'Irk' : 'Breed'}: ${entry.breed}`
+    : `${typeLabel}  ·  ${weightLabel}  ·  ${lifespanLabel}`;
+
+  return (
+    <Animated.View style={{ transform: [{ scale: pressScale }] }}>
+    <Pressable
+      style={bs.teaserRow}
+      onPressIn={() => Animated.spring(pressScale, { toValue: 0.97, useNativeDriver: true, speed: 60, bounciness: 0 }).start()}
+      onPressOut={() => Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 7 }).start()}
+      onPress={onPress}
+      android_ripple={{ color: 'rgba(127,196,184,0.10)' }}
+    >
+      {/* Header row: avatar/icon + pet name (or breed) + chevron */}
+      <View style={bs.teaserHeaderRow}>
+        {avatarUri ? (
+          <Image source={{ uri: avatarUri }} style={bs.teaserAvatar} />
+        ) : (
+          <View style={bs.teaserIconBox}>
+            <BreedDnaIcon size={19} color="#7fc4b8" />
+          </View>
+        )}
+        <View style={bs.teaserBody}>
+          <Text style={bs.teaserBreedName} numberOfLines={1}>{primaryLabel}</Text>
+          <Text style={bs.teaserSub} numberOfLines={1}>{secondaryLabel}</Text>
+        </View>
+        <ChevronRight size={15} color="rgba(127,196,184,0.5)" strokeWidth={2.2} />
+      </View>
+
+      {/* Divider */}
+      <View style={bs.teaserDivider} />
+
+      {/* Bottom row */}
+      <View style={bs.teaserBottomRow}>
+        {/* Breed-standard stats — clearly separate from pet identity above */}
+        {hasPetIdentity ? (
+          <Text style={bs.teaserStandardLine} numberOfLines={1}>
+            {typeLabel}  ·  {weightLabel}  ·  {lifespanLabel}
+          </Text>
+        ) : null}
+
+        {isPremium ? (
+          <>
+            <View style={bs.teaserChips}>
+              {topRisks.map((r, i) => (
+                <View key={i} style={bs.teaserChip}>
+                  <Text style={bs.teaserChipText} numberOfLines={1}>
+                    {isTr ? r.label_tr.split(' ')[0] : r.label.split(' ')[0]}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            {insightText ? (
+              <Text style={bs.teaserInsightPreview} numberOfLines={2}>{insightText}</Text>
+            ) : null}
+          </>
+        ) : (
+          <View style={bs.teaserLockRow}>
+            <View style={bs.teaserLockBadge}>
+              <LockIcon size={11} color="#88c4bc" />
+              <Text style={bs.teaserLockText}>Pro</Text>
+            </View>
+            <Text style={bs.teaserLockHint} numberOfLines={1}>
+              {isTr ? 'Irk sağlık profilini kilidi aç' : 'Unlock breed health profile'}
+            </Text>
+          </View>
+        )}
+      </View>
+    </Pressable>
+    </Animated.View>
+  );
+}
+
+const bs = StyleSheet.create({
+  // ── Breed teaser card (in scroll) ──────────────────────────────────────────
+  teaserRow: {
+    marginHorizontal: 16,
+    borderRadius: 18,
+    backgroundColor: '#0f2d3a',
+    borderWidth: 1,
+    borderColor: 'rgba(127,196,184,0.14)',
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 3,
+  },
+  teaserRowPressed: {
+    backgroundColor: '#0d2736',
+  },
+  teaserHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+    paddingBottom: 13,
+  },
+  teaserAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 11,
+    flexShrink: 0,
+  },
+  teaserIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 11,
+    backgroundColor: 'rgba(127,196,184,0.11)',
+    borderWidth: 1,
+    borderColor: 'rgba(127,196,184,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  teaserBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  teaserBreedName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#dff2ef',
+    letterSpacing: -0.2,
+  },
+  teaserSub: {
+    marginTop: 2,
+    fontSize: 11,
+    color: 'rgba(160,210,204,0.65)',
+    fontWeight: '500',
+  },
+  teaserDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: 'rgba(127,196,184,0.10)',
+    marginHorizontal: 14,
+  },
+  teaserBottomRow: {
+    paddingHorizontal: 14,
+    paddingTop: 11,
+    paddingBottom: 14,
+    gap: 9,
+  },
+  teaserChips: {
+    flexDirection: 'row',
+    gap: 5,
+    flexWrap: 'wrap',
+  },
+  teaserChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: 'rgba(163,67,33,0.20)',
+    borderWidth: 1,
+    borderColor: 'rgba(220,100,60,0.20)',
+  },
+  teaserChipText: {
+    fontSize: 10.5,
+    color: '#f0b49a',
+    fontWeight: '700',
+  },
+  teaserStandardLine: {
+    fontSize: 10.5,
+    color: 'rgba(127,196,184,0.38)',
+    fontWeight: '500',
+    letterSpacing: 0.1,
+  },
+  teaserInsightPreview: {
+    fontSize: 11.5,
+    color: 'rgba(160,210,204,0.52)',
+    fontWeight: '400',
+    lineHeight: 17,
+  },
+  teaserLockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  teaserLockBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(127,196,184,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(127,196,184,0.18)',
+  },
+  teaserLockText: {
+    fontSize: 10.5,
+    color: '#88c4bc',
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
+  teaserLockHint: {
+    fontSize: 11,
+    color: 'rgba(136,196,188,0.45)',
+    fontWeight: '400',
+    flex: 1,
+  },
+
+  // ── Bottom sheet ───────────────────────────────────────────────────────────
+  sheet: {
+    backgroundColor: '#0b1f2b',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    maxHeight: '90%',
+    overflow: 'hidden',
+  },
+  sheetHandleArea: {
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 4,
+    paddingHorizontal: 60,
+  },
+  sheetHandle: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(127,196,184,0.25)',
+  },
+  sheetAvatar: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    flexShrink: 0,
+  },
+  sheetScroll: {
+    paddingHorizontal: 20,
+    paddingBottom: 36,
+  },
+  sheetHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingTop: 12,
+    paddingBottom: 16,
+  },
+  sheetIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(127,196,184,0.12)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(127,196,184,0.24)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetHeaderText: {
+    flex: 1,
+  },
+  sheetPetName: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: 'rgba(160,210,204,0.6)',
+    letterSpacing: 0.1,
+    marginBottom: 2,
+  },
+  sheetBreedName: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#dff2ef',
+    letterSpacing: -0.4,
+  },
+  sheetBreedSub: {
+    marginTop: 3,
+    fontSize: 12,
+    color: 'rgba(160,210,204,0.68)',
+    fontWeight: '500',
+  },
+  sheetDivider: {
+    height: 1,
+    backgroundColor: 'rgba(127,196,184,0.10)',
+    marginBottom: 18,
+  },
+  // AI observation card
+  observationCard: {
+    borderRadius: 16,
+    backgroundColor: 'rgba(180,130,60,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(200,160,80,0.18)',
+    padding: 14,
+    marginBottom: 20,
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  observationIconCol: {
+    paddingTop: 1,
+  },
+  observationTextCol: {
+    flex: 1,
+  },
+  observationLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(210,170,90,0.8)',
+    letterSpacing: 0.8,
+    marginBottom: 5,
+  },
+  observationText: {
+    fontSize: 13,
+    lineHeight: 19.5,
+    color: 'rgba(230,210,170,0.88)',
+    fontWeight: '400',
+  },
+  // Section mini label
+  miniLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: 'rgba(127,196,184,0.55)',
+    letterSpacing: 0.8,
+    marginBottom: 10,
+  },
+  miniLabelSpaced: {
+    marginTop: 18,
+  },
+  // Risk chips
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginBottom: 2,
+  },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 9,
+    backgroundColor: 'rgba(163,67,33,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(220,100,60,0.22)',
+  },
+  chipText: {
+    fontSize: 12,
+    color: '#f4bfaa',
+    fontWeight: '600',
+  },
+  // Daily care items
+  careItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    marginBottom: 10,
+  },
+  careIconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: 'rgba(127,196,184,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  careText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18.5,
+    color: 'rgba(196,230,226,0.82)',
+    fontWeight: '500',
+    paddingTop: 5,
+  },
+  // Care tips (bullet)
+  tipRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+    marginBottom: 7,
+  },
+  tipDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#7fc4b8',
+    marginTop: 6,
+    flexShrink: 0,
+  },
+  tipText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18.5,
+    color: 'rgba(196,230,226,0.82)',
+    fontWeight: '500',
+  },
+  // Close button
+  sheetCloseRow: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 32,
+  },
+  sheetCloseBtn: {
+    height: 50,
+    borderRadius: 999,
+    backgroundColor: 'rgba(127,196,184,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(127,196,184,0.20)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetCloseBtnText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#7fc4b8',
+  },
+  // Premium lock overlay (over sheet)
+  lockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    overflow: 'hidden',
+  },
+  lockOverlayTint: {
+    backgroundColor: 'rgba(5,16,24,0.55)',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+  },
+  lockContent: {
+    alignItems: 'center',
+    gap: 10,
+    zIndex: 1,
+  },
+  lockIconRing: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(127,196,184,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(127,196,184,0.28)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 2,
+  },
+  lockTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#e6f6f4',
+    letterSpacing: -0.3,
+  },
+  lockSub: {
+    fontSize: 13.5,
+    lineHeight: 20,
+    color: 'rgba(196,230,226,0.75)',
+    textAlign: 'center',
+    fontWeight: '400',
+  },
+  lockBtn: {
+    marginTop: 4,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 999,
+    backgroundColor: '#7fc4b8',
+    shadowColor: '#7fc4b8',
+    shadowOpacity: 0.35,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+  },
+  lockBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#071820',
+  },
+});
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function HealthHubScreen({
   summary,
@@ -358,6 +911,7 @@ export default function HealthHubScreen({
   onOpenHealthRecords,
   onOpenVaccines,
   onOpenWeightTracking,
+  onAddWeightEntry,
   onOpenDocuments,
   domainOverview,
   documentsPreview,
@@ -366,6 +920,12 @@ export default function HealthHubScreen({
   onDeleteMedication,
   weightGoal,
   locale = 'en',
+  petBreed,
+  petType,
+  petName,
+  petAvatarUri,
+  isPremium = false,
+  onUpgradePremium,
 }: HealthHubScreenProps) {
   const isTr = locale === 'tr';
 
@@ -375,8 +935,8 @@ export default function HealthHubScreen({
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 420, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 380, useNativeDriver: true }),
+      Animated.timing(fadeAnim, { toValue: 1, duration: 340, useNativeDriver: true }),
+      Animated.spring(slideAnim, { toValue: 0, damping: 20, stiffness: 220, mass: 0.85, useNativeDriver: true }),
     ]).start();
   }, [fadeAnim, slideAnim]);
 
@@ -384,24 +944,90 @@ export default function HealthHubScreen({
   const [category, setCategory] = useState<HealthHubCategory>(initialCategory);
   const [selectedItem, setSelectedItem] = useState<HealthHubTimelineItem | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [recType, setRecType] = useState<AddHealthRecordType>('diagnosis');
-  const [recTitle, setRecTitle] = useState('');
-  const [recDate, setRecDate] = useState(new Date().toISOString().slice(0, 10));
-  const [recNote, setRecNote] = useState('');
-  const [focusedField, setFocusedField] = useState<'title' | 'date' | 'note' | null>(null);
-  const [error, setError] = useState('');
-  const saveScale = useMemo(() => new Animated.Value(1), []);
-  const [openSwipeKey, setOpenSwipeKey] = useState<string | null>(null);
-  const swipeXByKeyRef = useRef<Record<string, Animated.Value>>({});
-  const swipePressLockUntilRef = useRef(0);
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
+  const [addSheetMode, setAddSheetMode] = useState<AddRecordMode>('record');
+  const [addSheetPresetTitle, setAddSheetPresetTitle] = useState('');
+  const [addSheetPresetType, setAddSheetPresetType] = useState<AddHealthRecordType>('diagnosis');
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const quickTranslateY = useRef(new Animated.Value(500)).current;
+  const quickBackdropOpacity = useRef(new Animated.Value(0)).current;
+  const quickHeightRef = useRef(500);
+  const [breedSheetOpen, setBreedSheetOpen] = useState(false);
+  const sheetTranslateY = useRef(new Animated.Value(800)).current;
+  const sheetBackdropOpacity = useRef(new Animated.Value(0)).current;
+  const sheetHeightRef = useRef(800);
+
+  const breedSheetPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 4,
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) {
+          sheetTranslateY.setValue(gs.dy);
+          sheetBackdropOpacity.setValue(Math.max(0, 1 - gs.dy / Math.max(sheetHeightRef.current, 1)));
+        }
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > 100 || gs.vy > 0.8) {
+          Animated.parallel([
+            Animated.spring(sheetTranslateY, { toValue: sheetHeightRef.current, damping: 28, stiffness: 400, useNativeDriver: true }),
+            Animated.timing(sheetBackdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+          ]).start(() => setBreedSheetOpen(false));
+        } else {
+          Animated.parallel([
+            Animated.spring(sheetTranslateY, { toValue: 0, damping: 26, stiffness: 380, mass: 0.85, useNativeDriver: true }),
+            Animated.timing(sheetBackdropOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
+          ]).start();
+        }
+      },
+    }),
+  ).current;
+
+  function openBreedSheet() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setBreedSheetOpen(true);
+    sheetTranslateY.setValue(sheetHeightRef.current);
+    Animated.parallel([
+      Animated.spring(sheetTranslateY, { toValue: 0, damping: 26, stiffness: 380, mass: 0.85, useNativeDriver: true }),
+      Animated.timing(sheetBackdropOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+    ]).start();
+  }
+
+  function closeBreedSheet() {
+    Animated.parallel([
+      Animated.spring(sheetTranslateY, { toValue: sheetHeightRef.current, damping: 28, stiffness: 400, useNativeDriver: true }),
+      Animated.timing(sheetBackdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => setBreedSheetOpen(false));
+  }
+
+  // ── breed insights (memoised) ──
+  const breedEntry = useMemo(
+    () => (petBreed ? getBreedHealthEntry(petBreed, petType, { useFallback: true }) : undefined),
+    [petBreed, petType],
+  );
+  const breedInsight = useMemo(
+    () =>
+      breedEntry
+        ? generateBreedInsight({ entry: breedEntry, timeline, summary, weightGoal, locale })
+        : null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [breedEntry, timeline, summary, weightGoal, locale],
+  );
   const iconAnimByKeyRef = useRef<Record<string, Animated.Value>>({});
+  const cardScaleByKeyRef = useRef<Record<string, Animated.Value>>({});
+  const headerBtnScale = useRef(new Animated.Value(1)).current;
+  const qaScales = useRef([
+    new Animated.Value(1),
+    new Animated.Value(1),
+    new Animated.Value(1),
+    new Animated.Value(1),
+  ]).current;
 
   useEffect(() => { setCategory(initialCategory); }, [initialCategory, categoryResetKey]);
 
   useEffect(() => {
     if (!createPreset?.openCreate) return;
-    openCreate(createPreset.type ?? 'diagnosis', createPreset.title, createPreset.note);
+    openCreate(createPreset.type ?? 'diagnosis', createPreset.title);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createPreset?.nonce, createPreset?.openCreate]);
 
@@ -415,7 +1041,6 @@ export default function HealthHubScreen({
     for (const item of timeline) c[item.type] = (c[item.type] ?? 0) + 1;
     return c;
   }, [timeline]);
-  const isFormValid = recTitle.trim().length > 0 && recDate.trim().length > 0 && isValidDate(recDate);
 
   // ── hub entries ──
   const hubEntries = useMemo(
@@ -462,71 +1087,74 @@ export default function HealthHubScreen({
   );
 
   // ── form helpers ──
-  const openCreate = (presetType: AddHealthRecordType = 'diagnosis', presetTitle = '', presetNote = '') => {
-    setRecType(presetType);
-    setRecTitle(presetTitle ?? '');
-    setRecDate(new Date().toISOString().slice(0, 10));
-    setRecNote(presetNote ?? '');
-    setError('');
-    setCreateOpen(true);
-  };
-  const submitCreate = () => {
-    const cleanTitle = recTitle.trim();
-    if (!cleanTitle) { setError(isTr ? 'Başlık girin.' : 'Please enter a title.'); return; }
-    if (!isValidDate(recDate)) { setError(isTr ? 'Geçerli tarih girin (YYYY-AA-GG).' : 'Enter a valid date (YYYY-MM-DD).'); return; }
-    onAddRecord?.({ type: recType, title: cleanTitle, date: recDate, note: recNote.trim() || undefined });
-    setCreateOpen(false);
+  const openCreate = (presetType: AddHealthRecordType = 'diagnosis', presetTitle = '') => {
+    const mode: AddRecordMode =
+      presetType === 'procedure' ? 'vetVisit' :
+      presetType === 'vaccine'   ? 'vaccine'  : 'record';
+    setAddSheetMode(mode);
+    setAddSheetPresetTitle(presetTitle ?? '');
+    setAddSheetPresetType(presetType);
+    setAddSheetOpen(true);
   };
 
-  const getSwipeX = (key: string) => {
-    if (!swipeXByKeyRef.current[key]) swipeXByKeyRef.current[key] = new Animated.Value(0);
-    return swipeXByKeyRef.current[key];
-  };
   const getIconAnim = (key: string) => {
     if (!iconAnimByKeyRef.current[key]) iconAnimByKeyRef.current[key] = new Animated.Value(0);
     return iconAnimByKeyRef.current[key];
   };
 
-  const setSwipeOpen = (key: string, open: boolean) => {
-    if (openSwipeKey && openSwipeKey !== key) {
-      const prevX = getSwipeX(openSwipeKey);
-      Animated.spring(prevX, { toValue: 0, useNativeDriver: true, speed: 28, bounciness: 6 }).start();
-    }
-    const targetX = getSwipeX(key);
-    Animated.spring(targetX, {
-      toValue: open ? -SWIPE_ACTION_WIDTH : 0,
-      useNativeDriver: true,
-      speed: 28,
-      bounciness: 6,
-    }).start();
-    setOpenSwipeKey(open ? key : openSwipeKey === key ? null : openSwipeKey);
+  const getCardScale = (key: string) => {
+    if (!cardScaleByKeyRef.current[key]) cardScaleByKeyRef.current[key] = new Animated.Value(1);
+    return cardScaleByKeyRef.current[key];
   };
 
-  const handleQuickAddForKey = (key: string) => {
-    setSwipeOpen(key, false);
-    if (key === 'vet') {
-      if (onOpenVetVisits) onOpenVetVisits();
-      else openCreate('procedure', isTr ? 'Veteriner Ziyareti' : 'Vet Visit');
-      return;
-    }
-    if (key === 'vaccines') {
-      if (onOpenVaccines) onOpenVaccines();
-      else openCreate('vaccine', isTr ? 'Aşı Kaydı' : 'Vaccine Record');
-      return;
-    }
-    if (key === 'records') {
-      if (onOpenHealthRecords) onOpenHealthRecords();
-      else openCreate('diagnosis', isTr ? 'Sağlık Kaydı' : 'Health Record');
-      return;
-    }
-    if (key === 'weight') {
-      if (onOpenWeightTracking) onOpenWeightTracking();
-      return;
-    }
-    if (key === 'documents') {
-      onOpenDocuments?.();
-    }
-  };
+  const springDown = (v: Animated.Value, toValue = 0.96) =>
+    () => Animated.spring(v, { toValue, useNativeDriver: true, speed: 60, bounciness: 0 }).start();
+  const springUp = (v: Animated.Value) =>
+    () => Animated.spring(v, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 7 }).start();
+
+  // ── Quick-add sheet animation ────────────────────────────────────────────────
+  const quickSheetPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 4,
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy > 0) {
+          quickTranslateY.setValue(gs.dy);
+          quickBackdropOpacity.setValue(Math.max(0, 1 - gs.dy / Math.max(quickHeightRef.current, 1)));
+        }
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > 80 || gs.vy > 0.7) {
+          Animated.parallel([
+            Animated.spring(quickTranslateY, { toValue: quickHeightRef.current, damping: 28, stiffness: 400, useNativeDriver: true }),
+            Animated.timing(quickBackdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+          ]).start(() => setQuickAddOpen(false));
+        } else {
+          Animated.parallel([
+            Animated.spring(quickTranslateY, { toValue: 0, damping: 26, stiffness: 380, mass: 0.85, useNativeDriver: true }),
+            Animated.timing(quickBackdropOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
+          ]).start();
+        }
+      },
+    }),
+  ).current;
+
+  function openQuickAdd() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setQuickAddOpen(true);
+    quickTranslateY.setValue(quickHeightRef.current);
+    Animated.parallel([
+      Animated.spring(quickTranslateY, { toValue: 0, damping: 26, stiffness: 380, mass: 0.85, useNativeDriver: true }),
+      Animated.timing(quickBackdropOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
+    ]).start();
+  }
+
+  function closeQuickAdd(onClosed?: () => void) {
+    Animated.parallel([
+      Animated.spring(quickTranslateY, { toValue: quickHeightRef.current, damping: 28, stiffness: 400, useNativeDriver: true }),
+      Animated.timing(quickBackdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
+    ]).start(() => { setQuickAddOpen(false); onClosed?.(); });
+  }
 
   useEffect(() => {
     const keys: AreaRowKey[] = ['vet', 'vaccines', 'weight', 'records', 'documents'];
@@ -554,21 +1182,34 @@ export default function HealthHubScreen({
         <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
           <Defs>
             <LinearGradient id="healthHubPageBg" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0%" stopColor="#081a24" />
-              <Stop offset="55%" stopColor="#0e2a37" />
-              <Stop offset="100%" stopColor="#123743" />
+              <Stop offset="0%" stopColor="#0a1e26" />
+              <Stop offset="42%" stopColor="#10313b" />
+              <Stop offset="100%" stopColor="#18454e" />
             </LinearGradient>
           </Defs>
           <Rect x="0" y="0" width="100" height="100" fill="url(#healthHubPageBg)" />
-          <Rect x="0" y="0" width="100" height="100" fill="rgba(255,255,255,0.02)" />
+          <Rect x="0" y="0" width="100" height="100" fill="rgba(217,245,240,0.03)" />
         </Svg>
       </View>
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
 
         {/* ── HEADER ── */}
         <Animated.View style={[s.headerRow, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
-          <Text style={s.headerLabel}>{isTr ? 'SAĞLIK KAYITLARI' : 'CARE RECORDS'}</Text>
-          <Text style={s.headerTitle}>{isTr ? 'Sağlık Merkezi' : 'Health Hub'}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.headerLabel}>{isTr ? 'SAĞLIK KAYITLARI' : 'CARE RECORDS'}</Text>
+            <Text style={s.headerTitle}>{isTr ? 'Sağlık Merkezi' : 'Health Hub'}</Text>
+          </View>
+          <Animated.View style={{ transform: [{ scale: headerBtnScale }] }}>
+            <Pressable
+              style={s.headerAddBtn}
+              onPressIn={springDown(headerBtnScale, 0.88)}
+              onPressOut={springUp(headerBtnScale)}
+              onPress={openQuickAdd}
+              android_ripple={{ color: 'rgba(127,196,184,0.18)', borderless: true, radius: 24 }}
+            >
+              <Plus size={20} color="#7fc4b8" strokeWidth={2.4} />
+            </Pressable>
+          </Animated.View>
         </Animated.View>
 
         {/* ── CATEGORY SECTION HEADER ── */}
@@ -582,51 +1223,16 @@ export default function HealthHubScreen({
           {hubEntries.map((entry, idx) => {
             const rowTheme = AREA_ROW_THEMES[entry.key as Exclude<AreaRowKey, 'documents'>];
             const gradientId = `healthHubAreaGradient-${entry.key}`;
-            const swipeX = getSwipeX(entry.key);
-            const panResponder = PanResponder.create({
-              onMoveShouldSetPanResponder: (_evt, g) => Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 8,
-              onMoveShouldSetPanResponderCapture: (_evt, g) => Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 8,
-              onPanResponderTerminationRequest: () => false,
-              onShouldBlockNativeResponder: () => true,
-              onPanResponderMove: (_evt, g) => {
-                const base = openSwipeKey === entry.key ? -SWIPE_ACTION_WIDTH : 0;
-                const nextX = Math.min(0, Math.max(-SWIPE_ACTION_WIDTH, g.dx + base));
-                swipeX.setValue(nextX);
-              },
-              onPanResponderRelease: (_evt, g) => {
-                swipePressLockUntilRef.current = Date.now() + 220;
-                const movedLeftEnough = g.dx < -SWIPE_OPEN_THRESHOLD;
-                const movedRightEnough = g.dx > 24;
-                if (movedLeftEnough) {
-                  setSwipeOpen(entry.key, true);
-                  return;
-                }
-                if (movedRightEnough) {
-                  setSwipeOpen(entry.key, false);
-                  return;
-                }
-                setSwipeOpen(entry.key, openSwipeKey === entry.key);
-              },
-              onPanResponderTerminate: () => {
-                swipePressLockUntilRef.current = Date.now() + 220;
-                setSwipeOpen(entry.key, openSwipeKey === entry.key);
-              },
-            });
-            const rowInner = (
+            return (
+              <Animated.View key={entry.key} style={{ transform: [{ scale: getCardScale(entry.key) }] }}>
               <Pressable
-                style={({ pressed }) => [
+                style={[
                   s.categoryCard,
                   idx < hubEntries.length - 1 && s.categoryCardDividerSoft,
-                  pressed && s.categoryCardPressed,
                 ]}
-                onPress={() => {
-                  if (Date.now() < swipePressLockUntilRef.current) return;
-                  if (openSwipeKey === entry.key) {
-                    setSwipeOpen(entry.key, false);
-                    return;
-                  }
-                  entry.onPress?.();
-                }}
+                onPressIn={springDown(getCardScale(entry.key), 0.97)}
+                onPressOut={springUp(getCardScale(entry.key))}
+                onPress={() => entry.onPress?.()}
                 android_ripple={{ color: 'rgba(255,255,255,0.12)' }}
               >
                 <View pointerEvents="none" style={s.rowGradientFill}>
@@ -689,22 +1295,7 @@ export default function HealthHubScreen({
 
                 <ChevronRight size={16} color={rowTheme.chevron} />
               </Pressable>
-            );
-
-            return (
-              <View key={entry.key} style={s.swipeRowWrap}>
-                <View style={[s.swipeActionsRail, { backgroundColor: '#0f2a38' }]}>
-                  <Pressable style={[s.swipeDetailsBtn, { borderColor: `${rowTheme.chevron}55` }]} onPress={() => { setSwipeOpen(entry.key, false); entry.onPress?.(); }}>
-                    <Text style={s.swipeDetailsText}>{isTr ? 'Detaylar' : 'Details'}</Text>
-                  </Pressable>
-                  <Pressable style={[s.swipePlusBtn, { backgroundColor: `${rowTheme.chevron}33`, borderColor: `${rowTheme.chevron}80` }]} onPress={() => handleQuickAddForKey(entry.key)}>
-                    <Plus size={18} color="#e7f7ff" strokeWidth={2.2} />
-                  </Pressable>
-                </View>
-                <Animated.View style={{ transform: [{ translateX: swipeX }] }} {...panResponder.panHandlers}>
-                  {rowInner}
-                </Animated.View>
-              </View>
+              </Animated.View>
             );
           })}
         </Animated.View>
@@ -715,60 +1306,12 @@ export default function HealthHubScreen({
         </View>
         <Animated.View style={[s.categoryList, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
           {(() => {
-            const docsKey = 'documents';
-            const docsSwipeX = getSwipeX(docsKey);
-            const docsResponder = PanResponder.create({
-              onMoveShouldSetPanResponder: (_evt, g) => Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 8,
-              onMoveShouldSetPanResponderCapture: (_evt, g) => Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 8,
-              onPanResponderTerminationRequest: () => false,
-              onShouldBlockNativeResponder: () => true,
-              onPanResponderMove: (_evt, g) => {
-                const base = openSwipeKey === docsKey ? -SWIPE_ACTION_WIDTH : 0;
-                const nextX = Math.min(0, Math.max(-SWIPE_ACTION_WIDTH, g.dx + base));
-                docsSwipeX.setValue(nextX);
-              },
-              onPanResponderRelease: (_evt, g) => {
-                swipePressLockUntilRef.current = Date.now() + 220;
-                const movedLeftEnough = g.dx < -SWIPE_OPEN_THRESHOLD;
-                const movedRightEnough = g.dx > 24;
-                if (movedLeftEnough) {
-                  setSwipeOpen(docsKey, true);
-                  return;
-                }
-                if (movedRightEnough) {
-                  setSwipeOpen(docsKey, false);
-                  return;
-                }
-                setSwipeOpen(docsKey, openSwipeKey === docsKey);
-              },
-              onPanResponderTerminate: () => {
-                swipePressLockUntilRef.current = Date.now() + 220;
-                setSwipeOpen(docsKey, openSwipeKey === docsKey);
-              },
-            });
             return (
-              <View style={s.swipeRowWrap}>
-                <View style={[s.swipeActionsRail, { backgroundColor: '#0f2a38' }]}>
-                  <Pressable style={[s.swipeDetailsBtn, { borderColor: `${AREA_ROW_THEMES.documents.chevron}55` }]} onPress={() => { setSwipeOpen(docsKey, false); onOpenDocuments?.(); }}>
-                    <Text style={s.swipeDetailsText}>{isTr ? 'Detaylar' : 'Details'}</Text>
-                  </Pressable>
-                  <Pressable style={[s.swipePlusBtn, { backgroundColor: `${AREA_ROW_THEMES.documents.chevron}33`, borderColor: `${AREA_ROW_THEMES.documents.chevron}80` }]} onPress={() => handleQuickAddForKey(docsKey)}>
-                    <Plus size={18} color="#e7f7ff" strokeWidth={2.2} />
-                  </Pressable>
-                </View>
-                <Animated.View style={{ transform: [{ translateX: docsSwipeX }] }} {...docsResponder.panHandlers}>
-          <Pressable
-                    style={({ pressed }) => [s.categoryCard, pressed && s.categoryCardPressed]}
-                    onPress={() => {
-                      if (Date.now() < swipePressLockUntilRef.current) return;
-                      if (openSwipeKey === docsKey) {
-                        setSwipeOpen(docsKey, false);
-                        return;
-              }
-              onOpenDocuments?.();
-            }}
-            android_ripple={{ color: 'rgba(255,255,255,0.12)' }}
-          >
+              <Pressable
+                style={({ pressed }) => [s.categoryCard, pressed && s.categoryCardPressed]}
+                onPress={() => onOpenDocuments?.()}
+                android_ripple={{ color: 'rgba(255,255,255,0.12)' }}
+              >
             <View pointerEvents="none" style={s.rowGradientFill}>
               <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
                 <Defs>
@@ -825,9 +1368,7 @@ export default function HealthHubScreen({
               <Text style={[s.vaultCtaText, { color: AREA_ROW_THEMES.documents.statusText }]}>{isTr ? 'Tüm Belgeler' : 'View All'}</Text>
             </View>
             <ChevronRight size={16} color={AREA_ROW_THEMES.documents.chevron} />
-          </Pressable>
-                </Animated.View>
-              </View>
+              </Pressable>
             );
           })()}
         </Animated.View>
@@ -873,6 +1414,29 @@ export default function HealthHubScreen({
                     </View>
                   );
                 })}
+            </Animated.View>
+          </>
+        ) : null}
+
+        {/* ── BREED INSIGHTS ── */}
+        {breedEntry ? (
+          <>
+            <View style={[s.sectionHeaderRow, s.sectionHeaderRowSpaced]}>
+              <Text style={[s.sectionLabel, { color: 'rgba(127,196,184,0.55)' }]}>
+                {isTr ? 'IRK SAĞLIK PROFİLİ' : 'BREED INSIGHTS'}
+              </Text>
+              <View style={[s.sectionHeaderLine, { backgroundColor: 'rgba(127,196,184,0.15)' }]} />
+            </View>
+            <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 8 }}>
+              <BreedTeaserRow
+                entry={breedEntry}
+                isPremium={isPremium}
+                onPress={openBreedSheet}
+                isTr={isTr}
+                avatarUri={petAvatarUri}
+                insightText={breedInsight?.text}
+                petName={petName}
+              />
             </Animated.View>
           </>
         ) : null}
@@ -944,6 +1508,251 @@ export default function HealthHubScreen({
       </ScrollView>
 
       {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* QUICK-ADD BOTTOM SHEET                                                */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      <Modal visible={quickAddOpen} transparent animationType="none" onRequestClose={() => closeQuickAdd()}>
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.55)', opacity: quickBackdropOpacity }]} pointerEvents="none" />
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => closeQuickAdd()} />
+          <Animated.View
+            style={[bs.sheet, { transform: [{ translateY: quickTranslateY }] }]}
+            onLayout={(e) => { quickHeightRef.current = e.nativeEvent.layout.height; }}
+          >
+            <View style={bs.sheetHandleArea} {...quickSheetPan.panHandlers}>
+              <View style={bs.sheetHandle} />
+            </View>
+            <Text style={qa.title}>{isTr ? 'Kayıt Ekle' : 'Add Record'}</Text>
+
+            {/* Vet Visit */}
+            <Animated.View style={{ transform: [{ scale: qaScales[0] }] }}>
+              <Pressable
+                style={({ pressed }) => [qa.row, pressed && qa.rowPressed]}
+                onPressIn={springDown(qaScales[0], 0.97)}
+                onPressOut={springUp(qaScales[0])}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeQuickAdd(() => openCreate('procedure', isTr ? 'Veteriner Ziyareti' : 'Vet Visit')); }}
+              >
+                <View style={[qa.iconBox, { backgroundColor: 'rgba(100,200,180,0.12)', borderColor: 'rgba(100,200,180,0.22)' }]}>
+                  <Stethoscope size={20} color="#7fc4b8" strokeWidth={1.8} />
+                </View>
+                <View style={qa.rowBody}>
+                  <Text style={qa.rowLabel}>{isTr ? 'Veteriner Ziyareti' : 'Vet Visit'}</Text>
+                  <Text style={qa.rowSub}>{isTr ? 'Muayene ve kontrol kaydı' : 'Checkup or examination record'}</Text>
+                </View>
+                <ChevronRight size={14} color="rgba(127,196,184,0.4)" strokeWidth={2.2} />
+              </Pressable>
+            </Animated.View>
+
+            {/* Vaccine */}
+            <Animated.View style={{ transform: [{ scale: qaScales[1] }] }}>
+              <Pressable
+                style={({ pressed }) => [qa.row, pressed && qa.rowPressed]}
+                onPressIn={springDown(qaScales[1], 0.97)}
+                onPressOut={springUp(qaScales[1])}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeQuickAdd(() => openCreate('vaccine', isTr ? 'Aşı Kaydı' : 'Vaccine Record')); }}
+              >
+                <View style={[qa.iconBox, { backgroundColor: 'rgba(100,160,240,0.12)', borderColor: 'rgba(100,160,240,0.22)' }]}>
+                  <Syringe size={20} color="#88aaee" strokeWidth={1.8} />
+                </View>
+                <View style={qa.rowBody}>
+                  <Text style={qa.rowLabel}>{isTr ? 'Aşı' : 'Vaccine'}</Text>
+                  <Text style={qa.rowSub}>{isTr ? 'Aşı ve hatırlatma kaydı' : 'Vaccination & booster record'}</Text>
+                </View>
+                <ChevronRight size={14} color="rgba(127,196,184,0.4)" strokeWidth={2.2} />
+              </Pressable>
+            </Animated.View>
+
+            {/* Health Record */}
+            <Animated.View style={{ transform: [{ scale: qaScales[2] }] }}>
+              <Pressable
+                style={({ pressed }) => [qa.row, pressed && qa.rowPressed]}
+                onPressIn={springDown(qaScales[2], 0.97)}
+                onPressOut={springUp(qaScales[2])}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeQuickAdd(() => openCreate('diagnosis', isTr ? 'Sağlık Kaydı' : 'Health Record')); }}
+              >
+                <View style={[qa.iconBox, { backgroundColor: 'rgba(180,130,240,0.12)', borderColor: 'rgba(180,130,240,0.22)' }]}>
+                  <FileText size={20} color="#c4a0e8" strokeWidth={1.8} />
+                </View>
+                <View style={qa.rowBody}>
+                  <Text style={qa.rowLabel}>{isTr ? 'Sağlık Kaydı' : 'Health Record'}</Text>
+                  <Text style={qa.rowSub}>{isTr ? 'Teşhis, reçete, test sonucu' : 'Diagnosis, prescription, test result'}</Text>
+                </View>
+                <ChevronRight size={14} color="rgba(127,196,184,0.4)" strokeWidth={2.2} />
+              </Pressable>
+            </Animated.View>
+
+            {/* Weight */}
+            <Animated.View style={{ transform: [{ scale: qaScales[3] }] }}>
+              <Pressable
+                style={({ pressed }) => [qa.row, qa.rowLast, pressed && qa.rowPressed]}
+                onPressIn={springDown(qaScales[3], 0.97)}
+                onPressOut={springUp(qaScales[3])}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeQuickAdd(() => onAddWeightEntry ? onAddWeightEntry() : onOpenWeightTracking?.()); }}
+              >
+              <View style={[qa.iconBox, { backgroundColor: 'rgba(240,180,80,0.12)', borderColor: 'rgba(240,180,80,0.22)' }]}>
+                <Scale size={20} color="#e8c46a" strokeWidth={1.8} />
+              </View>
+              <View style={qa.rowBody}>
+                <Text style={qa.rowLabel}>{isTr ? 'Kilo' : 'Weight'}</Text>
+                <Text style={qa.rowSub}>{isTr ? 'Güncel kilo ölçümü ekle' : 'Log a new weight measurement'}</Text>
+              </View>
+                <ChevronRight size={14} color="rgba(127,196,184,0.4)" strokeWidth={2.2} />
+              </Pressable>
+            </Animated.View>
+
+            <View style={{ height: 24 }} />
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* BREED INSIGHTS BOTTOM SHEET                                           */}
+      {/* ────────────────────────────────────────────────────────────────────── */}
+      <Modal
+        visible={breedSheetOpen}
+        transparent
+        animationType="none"
+        onRequestClose={closeBreedSheet}
+      >
+        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
+          {/* Animated backdrop */}
+          <Animated.View
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.62)', opacity: sheetBackdropOpacity }]}
+            pointerEvents="none"
+          />
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={closeBreedSheet} />
+
+          {/* Animated sheet */}
+          <Animated.View
+            style={[bs.sheet, { transform: [{ translateY: sheetTranslateY }] }]}
+            onLayout={(e) => { sheetHeightRef.current = e.nativeEvent.layout.height; }}
+          >
+            {/* Draggable hero zone: handle + header + divider */}
+            <View {...breedSheetPan.panHandlers}>
+              <View style={bs.sheetHandleArea}>
+                <View style={bs.sheetHandle} />
+              </View>
+              {breedEntry ? (
+                <>
+                  <View style={bs.sheetHeaderRow}>
+                    {petAvatarUri ? (
+                      <Image source={{ uri: petAvatarUri }} style={bs.sheetAvatar} />
+                    ) : (
+                      <View style={bs.sheetIconCircle}>
+                        <BreedDnaIcon size={24} color="#7fc4b8" />
+                      </View>
+                    )}
+                    <View style={bs.sheetHeaderText}>
+                      {petName ? (
+                        <Text style={bs.sheetPetName} numberOfLines={1}>{petName}</Text>
+                      ) : null}
+                      <Text style={bs.sheetBreedName} numberOfLines={1}>{breedEntry.breed}</Text>
+                      <Text style={bs.sheetBreedSub}>
+                        {breedEntry.petType === 'Dog' ? (isTr ? 'Köpek' : 'Dog') : (isTr ? 'Kedi' : 'Cat')}
+                        {'  ·  '}{breedEntry.weightRangeKg[0]}–{breedEntry.weightRangeKg[1]} kg
+                        {'  ·  '}{breedEntry.lifespanYears[0]}–{breedEntry.lifespanYears[1]} {isTr ? 'yıl' : 'yrs'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={bs.sheetDivider} />
+                </>
+              ) : null}
+            </View>
+
+            {breedEntry ? (
+              <ScrollView
+                contentContainerStyle={bs.sheetScroll}
+                showsVerticalScrollIndicator={false}
+                bounces={false}
+              >
+                {/* AI Observation */}
+                {breedInsight ? (
+                  <View style={bs.observationCard}>
+                    <View style={bs.observationIconCol}>
+                      <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                        <Path d="M12 3L13.5 7.5L18 9L13.5 10.5L12 15L10.5 10.5L6 9L10.5 7.5L12 3Z" stroke="#c9a44a" strokeWidth={1.8} strokeLinejoin="round" />
+                        <Path d="M18.5 3.5L19.2 5.3L21 6L19.2 6.7L18.5 8.5L17.8 6.7L16 6L17.8 5.3L18.5 3.5Z" stroke="#c9a44a" strokeWidth={1.6} strokeLinejoin="round" />
+                      </Svg>
+                    </View>
+                    <View style={bs.observationTextCol}>
+                      <Text style={bs.observationLabel}>{isTr ? 'SAĞLIK ANALİZİ' : 'HEALTH ANALYSIS'}</Text>
+                      <Text style={bs.observationText}>{breedInsight.text}</Text>
+                    </View>
+                  </View>
+                ) : null}
+
+                {/* Genetic Risks */}
+                <Text style={bs.miniLabel}>{isTr ? 'GENETİK RİSKLER' : 'GENETIC RISKS'}</Text>
+                <View style={bs.chipsRow}>
+                  {breedEntry.healthRisks.map((r, i) => (
+                    <View key={i} style={[bs.chip, breedInsight?.matchedRisks.includes(isTr ? r.label_tr : r.label) && { borderColor: 'rgba(240,120,70,0.45)', backgroundColor: 'rgba(163,67,33,0.30)' }]}>
+                      <Text style={bs.chipText}>{isTr ? r.label_tr : r.label}</Text>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Daily Care */}
+                {(breedEntry.dailyCare?.length ?? 0) > 0 ? (
+                  <>
+                    <Text style={[bs.miniLabel, bs.miniLabelSpaced]}>{isTr ? 'GÜNLÜK BAKIM' : 'DAILY CARE'}</Text>
+                    {breedEntry.dailyCare!.map((item, i) => (
+                      <View key={i} style={bs.careItem}>
+                        <View style={bs.careIconBox}>
+                          <DailyCareIcon category={item.category} size={15} color="#7fc4b8" />
+                        </View>
+                        <Text style={bs.careText}>{isTr ? item.label_tr : item.label}</Text>
+                      </View>
+                    ))}
+                  </>
+                ) : null}
+
+                {/* Care Tips */}
+                <Text style={[bs.miniLabel, bs.miniLabelSpaced]}>{isTr ? 'VETERİNER ÖNERİLERİ' : 'VET RECOMMENDATIONS'}</Text>
+                {breedEntry.careTips.map((tip, i) => (
+                  <View key={i} style={bs.tipRow}>
+                    <View style={bs.tipDot} />
+                    <Text style={bs.tipText}>{isTr ? tip.label_tr : tip.label}</Text>
+                  </View>
+                ))}
+              </ScrollView>
+            ) : null}
+
+            {/* Close button */}
+            <View style={bs.sheetCloseRow}>
+              <Pressable style={bs.sheetCloseBtn} onPress={closeBreedSheet}>
+                <Text style={bs.sheetCloseBtnText}>{isTr ? 'Kapat' : 'Close'}</Text>
+              </Pressable>
+            </View>
+
+            {/* Premium lock overlay */}
+            {!isPremium && (
+              <Pressable
+                style={bs.lockOverlay}
+                onPress={() => { closeBreedSheet(); onUpgradePremium?.(); }}
+                android_ripple={{ color: 'rgba(255,255,255,0.06)' }}
+              >
+                <BlurView intensity={36} tint="dark" style={StyleSheet.absoluteFillObject} />
+                <View style={[StyleSheet.absoluteFillObject, bs.lockOverlayTint]} />
+                <View style={bs.lockContent}>
+                  <View style={bs.lockIconRing}>
+                    <LockIcon size={24} color="#c8ede8" />
+                  </View>
+                  <Text style={bs.lockTitle}>{isTr ? 'Premium Özellik' : 'Premium Feature'}</Text>
+                  <Text style={bs.lockSub}>
+                    {isTr
+                      ? 'Irk sağlık profili, günlük bakım rehberi ve AI analizini görmek için Pro\'ya geçin.'
+                      : 'Upgrade to Pro to unlock breed health profiles, daily care guides, and AI analysis.'}
+                  </Text>
+                  <View style={bs.lockBtn}>
+                    <Text style={bs.lockBtnText}>{isTr ? 'Pro\'ya Geç' : 'Upgrade to Pro'}</Text>
+                  </View>
+                </View>
+              </Pressable>
+            )}
+          </Animated.View>
+        </View>
+      </Modal>
+
+      {/* ────────────────────────────────────────────────────────────────────── */}
       {/* DETAIL / DELETE BOTTOM SHEET                                          */}
       {/* ────────────────────────────────────────────────────────────────────── */}
       <Modal
@@ -1011,100 +1820,17 @@ export default function HealthHubScreen({
       </Modal>
 
       {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* CREATE MODAL (full screen slide-up)                                   */}
+      {/* ADD RECORD SHEET                                                       */}
       {/* ────────────────────────────────────────────────────────────────────── */}
-      <Modal
-        visible={createOpen}
-        transparent={false}
-        animationType="slide"
-        presentationStyle="fullScreen"
-        statusBarTranslucent={false}
-        onRequestClose={() => setCreateOpen(false)}
-      >
-        <View style={s.createScreen}>
-          {/* Header */}
-          <View style={s.createHeader}>
-            <Pressable style={s.createCancelBtn} onPress={() => setCreateOpen(false)}>
-              <Text style={s.createCancelText}>{isTr ? 'İptal' : 'Cancel'}</Text>
-            </Pressable>
-            <Text style={s.createHeaderTitle}>{isTr ? 'Kayıt Ekle' : 'Add Record'}</Text>
-            <Animated.View style={{ transform: [{ scale: saveScale }] }}>
-              <Pressable
-                style={[s.createSaveBtn, !isFormValid && s.createSaveBtnDisabled]}
-                disabled={!isFormValid}
-                onPress={submitCreate}
-                onPressIn={() =>
-                  Animated.spring(saveScale, { toValue: 0.97, useNativeDriver: true, speed: 40, bounciness: 6 }).start()
-                }
-                onPressOut={() =>
-                  Animated.spring(saveScale, { toValue: 1, useNativeDriver: true, speed: 36, bounciness: 5 }).start()
-                }
-              >
-                <Text style={s.createSaveText}>{isTr ? 'Kaydet' : 'Save'}</Text>
-              </Pressable>
-            </Animated.View>
-          </View>
-
-          <ScrollView style={s.createBody} contentContainerStyle={s.createBodyContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-            {/* Type chips */}
-            <Text style={s.createFieldLabel}>{isTr ? 'KAYIT TÜRÜ' : 'RECORD TYPE'}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={s.createChipsRow}>
-              {RECORD_TYPES.map((t) => (
-                <Pressable
-                  key={t}
-                  style={[s.createChip, recType === t && s.createChipActive]}
-                  onPress={() => setRecType(t)}
-                >
-                  <Text style={[s.createChipText, recType === t && s.createChipTextActive]}>
-                    {recordTypeLabel(t, isTr)}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            {/* Title */}
-            <Text style={s.createFieldLabel}>{isTr ? 'BAŞLIK' : 'TITLE'}</Text>
-            <TextInput
-              style={[s.createInput, focusedField === 'title' && s.createInputFocused]}
-              placeholder={isTr ? 'Kayıt başlığı' : 'Record title'}
-              placeholderTextColor={C.outlineVariant}
-              value={recTitle}
-              onChangeText={setRecTitle}
-              onFocus={() => setFocusedField('title')}
-              onBlur={() => setFocusedField(null)}
-            />
-
-            {/* Date */}
-            <Text style={s.createFieldLabel}>{isTr ? 'TARİH (YYYY-AA-GG)' : 'DATE (YYYY-MM-DD)'}</Text>
-            <TextInput
-              style={[s.createInput, focusedField === 'date' && s.createInputFocused]}
-              placeholder={new Date().toISOString().slice(0, 10)}
-              placeholderTextColor={C.outlineVariant}
-              value={recDate}
-              onChangeText={setRecDate}
-              autoCapitalize="none"
-              onFocus={() => setFocusedField('date')}
-              onBlur={() => setFocusedField(null)}
-            />
-
-            {/* Note */}
-            <Text style={s.createFieldLabel}>{isTr ? 'NOT (OPSİYONEL)' : 'NOTE (OPTIONAL)'}</Text>
-            <TextInput
-              style={[s.createInput, s.createInputMultiline, focusedField === 'note' && s.createInputFocused]}
-              placeholder={isTr ? 'Ek not...' : 'Additional notes...'}
-              placeholderTextColor={C.outlineVariant}
-              value={recNote}
-              onChangeText={setRecNote}
-              multiline
-              numberOfLines={4}
-              onFocus={() => setFocusedField('note')}
-              onBlur={() => setFocusedField(null)}
-            />
-
-            {error ? <Text style={s.createError}>{error}</Text> : null}
-          </ScrollView>
-        </View>
-      </Modal>
+      <AddRecordSheet
+        visible={addSheetOpen}
+        mode={addSheetMode}
+        initialTitle={addSheetPresetTitle}
+        initialType={addSheetPresetType}
+        locale={locale}
+        onClose={() => setAddSheetOpen(false)}
+        onSave={(payload) => onAddRecord?.(payload)}
+      />
     </View>
   );
 }
@@ -1119,29 +1845,45 @@ const s = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   content: {
-    paddingTop: 36,
-    paddingHorizontal: 20,
-    paddingBottom: 120,
+    paddingTop: 56,
+    paddingHorizontal: 22,
+    paddingBottom: 132,
   },
 
   // Header
   headerRow: {
-    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: 18,
+  },
+  headerAddBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(127,196,184,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(127,196,184,0.20)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  headerAddBtnPressed: {
+    backgroundColor: 'rgba(127,196,184,0.18)',
   },
   headerLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
-    letterSpacing: 1.4,
-    color: 'rgba(196,222,234,0.84)',
+    letterSpacing: 1.8,
+    color: 'rgba(181,226,229,0.78)',
     textTransform: 'uppercase',
-    marginBottom: 4,
+    marginBottom: 8,
   },
   headerTitle: {
-    fontSize: 34,
-    fontWeight: '800',
-    color: '#eef7fb',
-    letterSpacing: -0.8,
-    lineHeight: 38,
+    fontSize: 40,
+    fontWeight: '900',
+    color: '#f1fbfc',
+    letterSpacing: -1.2,
+    lineHeight: 44,
   },
   addBtn: {
     height: 40,
@@ -1619,24 +2361,24 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'flex-start',
-    gap: 10,
-    marginBottom: 8,
+    gap: 12,
+    marginBottom: 10,
   },
   sectionHeaderRowSpaced: {
     marginTop: 8,
   },
   sectionLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
-    letterSpacing: 1.4,
-    color: 'rgba(196,222,234,0.84)',
+    letterSpacing: 1.8,
+    color: 'rgba(196,222,234,0.78)',
     textTransform: 'uppercase',
   },
   sectionLabelAreas: {
-    color: 'rgba(132,204,220,0.92)',
+    color: 'rgba(143,223,223,0.92)',
   },
   sectionLabelDocs: {
-    color: 'rgba(173,190,204,0.92)',
+    color: 'rgba(184,205,214,0.88)',
   },
   sectionLabelMeds: {
     color: 'rgba(139,210,196,0.92)',
@@ -1644,13 +2386,13 @@ const s = StyleSheet.create({
   sectionHeaderLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(189,216,227,0.24)',
+    backgroundColor: 'rgba(189,216,227,0.18)',
   },
   sectionHeaderLineAreas: {
-    backgroundColor: 'rgba(132,204,220,0.28)',
+    backgroundColor: 'rgba(143,223,223,0.24)',
   },
   sectionHeaderLineDocs: {
-    backgroundColor: 'rgba(173,190,204,0.26)',
+    backgroundColor: 'rgba(184,205,214,0.22)',
   },
   sectionHeaderLineMeds: {
     backgroundColor: 'rgba(139,210,196,0.28)',
@@ -1663,24 +2405,26 @@ const s = StyleSheet.create({
 
   // Category cards
   categoryList: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: 18,
-    marginBottom: 18,
+    backgroundColor: 'rgba(255,255,255,0.035)',
+    borderRadius: 24,
+    marginBottom: 22,
     overflow: 'hidden',
-    shadowColor: '#0b1b24',
-    shadowOpacity: 0.22,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(170,222,222,0.08)',
+    shadowColor: '#07151b',
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
   },
   categoryCard: {
     position: 'relative',
     overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 14,
   },
   categoryCardPressed: {
     transform: [{ scale: 0.992 }],
@@ -1688,50 +2432,7 @@ const s = StyleSheet.create({
   },
   categoryCardDividerSoft: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(8,24,34,0.45)',
-  },
-  swipeRowWrap: {
-    position: 'relative',
-    overflow: 'hidden',
-  },
-  swipeActionsRail: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: SWIPE_ACTION_WIDTH,
-    backgroundColor: '#102a38',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    paddingHorizontal: 0,
-    gap: 10,
-  },
-  swipeDetailsBtn: {
-    height: 36,
-    paddingHorizontal: 12,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  swipeDetailsText: {
-    color: '#e7f7ff',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-  },
-  swipePlusBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.32)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderBottomColor: 'rgba(225,247,247,0.08)',
   },
   categoryCardDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -1747,39 +2448,39 @@ const s = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
   },
   categoryIconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
+    width: 50,
+    height: 50,
+    borderRadius: 15,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.16)',
-    shadowOpacity: 0.24,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    borderColor: 'rgba(231,250,249,0.22)',
+    shadowOpacity: 0.26,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
   },
   vaccineCategoryIconBox: {
     borderColor: 'rgba(255,255,255,0.25)',
   },
   categoryCardBody: {
     flex: 1,
-    gap: 4,
+    gap: 5,
   },
   categoryCardTitle: {
-    fontSize: 15.5,
-    fontWeight: '700',
+    fontSize: 16.5,
+    fontWeight: '800',
     color: C.onSurface,
-    letterSpacing: -0.2,
+    letterSpacing: -0.35,
   },
   vaccineCategoryTitle: {
     color: '#ecfffb',
   },
   categoryCardSub: {
-    fontSize: 12,
+    fontSize: 12.5,
     fontWeight: '500',
     color: C.onSurfaceVariant,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   vaccineCategorySub: {
     color: 'rgba(236,255,251,0.84)',
@@ -1788,47 +2489,48 @@ const s = StyleSheet.create({
     marginTop: 4,
     fontSize: 12,
     lineHeight: 16,
-    color: C.onSurface,
+    color: 'rgba(225,238,243,0.78)',
     fontWeight: '600',
   },
   categoryCardRight: {
     alignItems: 'flex-end',
-    gap: 5,
-    minWidth: 82,
+    gap: 6,
+    minWidth: 92,
   },
   countBadge: {
     backgroundColor: C.surfaceContainer,
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: 'rgba(235,251,251,0.22)',
   },
   vaccineCountBadge: {
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
   countBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 11.5,
+    fontWeight: '800',
     color: C.primary,
   },
   vaccineCountBadgeText: {
     color: '#ecfffb',
   },
   categoryStatusText: {
-    fontSize: 10,
-    fontWeight: '600',
+    fontSize: 10.5,
+    fontWeight: '700',
     color: C.onSurfaceVariant,
-    maxWidth: 84,
+    maxWidth: 94,
     textAlign: 'right',
   },
   vaccineCategoryStatusText: {
     color: 'rgba(236,255,251,0.84)',
   },
   vaultCtaText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: C.primaryDim,
+    fontSize: 11.5,
+    fontWeight: '800',
+    color: '#d9eef4',
+    letterSpacing: 0.15,
   },
 
   // Medication cards
@@ -2144,132 +2846,57 @@ const s = StyleSheet.create({
     color: '#fff',
   },
 
-  // Create modal
-  createScreen: {
-    flex: 1,
-    backgroundColor: C.bg,
-  },
-  createHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingTop: 56,
-    paddingBottom: 16,
-    backgroundColor: C.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: C.surfaceContainer,
-  },
-  createCancelBtn: {
-    height: 36,
-    paddingHorizontal: 4,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  createCancelText: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: C.onSurfaceVariant,
-  },
-  createHeaderTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: C.onSurface,
-    letterSpacing: -0.2,
-  },
-  createSaveBtn: {
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.primary,
-    paddingHorizontal: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  createSaveBtnDisabled: {
-    opacity: 0.45,
-  },
-  createSaveText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: C.onPrimary,
-  },
-  createBody: {
-    flex: 1,
-  },
-  createBodyContent: {
-    paddingHorizontal: 22,
-    paddingTop: 24,
-    paddingBottom: 48,
-    gap: 0,
-  },
-  createFieldLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1.3,
-    color: C.onSurfaceVariant,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-    marginTop: 20,
-  },
-  createChipsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingRight: 4,
-  },
-  createChip: {
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: C.outlineVariant,
-    backgroundColor: C.surface,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  createChipActive: {
-    borderColor: C.primary,
-    backgroundColor: '#edf5ea',
-  },
-  createChipText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: C.onSurfaceVariant,
-  },
-  createChipTextActive: {
-    color: C.primary,
-    fontWeight: '700',
-  },
-  createInput: {
-    height: 48,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: C.outlineVariant,
-    backgroundColor: C.surface,
-    paddingHorizontal: 16,
-    color: C.onSurface,
-    fontSize: 15,
-    fontWeight: '500',
-  },
-  createInputMultiline: {
-    height: 96,
-    paddingTop: 14,
-    textAlignVertical: 'top',
-  },
-  createInputFocused: {
-    borderColor: C.primary,
-    shadowColor: C.primary,
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  createError: {
-    marginTop: 12,
-    fontSize: 13,
-    fontWeight: '600',
-    color: C.urgent,
-    lineHeight: 18,
-  },
 });
 
-
+// ─── Quick-add sheet styles ───────────────────────────────────────────────────
+const qa = StyleSheet.create({
+  title: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#dff2ef',
+    letterSpacing: -0.3,
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 16,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    gap: 14,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(127,196,184,0.08)',
+  },
+  rowLast: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(127,196,184,0.08)',
+  },
+  rowPressed: {
+    backgroundColor: 'rgba(127,196,184,0.06)',
+  },
+  iconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 13,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  rowBody: {
+    flex: 1,
+    gap: 2,
+  },
+  rowLabel: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#dff2ef',
+    letterSpacing: -0.2,
+  },
+  rowSub: {
+    fontSize: 12,
+    color: 'rgba(160,210,204,0.6)',
+    fontWeight: '400',
+  },
+});
