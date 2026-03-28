@@ -225,9 +225,10 @@ export default function HomeScreen({
   const [quickWeightValue, setQuickWeightValue] = useState('');
   const [quickWeightSaved, setQuickWeightSaved] = useState(false);
 
-  // ── Native Animated: weight card breathing + urgent pulse ──
+  // ── Native Animated: weight card breathing + urgent pulse + press ──
   const breathAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim = useRef(new Animated.Value(0)).current;
+  const weightCardPressScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     const breathLoop = Animated.loop(
@@ -251,7 +252,10 @@ export default function HomeScreen({
   }, [breathAnim, pulseAnim]);
 
   const breathAnimStyle = {
-    transform: [{ scale: breathAnim.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.004] }) }],
+    transform: [
+      { scale: breathAnim.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.004] }) },
+      { scale: weightCardPressScale },
+    ],
   };
 
   useEffect(() => {
@@ -650,11 +654,15 @@ export default function HomeScreen({
         {/* ── PRIMARY HEALTH CARD (breathing animation) ── */}
         <Animated.View style={breathAnimStyle}>
           <Pressable
-            style={({ pressed }) => [styles.weightCard, pressed && styles.weightCardPressed]}
-            onPress={() => {
-              hap.light();
-              onOpenWeightTracking?.();
+            style={styles.weightCard}
+            onPressIn={() => {
+              hap.medium();
+              Animated.spring(weightCardPressScale, { toValue: 0.97, useNativeDriver: true, speed: 60, bounciness: 0 }).start();
             }}
+            onPressOut={() => {
+              Animated.spring(weightCardPressScale, { toValue: 1, useNativeDriver: true, speed: 36, bounciness: 6 }).start();
+            }}
+            onPress={() => onOpenWeightTracking?.()}
           >
             <View style={styles.weightHeader}>
               <Text style={styles.weightLabel}>{isTr ? 'AĞIRLIK PROFİLİ' : 'WEIGHT PROFILE'}</Text>
@@ -1461,11 +1469,6 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 8 },
     elevation: 5,
-  },
-  weightCardPressed: {
-    borderColor: 'rgba(255,255,255,0.9)',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
   },
   weightHeader: {
     flexDirection: 'row',

@@ -447,7 +447,9 @@ function BreedTeaserRow({
       {/* Header row: avatar/icon + pet name (or breed) + chevron */}
       <View style={bs.teaserHeaderRow}>
         {avatarUri ? (
-          <Image source={{ uri: avatarUri }} style={bs.teaserAvatar} />
+          <View style={bs.teaserAvatarFrame}>
+            <Image source={{ uri: avatarUri }} style={bs.teaserAvatar} resizeMode="cover" />
+          </View>
         ) : (
           <View style={bs.teaserIconBox}>
             <BreedDnaIcon size={19} color="#7fc4b8" />
@@ -530,11 +532,16 @@ const bs = StyleSheet.create({
     paddingTop: 14,
     paddingBottom: 13,
   },
-  teaserAvatar: {
+  teaserAvatarFrame: {
     width: 40,
     height: 40,
     borderRadius: 11,
+    overflow: 'hidden',
     flexShrink: 0,
+  },
+  teaserAvatar: {
+    width: '100%',
+    height: '100%',
   },
   teaserIconBox: {
     width: 40,
@@ -653,11 +660,16 @@ const bs = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: 'rgba(127,196,184,0.25)',
   },
-  sheetAvatar: {
+  sheetAvatarFrame: {
     width: 52,
     height: 52,
     borderRadius: 14,
+    overflow: 'hidden',
     flexShrink: 0,
+  },
+  sheetAvatar: {
+    width: '100%',
+    height: '100%',
   },
   sheetScroll: {
     paddingHorizontal: 20,
@@ -1635,7 +1647,9 @@ export default function HealthHubScreen({
                 <>
                   <View style={bs.sheetHeaderRow}>
                     {petAvatarUri ? (
-                      <Image source={{ uri: petAvatarUri }} style={bs.sheetAvatar} />
+                      <View style={bs.sheetAvatarFrame}>
+                        <Image source={{ uri: petAvatarUri }} style={bs.sheetAvatar} resizeMode="cover" />
+                      </View>
                     ) : (
                       <View style={bs.sheetIconCircle}>
                         <BreedDnaIcon size={24} color="#7fc4b8" />

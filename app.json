@@ -12,7 +12,10 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "Select a profile photo for your VPaw profile."
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -27,7 +30,13 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "@lottiefiles/dotlottie-react-native/plugin"
+      "@lottiefiles/dotlottie-react-native/plugin",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Select a profile photo for your VPaw profile."
+        }
+      ]
     ]
   }
 }

@@ -1,14 +1,19 @@
-﻿import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -66,13 +71,30 @@ export default function ProfileEditScreen({ onBack, onSaved }: ProfileEditScreen
   const { locale } = useLocale();
   const copy = getWording(locale).profileEdit;
   const isTr = locale === 'tr';
+  const { height: screenH } = useWindowDimensions();
+
+  const basicInfoTitle = isTr ? 'Temel bilgiler' : 'Basic info';
+  const photoTitle = isTr ? 'Profil fotoğrafı' : 'Profile photo';
+  const photoHelper = isTr ? 'Fotoğrafa dokunarak yeni bir görsel seç.' : 'Tap the photo to choose a new image.';
+  const photoPermissionTitle = isTr ? 'Fotoğraf erişimi gerekli' : 'Photo access required';
+  const photoPermissionBody = isTr ? 'Profil fotoğrafı seçmek için fotoğraf erişimini aç.' : 'Enable photo access to choose a profile image.';
+  const photoPickFailedTitle = isTr ? 'Fotoğraf seçilemedi' : 'Photo could not be selected';
+  const photoPickFailedBody = isTr ? 'Lütfen tekrar dene.' : 'Please try again.';
+  const accountNameLabel = isTr ? 'Hesap adı' : 'Account name';
+  const emailLabel = isTr ? 'E-posta' : 'Email';
+  const nameHelper = isTr ? 'Profil, paylaşım ve sağlık kartında görünür.' : 'Shown in profile, sharing, and health card surfaces.';
+  const emailHelper = isTr ? 'Giriş ve güvenlik için kullanılır.' : 'Used for sign-in and account security.';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState('');
   const [avatarUrl, setAvatarUrl] = useState(FALLBACK_AVATAR);
   const [isFormFocused, setIsFormFocused] = useState(false);
+
   const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: !isFormFocused });
+  const translateY = useRef(new Animated.Value(screenH)).current;
+  const tintOpacity = useRef(new Animated.Value(0)).current;
+  const sheetHeightRef = useRef(screenH);
 
   useEffect(() => {
     let active = true;
@@ -102,7 +124,80 @@ export default function ProfileEditScreen({ onBack, onSaved }: ProfileEditScreen
     };
   }, [user?.id]);
 
+  useEffect(() => {
+    sheetHeightRef.current = screenH;
+    translateY.setValue(screenH);
+    tintOpacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(translateY, {
+        toValue: 0,
+        damping: 24,
+        stiffness: 240,
+        mass: 0.88,
+        useNativeDriver: true,
+      }),
+      Animated.timing(tintOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [screenH, tintOpacity, translateY]);
+
   const canSave = useMemo(() => fullName.trim().length >= 2 && !saving, [fullName, saving]);
+  const previewName = fullName.trim() || user?.user_metadata?.full_name || user?.email?.split('@')[0] || copy.namePlaceholder;
+
+  function closeSheet() {
+    Animated.parallel([
+      Animated.spring(translateY, {
+        toValue: sheetHeightRef.current,
+        damping: 28,
+        stiffness: 380,
+        useNativeDriver: true,
+      }),
+      Animated.timing(tintOpacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start(() => onBack());
+  }
+
+  const dragPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 4,
+      onPanResponderMove: (_, gs) => {
+        if (gs.dy >= 0) {
+          translateY.setValue(gs.dy);
+          tintOpacity.setValue(Math.max(0, 1 - gs.dy / Math.max(sheetHeightRef.current, 1)));
+        } else {
+          translateY.setValue(gs.dy * 0.12);
+        }
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy > 110 || gs.vy > 0.75) {
+          closeSheet();
+          return;
+        }
+
+        Animated.parallel([
+          Animated.spring(translateY, {
+            toValue: 0,
+            damping: 24,
+            stiffness: 300,
+            mass: 0.88,
+            useNativeDriver: true,
+          }),
+          Animated.timing(tintOpacity, {
+            toValue: 1,
+            duration: 150,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      },
+    }),
+  ).current;
 
   async function handleSave() {
     if (!user?.id || !canSave) return;
@@ -127,74 +222,149 @@ export default function ProfileEditScreen({ onBack, onSaved }: ProfileEditScreen
     onSaved();
   }
 
+  async function handlePickPhoto() {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(photoPermissionTitle, photoPermissionBody);
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.82,
+      });
+
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+
+      const pickedUri = result.assets[0].uri;
+      const ext = pickedUri.split('.').pop()?.split('?')[0] || 'jpg';
+      const dir = `${FileSystem.documentDirectory ?? ''}profile-photos`;
+      const target = `${dir}/avatar-${user?.id ?? 'local'}.${ext}`;
+
+      const dirInfo = await FileSystem.getInfoAsync(dir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+      }
+
+      const targetInfo = await FileSystem.getInfoAsync(target);
+      if (targetInfo.exists) {
+        await FileSystem.deleteAsync(target, { idempotent: true });
+      }
+
+      await FileSystem.copyAsync({ from: pickedUri, to: target });
+      setAvatarUrl(target);
+    } catch {
+      Alert.alert(photoPickFailedTitle, photoPickFailedBody);
+    }
+  }
+
   return (
     <View style={styles.screen} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
+      <Animated.View style={[styles.topTint, { opacity: tintOpacity }]} />
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <Animated.View
+        style={[styles.sheet, { transform: [{ translateY }] }]}
+        onLayout={(event) => {
+          sheetHeightRef.current = event.nativeEvent.layout.height;
+        }}
+      >
+        <View style={styles.handleArea} {...dragPan.panHandlers}>
+          <View style={styles.handle} />
+        </View>
+
         <View style={styles.topRow}>
-          <Pressable style={styles.iconBtn} onPress={onBack}>
+          <Pressable style={styles.iconBtn} onPress={closeSheet}>
             <Icon name="back" />
           </Pressable>
           <Text style={styles.title}>{copy.title}</Text>
-          <Pressable style={styles.iconBtn} onPress={handleSave} disabled={!canSave}>
-            <Icon name="save" color={canSave ? '#6f6f6f' : '#b9b9b9'} />
+          <Pressable style={[styles.iconBtn, styles.saveIconBtn]} onPress={handleSave} disabled={!canSave}>
+            <Icon name="save" color={canSave ? '#49685f' : '#b8c0be'} />
           </Pressable>
         </View>
 
-        {loading ? (
-          <View style={styles.loadingWrap}>
-            <ActivityIndicator size="small" color="#2d2d2d" />
-          </View>
-        ) : (
-          <>
-            <View style={styles.avatarCard}>
-              <View style={styles.avatarHeroWrap}>
-                <Image source={{ uri: avatarUrl || FALLBACK_AVATAR }} style={styles.avatarHero} />
-                <View style={styles.avatarCameraBadge}>
-                  <Icon name="camera" size={13} color="#6f6f6f" />
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          {loading ? (
+            <View style={styles.loadingWrap}>
+              <ActivityIndicator size="small" color="#49685f" />
+            </View>
+          ) : (
+            <>
+              <View style={styles.heroBlock}>
+                <Pressable style={({ pressed }) => [styles.avatarHeroWrap, pressed && styles.avatarHeroWrapPressed]} onPress={handlePickPhoto}>
+                  <Image source={{ uri: avatarUrl || FALLBACK_AVATAR }} style={styles.avatarHero} />
+                  <View style={styles.avatarCameraBadge}>
+                    <Icon name="camera" size={13} color="#5d6f69" />
+                  </View>
+                </Pressable>
+                <Text style={styles.heroName} numberOfLines={1}>
+                  {previewName}
+                </Text>
+                <Text style={styles.heroEmail} numberOfLines={1}>
+                  {user?.email ?? '-'}
+                </Text>
+              </View>
+
+              <View style={styles.groupWrap}>
+                <Text style={styles.groupTitle}>{basicInfoTitle}</Text>
+                <View style={styles.groupCard}>
+                  <View pointerEvents="none" style={styles.cardHighlight} />
+                  <View style={styles.fieldBlock}>
+                    <Text style={styles.label}>{accountNameLabel}</Text>
+                    <TextInput
+                      value={fullName}
+                      onChangeText={setFullName}
+                      placeholder={copy.namePlaceholder}
+                      placeholderTextColor="#a2aca8"
+                      style={styles.input}
+                      autoCapitalize="words"
+                      returnKeyType="done"
+                      onFocus={() => setIsFormFocused(true)}
+                      onBlur={() => setIsFormFocused(false)}
+                    />
+                    <Text style={styles.helperText}>{nameHelper}</Text>
+                  </View>
+                  <View style={styles.insetDivider} />
+                  <View style={styles.readOnlyRow}>
+                    <View style={styles.readOnlyCopy}>
+                      <Text style={styles.readOnlyLabel}>{emailLabel}</Text>
+                      <Text style={styles.readOnlyHelper}>{emailHelper}</Text>
+                    </View>
+                    <Text style={styles.readOnlyValue} numberOfLines={1}>
+                      {user?.email ?? '-'}
+                    </Text>
+                  </View>
                 </View>
               </View>
-              <Text style={styles.avatarCardTitle}>{isTr ? 'Profil Fotoğrafı' : 'Profile Photo'}</Text>
-              <Text style={styles.avatarCardSub}>{isTr ? 'Aşağıdan bir avatar seç.' : 'Pick an avatar below.'}</Text>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.avatarRail}>
-                {AVATAR_PRESETS.map((preset) => {
-                  const selected = preset === avatarUrl;
-                  return (
-                    <Pressable
-                      key={preset}
-                      onPress={() => setAvatarUrl(preset)}
-                      style={[styles.avatarOptionWrap, selected && styles.avatarOptionWrapSelected]}
-                    >
-                      <Image source={{ uri: preset }} style={styles.avatarOption} />
-                    </Pressable>
-                  );
-                })}
-              </ScrollView>
-            </View>
-
-            <View style={styles.formCard}>
-              <Text style={styles.label}>{copy.nameLabel}</Text>
-              <TextInput
-                value={fullName}
-                onChangeText={setFullName}
-                placeholder={copy.namePlaceholder}
-                placeholderTextColor="#a8a8a8"
-                style={styles.input}
-                autoCapitalize="words"
-                returnKeyType="done"
-                onFocus={() => setIsFormFocused(true)}
-                onBlur={() => setIsFormFocused(false)}
-              />
-            </View>
-
-            <Pressable style={[styles.saveBtn, (!canSave || saving) && styles.saveBtnDisabled]} onPress={handleSave} disabled={!canSave || saving}>
-              <Text style={styles.saveBtnText}>{saving ? copy.saving : copy.save}</Text>
-            </Pressable>
-          </>
-        )}
-      </ScrollView>
+              <View style={styles.groupWrap}>
+                <Text style={styles.groupTitle}>{photoTitle}</Text>
+                <View style={styles.groupCard}>
+                  <View pointerEvents="none" style={styles.cardHighlight} />
+                  <Text style={styles.photoHelper}>{photoHelper}</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.avatarRail}>
+                    {AVATAR_PRESETS.map((preset) => {
+                      const selected = preset === avatarUrl;
+                      return (
+                        <Pressable
+                          key={preset}
+                          onPress={() => setAvatarUrl(preset)}
+                          style={[styles.avatarOptionWrap, selected && styles.avatarOptionWrapSelected]}
+                        >
+                          <Image source={{ uri: preset }} style={styles.avatarOption} />
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                </View>
+              </View>
+            </>
+          )}
+        </ScrollView>
+      </Animated.View>
     </View>
   );
 }
@@ -202,156 +372,244 @@ export default function ProfileEditScreen({ onBack, onSaved }: ProfileEditScreen
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#faf9f8',
+    backgroundColor: '#edf4f3',
   },
-  content: {
-    paddingTop: 70,
-    paddingHorizontal: 24,
-    paddingBottom: 34,
+  topTint: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 220,
+    backgroundColor: '#cfe9eb',
+  },
+  sheet: {
+    flex: 1,
+    marginTop: 72,
+    backgroundColor: '#fbfaf7',
+    borderTopLeftRadius: 32,
+    borderTopRightRadius: 32,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(233, 238, 235, 0.92)',
+  },
+  handleArea: {
+    paddingTop: 10,
+    paddingBottom: 8,
+    alignItems: 'center',
+  },
+  handle: {
+    width: 40,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(120, 135, 130, 0.28)',
   },
   topRow: {
+    paddingHorizontal: 20,
+    paddingTop: 4,
+    paddingBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   iconBtn: {
-    width: 34,
-    height: 34,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(232, 237, 235, 0.95)',
     alignItems: 'center',
     justifyContent: 'center',
   },
+  saveIconBtn: {
+    backgroundColor: '#eef4f0',
+  },
   title: {
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 20,
+    lineHeight: 26,
     fontWeight: '700',
-    color: '#2d2d2d',
+    color: '#22342f',
+  },
+  content: {
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 28,
+    gap: 16,
   },
   loadingWrap: {
-    marginTop: 40,
+    marginTop: 56,
     alignItems: 'center',
   },
-  avatarCard: {
-    marginTop: 20,
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
-    padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+  heroBlock: {
+    alignItems: 'center',
+    paddingTop: 2,
+    paddingBottom: 8,
   },
   avatarHeroWrap: {
     alignSelf: 'center',
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     marginBottom: 10,
   },
+  avatarHeroWrapPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
+  },
   avatarHero: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
   },
   avatarCameraBadge: {
     position: 'absolute',
     right: -4,
     bottom: -2,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: '#f4f1ea',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
+    borderColor: 'rgba(97, 112, 107, 0.1)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  avatarCardTitle: {
+  heroName: {
+    maxWidth: '88%',
     textAlign: 'center',
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#2d2d2d',
+    fontSize: 28,
+    lineHeight: 32,
+    color: '#22342f',
     fontWeight: '700',
+    letterSpacing: -0.8,
   },
-  avatarCardSub: {
+  heroEmail: {
     textAlign: 'center',
     marginTop: 2,
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#8b8b8b',
+    fontSize: 15,
+    lineHeight: 20,
+    color: 'rgba(97, 112, 107, 0.78)',
     fontWeight: '500',
   },
-  avatarRail: {
-    marginTop: 12,
+  groupWrap: {
     gap: 10,
-    paddingHorizontal: 2,
   },
-  avatarOptionWrap: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    borderWidth: 2,
-    borderColor: 'transparent',
-    padding: 2,
+  groupTitle: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: 'rgba(110, 123, 118, 0.76)',
+    fontWeight: '600',
+    marginLeft: 4,
   },
-  avatarOptionWrapSelected: {
-    borderColor: '#d3c2a4',
-    backgroundColor: 'rgba(211,194,164,0.14)',
-  },
-  avatarOption: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 26,
-  },
-  formCard: {
-    marginTop: 16,
-    backgroundColor: '#fff',
-    borderRadius: 22,
+  groupCard: {
+    backgroundColor: '#ffffff',
+    borderRadius: 28,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.03)',
-    padding: 18,
+    borderColor: 'rgba(233, 238, 235, 0.96)',
+    padding: 16,
+    overflow: 'hidden',
+    shadowColor: '#708782',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  cardHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  fieldBlock: {
+    gap: 8,
   },
   label: {
     fontSize: 13,
     lineHeight: 18,
-    fontWeight: '700',
-    color: '#787878',
-    marginBottom: 8,
+    fontWeight: '600',
+    color: '#6e7b76',
   },
   input: {
-    height: 50,
+    height: 48,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    backgroundColor: '#faf9f8',
+    borderColor: 'rgba(223, 229, 226, 0.98)',
+    backgroundColor: '#faf9f6',
     paddingHorizontal: 14,
     fontSize: 15,
-    color: '#2d2d2d',
+    color: '#22342f',
     fontWeight: '500',
   },
-  saveBtn: {
-    marginTop: 20,
-    height: 52,
-    borderRadius: 16,
+  helperText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#87938f',
+    fontWeight: '500',
+  },
+  insetDivider: {
+    height: 1,
+    marginVertical: 14,
+    backgroundColor: 'rgba(43, 56, 50, 0.06)',
+  },
+  readOnlyRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2d2d2d',
-    shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 7,
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  saveBtnDisabled: {
-    opacity: 0.6,
+  readOnlyCopy: {
+    flex: 1,
+    gap: 2,
   },
-  saveBtnText: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#faf8f5',
-    fontWeight: '700',
+  readOnlyLabel: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#6e7b76',
+    fontWeight: '500',
+  },
+  readOnlyHelper: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#87938f',
+    fontWeight: '500',
+  },
+  readOnlyValue: {
+    maxWidth: '48%',
+    textAlign: 'right',
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#22342f',
+    fontWeight: '600',
+  },
+  photoHelper: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#87938f',
+    fontWeight: '500',
+  },
+  avatarRail: {
+    marginTop: 10,
+    gap: 10,
+    paddingHorizontal: 2,
+  },
+  avatarOptionWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1.5,
+    borderColor: 'rgba(231, 236, 234, 0.96)',
+    padding: 3,
+    backgroundColor: '#faf9f6',
+  },
+  avatarOptionWrapSelected: {
+    borderColor: '#c8ba97',
+    backgroundColor: 'rgba(200,186,151,0.12)',
+  },
+  avatarOption: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 24,
   },
 });
-

@@ -2,17 +2,20 @@
 import { StatusBar } from 'expo-status-bar';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { useAuth } from '../hooks/useAuth';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { useAppSettings } from '../hooks/useAppSettings';
 import type { DateFormat, WeightUnit } from '../hooks/useAppSettings';
 import { t } from '../lib/i18n';
+import { supabase } from '../lib/supabase';
 
 type SettingsScreenProps = {
   onBack: () => void;
 };
 
 export default function SettingsScreen({ onBack }: SettingsScreenProps) {
+  const { user } = useAuth();
   const { locale, setLocale } = useLocale();
   const { settings, setSettings } = useAppSettings();
 
@@ -94,6 +97,32 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
     );
   };
 
+  const resetPassword = async () => {
+    if (!user?.email) {
+      Alert.alert(
+        locale === 'tr' ? 'E-posta bulunamadı' : 'Email not available',
+        locale === 'tr' ? 'Şifre sıfırlama için hesap e-postası gerekli.' : 'An account email is required to reset the password.',
+      );
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(user.email);
+    if (error) {
+      Alert.alert(
+        locale === 'tr' ? 'Bağlantı gönderilemedi' : 'Reset link could not be sent',
+        error.message,
+      );
+      return;
+    }
+
+    Alert.alert(
+      locale === 'tr' ? 'Sıfırlama bağlantısı gönderildi' : 'Reset link sent',
+      locale === 'tr'
+        ? `${user.email} adresine şifre yenileme bağlantısı gönderildi.`
+        : `A password reset link was sent to ${user.email}.`,
+    );
+  };
+
   const performSaveAndExit = async () => {
     setSaving(true);
     await setSettings({
@@ -161,6 +190,19 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
         <View style={styles.card}>
           <Row label={locale === 'tr' ? 'Veri ve gizlilik' : 'Data & privacy'} value={locale === 'tr' ? 'İncele' : 'Review'} onPress={openDataPrivacy} />
           <Row label={locale === 'tr' ? 'Dışa aktar / veri indir' : 'Export / data download'} value={locale === 'tr' ? 'Aç' : 'Open'} noBorder onPress={openDataDownload} />
+        </View>
+
+        <Text style={styles.sectionTitle}>{locale === 'tr' ? 'HESAP GÜVENLİĞİ' : 'ACCOUNT SECURITY'}</Text>
+        <Text style={styles.sectionDescription}>{locale === 'tr' ? 'Şifre ve hesap erişimi yönetimi.' : 'Password and account access controls.'}</Text>
+        <View style={styles.card}>
+          <Row
+            label={locale === 'tr' ? 'Şifre sıfırlama' : 'Reset password'}
+            value={locale === 'tr' ? 'Bağlantı gönder' : 'Send link'}
+            noBorder
+            onPress={() => {
+              void resetPassword();
+            }}
+          />
         </View>
 
         <Text style={styles.sectionTitle}>{t(locale, 'dataIntegrity')}</Text>
