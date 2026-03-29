@@ -156,7 +156,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
 
           <Pressable style={[styles.saveBtn, hasChanges && !saving && styles.saveBtnActive, (!hasChanges || saving) && styles.saveBtnDisabled]} onPress={saveAndExit} disabled={!hasChanges || saving}>
             <Text style={[styles.saveBtnText, hasChanges && !saving && styles.saveBtnTextActive]}>
-              {saving ? (locale === 'tr' ? 'Kaydediliyor…' : 'Saving…') : (locale === 'tr' ? 'Kaydet' : 'Save')}
+              {saving ? t(locale, 'saving') : (locale === 'tr' ? 'Kaydet' : 'Save')}
             </Text>
           </Pressable>
         </View>
@@ -228,7 +228,7 @@ export default function SettingsScreen({ onBack }: SettingsScreenProps) {
                   await performSaveAndExit();
                 }}
               >
-                <Text style={styles.confirmPrimaryText}>{saving ? t(locale, 'saving') : (locale === 'tr' ? 'Kaydet ve Çık' : 'Save & Exit')}</Text>
+                <Text style={styles.confirmPrimaryText}>{saving ? t(locale, 'saving') : t(locale, 'saveAndExit')}</Text>
               </Pressable>
             </View>
           </View>

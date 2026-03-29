@@ -882,7 +882,7 @@ export default function VetVisitsScreen({
             title={stateTitle}
             body={stateBody}
             actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : undefined}
-            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lutfen kisa bir sure sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
+            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lütfen kısa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
           />
         )}
       </ScrollView>
@@ -1155,6 +1155,7 @@ const styles = StyleSheet.create({
   frontLayer: {
     flex: 1,
     overflow: 'hidden',
+    backgroundColor: '#f6f4f0',
   },
   content: {
     paddingTop: 56,

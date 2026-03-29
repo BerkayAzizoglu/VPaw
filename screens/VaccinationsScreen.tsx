@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, type ReactNode } from 'react';
+import React, { type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Animated,
@@ -283,16 +283,6 @@ export default function VaccinationsScreen({
       ? isTr ? 'İlk aşı kaydını eklediğinizde bu alan otomatik olarak dolacaktır.' : 'This area will populate automatically once you add the first vaccination.'
       : isTr ? 'Bağlantıyı kontrol edip tekrar deneyin.' : 'Please check your connection and try again.';
 
-  // ── entrance animation ──
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 420, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 380, useNativeDriver: true }),
-    ]).start();
-  }, [fadeAnim, slideAnim]);
-
   // ── swipe ──
   const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true, enterVariant: 'drift' });
 
@@ -337,7 +327,7 @@ export default function VaccinationsScreen({
           </View>
 
           {showMainContent ? (
-            <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+            <View>
 
               {/* ── Attention banner ── */}
               {hasAttention && (
@@ -420,7 +410,7 @@ export default function VaccinationsScreen({
                 </View>
               </View>
 
-            </Animated.View>
+            </View>
           ) : (
             <ScreenStateCard
               mode={screenState as ScreenStateMode}
@@ -458,6 +448,7 @@ const styles = StyleSheet.create({
   frontLayer: {
     flex: 1,
     overflow: 'hidden',
+    backgroundColor: '#f6f4f0',
   },
   content: {
     paddingTop: 56,

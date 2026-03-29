@@ -1,12 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { ChevronLeft, FileText, FlaskConical, Image as ImageIcon, Paperclip, Pill } from 'lucide-react-native';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import type { HealthDocumentItem, HealthDocumentType } from '../lib/healthDocumentsVault';
 
 type DocumentsScreenProps = {
   onBack: () => void;
+  backPreview?: ReactNode;
   petName: string;
   documents: HealthDocumentItem[];
   locale?: 'en' | 'tr';
@@ -60,12 +61,13 @@ function bgForType(type: HealthDocumentType) {
 
 export default function DocumentsScreen({
   onBack,
+  backPreview,
   petName,
   documents,
   locale = 'en',
 }: DocumentsScreenProps) {
   const isTr = locale === 'tr';
-  const swipePan = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: false });
+  const swipePan = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true, enterVariant: 'drift' });
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [dateFilter, setDateFilter] = useState<DateFilter>('newest');
   const [query, setQuery] = useState('');
@@ -85,15 +87,23 @@ export default function DocumentsScreen({
   const typeFilters: TypeFilter[] = ['all', 'lab', 'prescription', 'document', 'image', 'other'];
 
   return (
-    <View style={styles.screen} {...swipePan.panHandlers}>
-      <StatusBar style="dark" />
-      <FlatList
-        data={filteredDocuments}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.content}
-        showsVerticalScrollIndicator={false}
-        ListHeaderComponent={(
-          <View style={styles.headerWrap}>
+    <View style={styles.screen}>
+      {backPreview ? (
+        <Animated.View pointerEvents="none" style={[styles.backLayer, swipePan.backLayerStyle]}>
+          {backPreview}
+        </Animated.View>
+      ) : null}
+
+      <Animated.View style={[styles.frontLayer, swipePan.frontLayerStyle]} {...swipePan.panHandlers}>
+        <StatusBar style="dark" />
+        <FlatList
+          data={filteredDocuments}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.content}
+          showsVerticalScrollIndicator={false}
+          scrollEnabled={!swipePan.isSwiping}
+          ListHeaderComponent={(
+            <View style={styles.headerWrap}>
             <View style={styles.headerRow}>
               <Pressable style={styles.backBtn} onPress={onBack}>
                 <ChevronLeft size={20} color="#5d605a" strokeWidth={2.4} />
@@ -153,10 +163,10 @@ export default function DocumentsScreen({
                 <Text style={[styles.dateChipText, dateFilter === 'oldest' && styles.dateChipTextActive]}>{isTr ? 'Eski → Yeni' : 'Oldest'}</Text>
               </Pressable>
             </View>
-          </View>
-        )}
-        ListEmptyComponent={(
-          <View style={styles.emptyWrap}>
+            </View>
+          )}
+          ListEmptyComponent={(
+            <View style={styles.emptyWrap}>
             <View style={styles.emptyIconBox}>
               <FileText size={28} color="#b1b3ab" strokeWidth={1.8} />
             </View>
@@ -172,10 +182,10 @@ export default function DocumentsScreen({
                     ? 'Veteriner ziyaretlerine veya sağlık kayıtlarına eklenen belgeler burada görünür.'
                     : 'Documents linked to vet visits or health records will appear here.')}
             </Text>
-          </View>
-        )}
-        renderItem={({ item }) => (
-          <View style={styles.docCard}>
+            </View>
+          )}
+          renderItem={({ item }) => (
+            <View style={styles.docCard}>
             <View style={[styles.iconBox, { backgroundColor: bgForType(item.type) }]}>
               {iconForType(item.type)}
             </View>
@@ -191,15 +201,18 @@ export default function DocumentsScreen({
               </Text>
               {item.note ? <Text style={styles.docNote} numberOfLines={2}>{item.note}</Text> : null}
             </View>
-          </View>
-        )}
-      />
+            </View>
+          )}
+        />
+      </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#f6f4f0' },
+  backLayer: { ...StyleSheet.absoluteFillObject },
+  frontLayer: { flex: 1, overflow: 'hidden', backgroundColor: '#f6f4f0' },
   content: { paddingTop: 52, paddingHorizontal: 20, paddingBottom: 40, gap: 12 },
   headerWrap: { gap: 12, marginBottom: 6 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },

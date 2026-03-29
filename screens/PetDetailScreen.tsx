@@ -56,15 +56,15 @@ function fmtDate(value: string, isTr: boolean): string {
 }
 
 function nextRoutineDue(record: RoutineCareRecord, isTr: boolean): string {
-  if (!record.enabled || !record.lastDate) return isTr ? 'Kayit yok' : 'No record';
+  if (!record.enabled || !record.lastDate) return isTr ? 'Kayıt yok' : 'No record';
   const ms = new Date(record.lastDate).getTime();
-  if (!Number.isFinite(ms)) return isTr ? 'Kayit yok' : 'No record';
+  if (!Number.isFinite(ms)) return isTr ? 'Kayıt yok' : 'No record';
   const dueMs = ms + record.intervalDays * 86400000;
   const diffDays = Math.round((dueMs - Date.now()) / 86400000);
   if (diffDays < 0) return isTr ? `${Math.abs(diffDays)} gun gecikti` : `${Math.abs(diffDays)}d overdue`;
-  if (diffDays === 0) return isTr ? 'Bugun' : 'Today';
-  if (diffDays === 1) return isTr ? 'Yarin' : 'Tomorrow';
-  return isTr ? `${diffDays} gun sonra` : `In ${diffDays} days`;
+  if (diffDays === 0) return isTr ? 'Bugün' : 'Today';
+  if (diffDays === 1) return isTr ? 'Yarın' : 'Tomorrow';
+  return isTr ? `${diffDays} gün sonra` : `In ${diffDays} days`;
 }
 
 function routineDueColor(record: RoutineCareRecord): string {
@@ -244,8 +244,8 @@ export default function PetDetailScreen({
 
           <Section title={isTr ? 'ASILAR' : 'VACCINATIONS'}>
             <InfoRow
-              label={isTr ? 'Kayitli asi' : 'Recorded vaccines'}
-              value={vaccineCount > 0 ? String(vaccineCount) : (isTr ? 'Kayit yok' : 'None')}
+              label={isTr ? 'Kayıtlı aşı' : 'Recorded vaccines'}
+              value={vaccineCount > 0 ? String(vaccineCount) : (isTr ? 'Kayıt yok' : 'None')}
             />
             {lastVaccine ? (
               <InfoRow
@@ -272,7 +272,7 @@ export default function PetDetailScreen({
               {surgeryCount > 0 ? (
                 <InfoRow label={isTr ? 'Ameliyat kaydi' : 'Surgeries'} value={String(surgeryCount)} />
               ) : null}
-              <NavRow label={isTr ? 'Saglik kayitlarina git' : 'View health records'} onPress={onOpenHealthRecords} />
+              <NavRow label={isTr ? 'Sağlık kayıtlarına git' : 'View health records'} onPress={onOpenHealthRecords} />
             </Section>
           ) : null}
 
@@ -321,7 +321,7 @@ export default function PetDetailScreen({
           <Section title={isTr ? 'HIZLI ERISIM' : 'QUICK ACCESS'}>
             <NavRow label={isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits'} onPress={onOpenVetVisits} />
             <View style={styles.navDivider} />
-            <NavRow label={isTr ? 'Saglik Kayitlari' : 'Health Records'} onPress={onOpenHealthRecords} />
+            <NavRow label={isTr ? 'Sağlık Kayıtları' : 'Health Records'} onPress={onOpenHealthRecords} />
             <View style={styles.navDivider} />
             <NavRow label={isTr ? 'Kilo Takibi' : 'Weight Tracking'} onPress={onOpenWeightTracking} />
           </Section>
@@ -334,7 +334,7 @@ export default function PetDetailScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#98D6D1',
+    backgroundColor: '#cdefe7',
   },
   screen: {
     flex: 1,

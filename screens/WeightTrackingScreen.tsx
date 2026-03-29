@@ -1,10 +1,12 @@
-import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   Alert,
   Animated,
+  FlatList,
   KeyboardAvoidingView,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
   ScrollView,
@@ -36,6 +38,7 @@ type WeightTrackingScreenProps = {
   microchip?: string;
   entries: WeightPoint[];
   onAddEntry: (value: number, options?: { date?: string; note?: string }) => void;
+  onUpdateEntry?: (entryIndex: number, value: number, options?: { date?: string; note?: string }) => void;
   weightGoal?: number;
   onSetWeightGoal?: (goal: number) => void;
   totalExpenses?: { total: number; currency: string };
@@ -52,6 +55,9 @@ type WeightReference = {
 
 const CHART_HEIGHT = 160;
 const CHART_INSET = 10;
+const PW_ROW_HEIGHT = 38;
+const PW_WHEEL_HEIGHT = 168;
+const PW_ROW_PADDING = (PW_WHEEL_HEIGHT - PW_ROW_HEIGHT) / 2;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 // ─── Unit conversion ─────────────────────────────────────────────────────────
@@ -129,6 +135,46 @@ function toYmd(date: Date) {
   return `${y}-${m}-${d}`;
 }
 
+type DateParts = { day: number; month: number; year: number };
+type DragGesture = { dx: number; dy: number; vy: number };
+
+function toDateParts(date: Date): DateParts {
+  return { day: date.getDate(), month: date.getMonth() + 1, year: date.getFullYear() };
+}
+
+function daysInMonth(year: number, month: number) {
+  return new Date(year, month, 0).getDate();
+}
+
+function clampDateParts(parts: DateParts, today: DateParts): DateParts {
+  const year = Math.max(today.year - 20, Math.min(today.year, parts.year));
+  const monthMax = year === today.year ? today.month : 12;
+  const month = Math.max(1, Math.min(monthMax, parts.month));
+  const dim = daysInMonth(year, month);
+  const dayMax = year === today.year && month === today.month ? Math.min(today.day, dim) : dim;
+  const day = Math.max(1, Math.min(dayMax, parts.day));
+  return { day, month, year };
+}
+
+function dateFromParts(parts: DateParts) {
+  return new Date(parts.year, parts.month - 1, parts.day, 12, 0, 0, 0);
+}
+
+function splitWeightParts(displayWeight: number) {
+  const safe = Math.max(0, Math.round(displayWeight * 10) / 10);
+  const whole = Math.floor(safe);
+  const decimal = Math.round((safe - whole) * 10);
+  return { whole, decimal };
+}
+
+function formatPickerDateLabel(date: Date, isTr: boolean) {
+  return date.toLocaleDateString(isTr ? 'tr-TR' : 'en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
 function formatTemplate(template: string, params: Record<string, string>) {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => params[key] ?? '');
 }
@@ -199,6 +245,76 @@ function Icon({ kind, size = 20, color = '#787878' }: { kind: 'back' | 'plus' | 
   );
 }
 
+type PickerWheelItem = {
+  value: string;
+  label: string;
+};
+
+function PickerWheelColumn({
+  items,
+  selectedValue,
+  onValueChange,
+  width,
+}: {
+  items: PickerWheelItem[];
+  selectedValue: string;
+  onValueChange: (value: string) => void;
+  width: number;
+}) {
+  const listRef = useRef<FlatList<PickerWheelItem>>(null);
+  const selectedIndex = Math.max(0, items.findIndex((item) => item.value === selectedValue));
+
+  useEffect(() => {
+    if (!items.length) return;
+    requestAnimationFrame(() => {
+      listRef.current?.scrollToIndex({ index: selectedIndex, animated: true, viewPosition: 0.5 });
+    });
+  }, [items, selectedIndex]);
+
+  return (
+    <View style={[styles.column, { width }]}>
+      <FlatList
+        ref={listRef}
+        data={items}
+        keyExtractor={(item) => item.value}
+        showsVerticalScrollIndicator={false}
+        bounces={false}
+        snapToInterval={PW_ROW_HEIGHT}
+        decelerationRate="fast"
+        contentContainerStyle={styles.columnContent}
+        getItemLayout={(_, index) => ({
+          length: PW_ROW_HEIGHT,
+          offset: PW_ROW_HEIGHT * index,
+          index,
+        })}
+        initialScrollIndex={selectedIndex}
+        onScrollToIndexFailed={(info) => {
+          requestAnimationFrame(() => {
+            listRef.current?.scrollToOffset({
+              offset: Math.max(0, info.averageItemLength * info.index),
+              animated: true,
+            });
+          });
+        }}
+        onMomentumScrollEnd={(event) => {
+          const index = Math.max(0, Math.min(Math.round(event.nativeEvent.contentOffset.y / PW_ROW_HEIGHT), items.length - 1));
+          const next = items[index];
+          if (next && next.value !== selectedValue) onValueChange(next.value);
+        }}
+        renderItem={({ item }) => {
+          const active = item.value === selectedValue;
+          return (
+            <Pressable onPress={() => onValueChange(item.value)} style={({ pressed }) => [styles.row, pressed && styles.rowPressed, active && styles.rowActive]}>
+              <Text style={[styles.rowText, active && styles.rowTextActive]}>{item.label}</Text>
+            </Pressable>
+          );
+        }}
+      />
+      <View pointerEvents="none" style={styles.selectionBand} />
+    </View>
+  );
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function WeightTrackingScreen({
@@ -229,11 +345,18 @@ export default function WeightTrackingScreen({
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubX, setScrubX] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  useEffect(() => { if (initialShowAdd) setShowAdd(true); }, []);
+  useEffect(() => {
+    if (initialShowAdd) openAddSheet('add', latestWeight?.value ?? 1, new Date(), '', null);
+  }, []);
+  const [entryFormMode, setEntryFormMode] = useState<'add' | 'edit'>('add');
+  const [editingEntryIndex, setEditingEntryIndex] = useState<number | null>(null);
   const [newWeight, setNewWeight] = useState('');
   const [entryDate, setEntryDate] = useState(toYmd(new Date()));
+  const [weightWhole, setWeightWhole] = useState('0');
+  const [weightDecimal, setWeightDecimal] = useState('0');
+  const [entryDateParts, setEntryDateParts] = useState<DateParts>(toDateParts(new Date()));
   const [entryNote, setEntryNote] = useState('');
-  const [focusedField, setFocusedField] = useState<'weight' | 'date' | 'note' | 'goal' | null>(null);
+  const [focusedField, setFocusedField] = useState<'note' | 'goal' | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [goalInput, setGoalInput] = useState('');
@@ -241,6 +364,9 @@ export default function WeightTrackingScreen({
 
   const lineAnim = useRef(new Animated.Value(0)).current;
   const savePressScale = useRef(new Animated.Value(1)).current;
+  const addSheetTranslateY = useRef(new Animated.Value(680)).current;
+  const addSheetBackdropOpacity = useRef(new Animated.Value(0)).current;
+  const addSheetHeightRef = useRef(680);
   const { width } = useWindowDimensions();
   const chartWidth = Math.max(240, width - 96);
   const chartHeight = CHART_HEIGHT;
@@ -560,21 +686,149 @@ export default function WeightTrackingScreen({
   }, [entries, isTr, weightUnit]);
 
   // ─── Goal progress ──────────────────────────────────────────────────────────
+  const closeAddSheet = (onClosed?: () => void) => {
+    Animated.parallel([
+      Animated.spring(addSheetTranslateY, {
+        toValue: addSheetHeightRef.current,
+        damping: 28,
+        stiffness: 380,
+        useNativeDriver: true,
+      }),
+      Animated.timing(addSheetBackdropOpacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowAdd(false);
+      setEntryFormMode('add');
+      setEditingEntryIndex(null);
+      setNewWeight('');
+      setEntryDate(toYmd(new Date()));
+      setWeightWhole('0');
+      setWeightDecimal('0');
+      setEntryDateParts(toDateParts(new Date()));
+      setEntryNote('');
+      setFormError(null);
+      onClosed?.();
+    });
+  };
+
+  const openAddSheet = (mode: 'add' | 'edit', nextWeight: number, nextDate: Date, nextNote: string, entryIndex: number | null) => {
+    const displayWeight = toDisplayVal(nextWeight, weightUnit);
+    const parts = splitWeightParts(displayWeight);
+    const safeDate = clampDateParts(toDateParts(nextDate), toDateParts(new Date()));
+
+    setEntryFormMode(mode);
+    setEditingEntryIndex(entryIndex);
+    setNewWeight(displayWeight.toFixed(1));
+    setEntryDate(toYmd(dateFromParts(safeDate)));
+    setWeightWhole(String(parts.whole));
+    setWeightDecimal(String(parts.decimal));
+    setEntryDateParts(safeDate);
+    setEntryNote(nextNote);
+    setFormError(null);
+    setShowAdd(true);
+
+    addSheetTranslateY.setValue(addSheetHeightRef.current);
+    addSheetBackdropOpacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(addSheetTranslateY, {
+        toValue: 0,
+        damping: 26,
+        stiffness: 360,
+        mass: 0.85,
+        useNativeDriver: true,
+      }),
+      Animated.timing(addSheetBackdropOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  const addSheetPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g: DragGesture) => g.dy > 4 && Math.abs(g.dy) > Math.abs(g.dx),
+      onMoveShouldSetPanResponderCapture: (_, g: DragGesture) => g.dy > 2 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderMove: (_, g: DragGesture) => {
+        if (g.dy > 0) {
+          addSheetTranslateY.setValue(g.dy);
+          addSheetBackdropOpacity.setValue(Math.max(0, 1 - g.dy / Math.max(addSheetHeightRef.current, 1)));
+          return;
+        }
+        addSheetTranslateY.setValue(g.dy * 0.12);
+      },
+      onPanResponderRelease: (_, g: DragGesture) => {
+        if (g.dy > 68 || g.vy > 0.5) {
+          closeAddSheet();
+          return;
+        }
+        Animated.parallel([
+          Animated.spring(addSheetTranslateY, {
+            toValue: 0,
+            damping: 24,
+            stiffness: 300,
+            mass: 0.85,
+            useNativeDriver: true,
+          }),
+          Animated.timing(addSheetBackdropOpacity, {
+            toValue: 1,
+            duration: 140,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      },
+    }),
+  ).current;
+
   const currentWeightForGoal = latestWeight?.value ?? 0;
   const goalProgress = weightGoal && weightGoal > 0
     ? Math.min(1, Math.max(0, currentWeightForGoal / weightGoal))
     : null;
 
+  const addPickerToday = useMemo(() => toDateParts(new Date()), []);
+  const addWeightWholeItems = useMemo(() => Array.from({ length: 201 }, (_, index) => ({
+    value: String(index),
+    label: String(index),
+  })), []);
+  const addWeightDecimalItems = useMemo(() => Array.from({ length: 10 }, (_, index) => ({
+    value: String(index),
+    label: String(index),
+  })), []);
+  const addMonthItems = useMemo(() => {
+    const localeCode = isTr ? 'tr-TR' : 'en-US';
+    return Array.from({ length: 12 }, (_, index) => ({
+      value: String(index + 1),
+      label: new Date(2000, index, 1).toLocaleDateString(localeCode, { month: 'short' }),
+    }));
+  }, [isTr]);
+  const addYearItems = useMemo(() => Array.from({ length: 21 }, (_, index) => {
+    const year = addPickerToday.year - index;
+    return { value: String(year), label: String(year) };
+  }), [addPickerToday.year]);
+  const addMonthLimit = entryDateParts.year === addPickerToday.year ? addPickerToday.month : 12;
+  const addDayLimit = entryDateParts.year === addPickerToday.year && entryDateParts.month === addPickerToday.month
+    ? addPickerToday.day
+    : daysInMonth(entryDateParts.year, entryDateParts.month);
+  const addDayItems = useMemo(() => Array.from({ length: addDayLimit }, (_, index) => ({
+    value: String(index + 1),
+    label: String(index + 1),
+  })), [addDayLimit]);
+
   // ─── Save entry ─────────────────────────────────────────────────────────────
   const saveEntry = () => {
-    const parsed = Number(newWeight.replace(',', '.'));
+    const parsed = Number(`${weightWhole}.${weightDecimal}`);
     if (!Number.isFinite(parsed) || parsed <= 0) {
       setFormError(copy.enterValidWeight);
       return;
     }
-    const parsedDate = new Date(`${entryDate.trim()}T12:00:00.000Z`);
+    const parsedDate = dateFromParts(entryDateParts);
     if (!Number.isFinite(parsedDate.getTime())) {
-      setFormError(isTr ? 'Lütfen tarihi YYYY-AA-GG formatında girin.' : 'Please enter date as YYYY-MM-DD.');
+      setFormError(isTr ? 'Lütfen geçerli bir tarih seçin.' : 'Please choose a valid date.');
       return;
     }
 
@@ -584,9 +838,12 @@ export default function WeightTrackingScreen({
     });
     setNewWeight('');
     setEntryDate(toYmd(new Date()));
+    setWeightWhole('0');
+    setWeightDecimal('0');
+    setEntryDateParts(toDateParts(new Date()));
     setEntryNote('');
     setFormError(null);
-    setShowAdd(false);
+    closeAddSheet();
   };
 
   // ─── Save goal ──────────────────────────────────────────────────────────────
@@ -813,7 +1070,7 @@ export default function WeightTrackingScreen({
             {/* Add weight entry pill inside chart card */}
             <Pressable
               style={styles.addEntryPill}
-              onPress={() => { setShowAdd(true); setFormError(null); }}
+              onPress={() => openAddSheet('add', latestWeight?.value ?? 1, new Date(), '', null)}
             >
               <Icon kind="plus" size={15} color="#fff" />
               <Text style={styles.addEntryPillText}>
@@ -910,83 +1167,117 @@ export default function WeightTrackingScreen({
         <Modal
           visible={showAdd}
           transparent
-          animationType="slide"
-          onRequestClose={() => setShowAdd(false)}
+          animationType="none"
+          onRequestClose={() => closeAddSheet()}
         >
-          <Pressable style={styles.sheetBackdrop} onPress={() => setShowAdd(false)} />
-          <View style={styles.sheet}>
-            <View style={styles.sheetHandle} />
-            <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>{copy.addWeightEntry}</Text>
-              <Pressable onPress={() => setShowAdd(false)} style={styles.sheetCloseBtn}>
-                <Icon kind="close" size={18} color="#5d605a" />
-              </Pressable>
-            </View>
-            <Text style={styles.sheetHint}>
-              {isTr ? 'Grafik ile bağlantılı, tarihli bir kayıt ekleyin.' : 'Add a dated entry linked to this chart.'}
-            </Text>
+          <View style={styles.sheetModalRoot}>
+            <Animated.View pointerEvents="none" style={[styles.sheetBackdrop, { opacity: addSheetBackdropOpacity }]} />
+            <Pressable style={StyleSheet.absoluteFillObject} onPress={() => closeAddSheet()} />
+            <Animated.View
+              style={[styles.sheet, { transform: [{ translateY: addSheetTranslateY }] }]}
+              onLayout={(e) => {
+                addSheetHeightRef.current = e.nativeEvent.layout.height;
+              }}
+            >
+              <View style={styles.sheetDragArea} {...addSheetPan.panHandlers}>
+                <View style={styles.sheetHandle} />
+                <View style={styles.sheetHeader}>
+                  <Text style={styles.sheetTitle}>{copy.addWeightEntry}</Text>
+                </View>
+                <Text style={styles.sheetHint}>
+                  {isTr ? 'Grafik ile bağlantılı, tarihli bir kayıt ekleyin.' : 'Add a dated entry linked to this chart.'}
+                </Text>
+              </View>
 
-            <Text style={styles.fieldLabel}>{isTr ? `Ağırlık (${weightUnit})` : `Weight (${weightUnit})`}</Text>
-            <TextInput
-              value={newWeight}
-              onChangeText={setNewWeight}
-              keyboardType="decimal-pad"
-              placeholder={copy.weightPlaceholder}
-              placeholderTextColor="#b1b3ab"
-              onFocus={() => setFocusedField('weight')}
-              onBlur={() => setFocusedField(null)}
-              style={[styles.fieldInput, focusedField === 'weight' && styles.fieldInputFocused]}
-            />
+              <View style={styles.addSheetSummary}>
+                <View style={styles.addSheetSummaryBlock}>
+                  <Text style={styles.addSheetSummaryLabel}>{isTr ? 'SEÇİLİ KİLO' : 'SELECTED WEIGHT'}</Text>
+                  <Text style={styles.addSheetSummaryValue}>
+                    {`${weightWhole}.${weightDecimal}`} <Text style={styles.addSheetSummaryUnit}>{weightUnit}</Text>
+                  </Text>
+                </View>
+                <View style={styles.addSheetSummaryBlockRight}>
+                  <Text style={styles.addSheetSummaryLabel}>{isTr ? 'TARİH' : 'DATE'}</Text>
+                  <Text style={styles.addSheetSummaryDate}>{formatPickerDateLabel(dateFromParts(entryDateParts), isTr)}</Text>
+                </View>
+              </View>
 
-            <Text style={styles.fieldLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
-            <View style={styles.quickDateRow}>
-              <Pressable style={styles.quickDateChip} onPress={() => setEntryDate(toYmd(new Date()))}>
-                <Text style={styles.quickDateChipText}>{isTr ? 'Bugün' : 'Today'}</Text>
-              </Pressable>
-              <Pressable
-                style={styles.quickDateChip}
-                onPress={() => {
-                  const yesterday = new Date();
-                  yesterday.setDate(yesterday.getDate() - 1);
-                  setEntryDate(toYmd(yesterday));
-                }}
-              >
-                <Text style={styles.quickDateChipText}>{isTr ? 'Dün' : 'Yesterday'}</Text>
-              </Pressable>
-            </View>
-            <TextInput
-              value={entryDate}
-              onChangeText={setEntryDate}
-              placeholder="2026-03-22"
-              placeholderTextColor="#b1b3ab"
-              onFocus={() => setFocusedField('date')}
-              onBlur={() => setFocusedField(null)}
-              style={[styles.fieldInput, focusedField === 'date' && styles.fieldInputFocused]}
-            />
+              <View style={styles.addSheetBlock}>
+                <Text style={styles.fieldLabel}>{isTr ? `AĞIRLIK (${weightUnit})` : `WEIGHT (${weightUnit})`}</Text>
+                <View style={styles.weightPickerRow}>
+                  <PickerWheelColumn
+                    items={addWeightWholeItems}
+                    selectedValue={weightWhole}
+                    onValueChange={setWeightWhole}
+                    width={84}
+                  />
+                  <Text style={styles.weightPickerDot}>.</Text>
+                  <PickerWheelColumn
+                    items={addWeightDecimalItems}
+                    selectedValue={weightDecimal}
+                    onValueChange={setWeightDecimal}
+                    width={72}
+                  />
+                  <Text style={styles.weightPickerUnit}>{weightUnit}</Text>
+                </View>
+              </View>
 
-            <Text style={styles.fieldLabel}>{isTr ? 'Not (opsiyonel)' : 'Note (optional)'}</Text>
-            <TextInput
-              value={entryNote}
-              onChangeText={setEntryNote}
-              placeholder={isTr ? 'Örn. yemek değişti, aktivite arttı...' : 'e.g. diet changed, activity increased...'}
-              placeholderTextColor="#b1b3ab"
-              onFocus={() => setFocusedField('note')}
-              onBlur={() => setFocusedField(null)}
-              multiline
-              style={[styles.fieldInput, styles.fieldInputNote, focusedField === 'note' && styles.fieldInputFocused]}
-            />
+              <View style={styles.addSheetBlock}>
+                <Text style={styles.fieldLabel}>{isTr ? 'TARİH' : 'DATE'}</Text>
+                <View style={styles.datePickerRow}>
+                  <PickerWheelColumn
+                    items={addDayItems}
+                    selectedValue={String(entryDateParts.day)}
+                    onValueChange={(value) => {
+                      setEntryDateParts((prev) => clampDateParts({ ...prev, day: Number(value) }, addPickerToday));
+                    }}
+                    width={68}
+                  />
+                  <PickerWheelColumn
+                    items={addMonthItems.slice(0, addMonthLimit)}
+                    selectedValue={String(entryDateParts.month)}
+                    onValueChange={(value) => {
+                      setEntryDateParts((prev) => clampDateParts({ ...prev, month: Number(value) }, addPickerToday));
+                    }}
+                    width={92}
+                  />
+                  <PickerWheelColumn
+                    items={addYearItems}
+                    selectedValue={String(entryDateParts.year)}
+                    onValueChange={(value) => {
+                      setEntryDateParts((prev) => clampDateParts({ ...prev, year: Number(value) }, addPickerToday));
+                    }}
+                    width={84}
+                  />
+                </View>
+              </View>
 
-            {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+              <View style={styles.addSheetBlock}>
+                <Text style={styles.fieldLabel}>{isTr ? 'NOT (OPSİYONEL)' : 'NOTE (OPTIONAL)'}</Text>
+                <TextInput
+                  value={entryNote}
+                  onChangeText={setEntryNote}
+                  placeholder={isTr ? 'Örn. yemek değişti, aktivite arttı...' : 'e.g. diet changed, activity increased...'}
+                  placeholderTextColor="#b1b3ab"
+                  onFocus={() => setFocusedField('note')}
+                  onBlur={() => setFocusedField(null)}
+                  multiline
+                  style={[styles.fieldInput, styles.fieldInputNote, focusedField === 'note' && styles.fieldInputFocused]}
+                />
+              </View>
 
-            <Animated.View style={{ transform: [{ scale: savePressScale }] }}>
-              <Pressable
-                style={styles.sheetSaveBtn}
-                onPress={saveEntry}
-                onPressIn={() => Animated.timing(savePressScale, { toValue: 0.98, duration: 90, useNativeDriver: true }).start()}
-                onPressOut={() => Animated.timing(savePressScale, { toValue: 1, duration: 110, useNativeDriver: true }).start()}
-              >
-                <Text style={styles.sheetSaveBtnText}>{isTr ? 'Kaydı Kaydet' : 'Save Entry'}</Text>
-              </Pressable>
+              {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+
+              <Animated.View style={{ transform: [{ scale: savePressScale }] }}>
+                <Pressable
+                  style={styles.sheetSaveBtn}
+                  onPress={saveEntry}
+                  onPressIn={() => Animated.timing(savePressScale, { toValue: 0.98, duration: 90, useNativeDriver: true }).start()}
+                  onPressOut={() => Animated.timing(savePressScale, { toValue: 1, duration: 110, useNativeDriver: true }).start()}
+                >
+                  <Text style={styles.sheetSaveBtnText}>{isTr ? 'Kaydı Kaydet' : 'Save Entry'}</Text>
+                </Pressable>
+              </Animated.View>
             </Animated.View>
           </View>
         </Modal>
@@ -1430,18 +1721,102 @@ const styles = StyleSheet.create({
   },
 
   // Bottom-sheet modal
+  sheetModalRoot: {
+    flex: 1,
+  },
   sheetBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.35)',
   },
   sheet: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    paddingHorizontal: 22,
-    paddingTop: 14,
-    paddingBottom: 40,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 34,
     gap: 12,
+  },
+  sheetDragArea: {
+    gap: 8,
+  },
+  addSheetSummary: {
+    marginTop: 2,
+    marginBottom: 8,
+    borderRadius: 24,
+    backgroundColor: '#f7f5f0',
+    borderWidth: 1,
+    borderColor: '#e8e4dc',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 16,
+  },
+  addSheetSummaryBlock: {
+    flex: 1,
+    gap: 4,
+  },
+  addSheetSummaryBlockRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  addSheetSummaryLabel: {
+    fontSize: 10,
+    lineHeight: 14,
+    color: '#6f736d',
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  addSheetSummaryValue: {
+    fontSize: 23,
+    lineHeight: 27,
+    color: '#30332e',
+    fontWeight: '700',
+    letterSpacing: -0.3,
+  },
+  addSheetSummaryUnit: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#5d605a',
+    fontWeight: '500',
+  },
+  addSheetSummaryDate: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#30332e',
+    fontWeight: '600',
+  },
+  addSheetBlock: {
+    gap: 10,
+    marginTop: 6,
+  },
+  weightPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 2,
+  },
+  datePickerRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 2,
+  },
+  weightPickerDot: {
+    fontSize: 28,
+    lineHeight: 32,
+    color: '#a5aaa1',
+    fontWeight: '500',
+    marginTop: -2,
+  },
+  weightPickerUnit: {
+    fontSize: 15,
+    lineHeight: 20,
+    color: '#5d605a',
+    fontWeight: '600',
+    marginLeft: 2,
   },
   sheetHandle: {
     alignSelf: 'center',
@@ -1547,6 +1922,52 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: '#fff',
     fontWeight: '700',
+  },
+
+  // Picker wheels
+  column: {
+    height: PW_WHEEL_HEIGHT,
+    borderRadius: 22,
+    backgroundColor: '#f6f4f0',
+    borderWidth: 1,
+    borderColor: '#e5e1d8',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  columnContent: {
+    paddingVertical: PW_ROW_PADDING,
+  },
+  row: {
+    height: PW_ROW_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowPressed: {
+    opacity: 0.82,
+  },
+  rowActive: {
+    backgroundColor: 'rgba(71,102,74,0.08)',
+  },
+  rowText: {
+    fontSize: 18,
+    lineHeight: 22,
+    fontWeight: '600',
+    color: '#6f736d',
+  },
+  rowTextActive: {
+    color: '#30332e',
+    fontWeight: '700',
+  },
+  selectionBand: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
+    top: (PW_WHEEL_HEIGHT - PW_ROW_HEIGHT) / 2,
+    height: PW_ROW_HEIGHT,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.18)',
+    backgroundColor: 'rgba(71,102,74,0.05)',
   },
 
   // Header placeholder (fills space when no expense badge)

@@ -7,6 +7,7 @@ export function useRouteActions<Route extends string, VetVisitCreatePreset>(args
   setRoute: Dispatch<SetStateAction<Route>>;
   setSubBackRoute: Dispatch<SetStateAction<Route>>;
   setPetProfileBackRoute: Dispatch<SetStateAction<Route>>;
+  setWeightBackRoute: Dispatch<SetStateAction<Route>>;
   setPassportBackRoute: Dispatch<SetStateAction<Route>>;
   setDocumentsBackRoute: Dispatch<SetStateAction<Route>>;
   setNotificationsBackRoute: Dispatch<SetStateAction<Route>>;
@@ -18,6 +19,7 @@ export function useRouteActions<Route extends string, VetVisitCreatePreset>(args
     setRoute,
     setSubBackRoute,
     setPetProfileBackRoute,
+    setWeightBackRoute,
     setPassportBackRoute,
     setDocumentsBackRoute,
     setNotificationsBackRoute,
@@ -40,9 +42,9 @@ export function useRouteActions<Route extends string, VetVisitCreatePreset>(args
 
   const openWeightTracking = useCallback((petId: string = activePetId, from: Route = 'petProfile' as Route) => {
     setActivePetWithPersist(petId);
-    setPetProfileBackRoute(from);
+    setWeightBackRoute(from);
     setRoute('weightTracking' as Route);
-  }, [activePetId, setActivePetWithPersist, setPetProfileBackRoute, setRoute]);
+  }, [activePetId, setActivePetWithPersist, setRoute, setWeightBackRoute]);
 
   const openPassport = useCallback((petId: string = activePetId, from: Route = 'home' as Route) => {
     setActivePetWithPersist(petId);

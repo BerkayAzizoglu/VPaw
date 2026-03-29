@@ -24,7 +24,6 @@ export function useEdgeSwipeBack({
   const navigatingRef = useRef(false);
   const onBackRef = useRef(onBack);
   const translateX = useRef(new Animated.Value(0)).current;
-  const enterProgress = useRef(new Animated.Value(0)).current;
   const screenWidth = Dimensions.get('window').width;
   const [isSwiping, setIsSwiping] = useState(false);
 
@@ -33,22 +32,10 @@ export function useEdgeSwipeBack({
   }, [onBack]);
 
   useEffect(() => {
-    // Reset translateX on mount/remount so the screen is never stuck off-screen
+    // Reset translateX on mount/remount so the screen is never stuck off-screen.
+    // Keep entry transition flat to avoid flash/jump between route mounts.
     translateX.setValue(0);
-    const variantMap = {
-      soft: { duration: 240, offset: 16, easing: Easing.bezier(0.22, 1, 0.36, 1) },
-      snappy: { duration: 170, offset: 10, easing: Easing.out(Easing.cubic) },
-      drift: { duration: 300, offset: 22, easing: Easing.bezier(0.16, 1, 0.3, 1) },
-    } as const;
-    const variant = variantMap[enterVariant];
-    enterProgress.setValue(0);
-    Animated.timing(enterProgress, {
-      toValue: 1,
-      duration: variant.duration,
-      easing: variant.easing,
-      useNativeDriver: true,
-    }).start();
-  }, [enterProgress, enterVariant, translateX]);
+  }, [translateX, enterVariant]);
 
   const responder = useMemo(
     () =>
@@ -58,7 +45,7 @@ export function useEdgeSwipeBack({
           if (!enabled) return false;
           const startX = gesture.x0 ?? evt.nativeEvent.pageX ?? gesture.moveX;
           const startsFromLeftEdge = fullScreenGestureEnabled ? true : startX <= edgeWidth;
-          const enoughHorizontalIntent = gesture.dx > 7 && Math.abs(gesture.dx) > Math.abs(gesture.dy);
+          const enoughHorizontalIntent = gesture.dx > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.25;
           const lowVerticalNoise = Math.abs(gesture.dy) < maxDy;
           return startsFromLeftEdge && enoughHorizontalIntent && lowVerticalNoise;
         },
@@ -124,8 +111,8 @@ export function useEdgeSwipeBack({
           hasTriggeredRef.current = false;
           setIsSwiping(false);
         },
-        onPanResponderTerminationRequest: () => false,
-        onShouldBlockNativeResponder: () => true,
+        onPanResponderTerminationRequest: () => true,
+        onShouldBlockNativeResponder: () => false,
       }),
     [edgeWidth, enabled, fullScreenGestureEnabled, maxDy, screenWidth, translateX, triggerDx],
   );
@@ -138,32 +125,11 @@ export function useEdgeSwipeBack({
     extrapolate: 'clamp',
   });
 
-  const enterTranslateX = enterProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [
-      enterVariant === 'snappy' ? 10 : enterVariant === 'drift' ? 22 : 16,
-      0,
-    ],
-    extrapolate: 'clamp',
-  });
-
-  const enterOpacity = enterProgress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.97, 1],
-    extrapolate: 'clamp',
-  });
-
   return {
     panHandlers: responder.panHandlers,
     frontLayerStyle: {
-      transform: [{ translateX: Animated.add(translateX, enterTranslateX) }],
-      opacity: enterOpacity,
-      shadowColor: '#000',
-      shadowOpacity: 0.12,
-      shadowRadius: 12,
-      shadowOffset: { width: -2, height: 0 },
-      elevation: 10,
-      backgroundColor: '#faf8f5',
+      transform: [{ translateX }],
+      opacity: 1,
     } as const,
     backLayerStyle: {
       transform: [{ translateX: backReveal }],

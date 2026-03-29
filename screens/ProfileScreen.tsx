@@ -56,13 +56,13 @@ const sectionToneStyles: Record<SectionTone, { iconBg: string; iconBorder: strin
 function getNavRows(isTr: boolean) {
   return {
     app: [
-      { key: 'help', label: isTr ? 'Yardim' : 'Help', icon: 'help' as const },
+      { key: 'help', label: isTr ? 'Yardım' : 'Help', icon: 'help' as const },
       { key: 'feedback', label: isTr ? 'Geri Bildirim' : 'Feedback', icon: 'feedback' as const },
     ],
     management: [
-      { key: 'pet_health_card', label: isTr ? 'Pet Saglik Karti' : 'Pet Health Card', icon: 'card' as const, premiumFeature: true },
-      { key: 'pets', label: isTr ? 'Petler' : 'Pets', icon: 'share' as const },
-      { key: 'family_sharing', label: isTr ? 'Aile Paylasimi' : 'Family Sharing', icon: 'share' as const, premiumFeature: true },
+      { key: 'pet_health_card', label: isTr ? 'Pet Sağlık Kartı' : 'Pet Health Card', icon: 'card' as const, premiumFeature: true },
+      { key: 'pets', label: isTr ? 'Evcil Hayvanlar' : 'Pets', icon: 'share' as const },
+      { key: 'family_sharing', label: isTr ? 'Aile Paylaşımı' : 'Family Sharing', icon: 'share' as const, premiumFeature: true },
     ],
   };
 }
@@ -172,9 +172,9 @@ export default function ProfileScreen({
   const visiblePets = petProfiles ? Object.values(petProfiles).filter((p) => p?.name?.trim()) : [];
   const orderedPets = [...visiblePets].sort((a, b) => (a.id === activePetId ? -1 : b.id === activePetId ? 1 : a.name.localeCompare(b.name)));
   const petsCount = orderedPets.length;
-  const displayName = profile?.full_name?.trim() || user?.user_metadata?.full_name || user?.email?.split('@')[0] || (isTr ? 'Kullanici' : 'User');
+  const displayName = profile?.full_name?.trim() || user?.user_metadata?.full_name || user?.email?.split('@')[0] || (isTr ? 'Kullanıcı' : 'User');
   const accountEmail = user?.email ?? '-';
-  const membershipLabel = isPremiumPlan ? 'VPaw Premium' : (isTr ? 'Free Plan' : 'Free Plan');
+  const membershipLabel = isPremiumPlan ? 'VPaw Premium' : (isTr ? 'Ücretsiz Plan' : 'Free Plan');
   const managementItems = [
     navRows.management[0],
     navRows.management[2],
@@ -198,7 +198,7 @@ export default function ProfileScreen({
       if (!active) return;
 
       if (queryError) {
-        setError(isTr ? 'Profil bilgisi alinamadi. Lutfen tekrar dene.' : 'Failed to load profile. Please try again.');
+        setError(isTr ? 'Profil bilgisi alınamadı. Lütfen tekrar deneyin.' : 'Failed to load profile. Please try again.');
         setProfile(null);
       } else {
         setProfile(data ?? null);
@@ -213,7 +213,7 @@ export default function ProfileScreen({
   }, [isTr, user?.id]);
 
   return (
-    <LinearGradient colors={['#5F9E9B', '#BFE3EA', '#F7FBFC']} locations={[0, 0.58, 1]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.screen}>
+    <LinearGradient colors={['#CDEFE7', '#E3F6EF', '#F4ECD6']} locations={[0, 0.55, 1]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.screen}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
@@ -249,10 +249,10 @@ export default function ProfileScreen({
             <View style={styles.premiumCopy}>
               <Text style={styles.premiumLabel}>VPaw Premium</Text>
               <Text style={styles.premiumTitle}>
-                {isTr ? 'Sinirsiz pet ve saglik karti disa aktarma' : 'Unlimited pets and health card export'}
+                {isTr ? 'Sınırsız pet ve sağlık kartı dışa aktarma' : 'Unlimited pets and health card export'}
               </Text>
               <Text style={styles.premiumText}>
-                {isTr ? 'Tum premium avantajlari acmak icin plani gor.' : 'View the plan to unlock the full premium set.'}
+                {isTr ? 'Tüm premium avantajları açmak için planı görün.' : 'View the plan to unlock the full premium set.'}
               </Text>
             </View>
             <AppIcon name="chevronRight" size={15} color="#b6a58a" strokeWidth={1.9} />
@@ -267,7 +267,7 @@ export default function ProfileScreen({
           onItemPress={(key) => {
             if (key === 'pet_health_card') onOpenPetPassport?.();
             if (key === 'pets') onOpenPetProfiles?.();
-            if (key === 'family_sharing') Alert.alert(isTr ? 'Aile paylasimi yakinda' : 'Family sharing coming soon');
+            if (key === 'family_sharing') Alert.alert(isTr ? 'Aile paylaşımı yakında' : 'Family sharing coming soon');
           }}
         />
 
@@ -278,8 +278,8 @@ export default function ProfileScreen({
           isTr={isTr}
           onItemPress={(key) => {
             if (key === 'settings') onOpenSettings?.();
-            if (key === 'help') Alert.alert(isTr ? 'Yardim yakinda' : 'Help coming soon');
-            if (key === 'feedback') Alert.alert(isTr ? 'Geri bildirim yakinda' : 'Feedback coming soon');
+            if (key === 'help') Alert.alert(isTr ? 'Yardım yakında' : 'Help coming soon');
+            if (key === 'feedback') Alert.alert(isTr ? 'Geri bildirim yakında' : 'Feedback coming soon');
           }}
         />
 
@@ -290,7 +290,7 @@ export default function ProfileScreen({
             <View style={styles.signOutIconWrap}>
               <LogOut size={14} color="#ffffff" strokeWidth={2.1} />
             </View>
-            <Text style={styles.signOutText}>Log Out</Text>
+            <Text style={styles.signOutText}>{isTr ? 'Çıkış Yap' : 'Log Out'}</Text>
           </Pressable>
         </View>
       </ScrollView>

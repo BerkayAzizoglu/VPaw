@@ -62,6 +62,11 @@ function ensureString(value: unknown, fallback: string) {
   return typeof value === 'string' && value.trim() ? value : fallback;
 }
 
+function toHealthRecordSourceType(value: unknown): 'manual' | 'vet_visit' {
+  if (typeof value !== 'string') return 'manual';
+  return value === 'vet_visit' ? 'vet_visit' : 'manual';
+}
+
 function normalizeVaccineKey(name: string, date: string) {
   const ms = parseDateMs(date);
   const normalizedDate = ms == null ? date.trim().toLowerCase() : new Date(ms).toISOString().slice(0, 10);
@@ -325,11 +330,13 @@ export function getHealthRecordsFromEvents(
       activeBody: ensureString(primary?.description, 'Record details are available.'),
       activeBadge: status === 'resolved' ? 'Resolved' : status === 'active' ? 'Active' : 'Monitoring',
       activeSeverity: severity.charAt(0).toUpperCase() + severity.slice(1),
+      activeSourceType: toHealthRecordSourceType(primary?.metadata?.source),
       historyTitle: ensureString(secondary?.title, ensureString(primary?.title, fallbackTitle)),
       historyDate: toDateLabel(secondary?.date || primary?.date),
       historyBody: ensureString(secondary?.description, 'Previous record details are available.'),
       resolvedBadge: 'Resolved',
       historySeverity: 'Low',
+      historySourceType: toHealthRecordSourceType(secondary?.metadata?.source ?? primary?.metadata?.source),
     };
   };
 
@@ -373,7 +380,8 @@ export function getHealthRecordsForUI(
     metadata: {
       category: mapMedicalEventTypeToLegacyCategory(event.type),
       status: event.status ?? 'active',
-      source: 'mvp-medical-event',
+      source: event.vetVisitId ? 'vet_visit' : 'manual',
+      sourceVisitId: event.vetVisitId,
     },
     createdAt: event.createdAt,
     updatedAt: event.updatedAt,

@@ -16,23 +16,22 @@ import { getBreedHealthEntry, type BreedHealthEntry, type DailyCareCategory } fr
 import { generateBreedInsight } from '../lib/breedInsightsEngine';
 import AddRecordSheet, { type AddRecordMode } from '../components/AddRecordSheet';
 import {
-  Activity,
   CheckCircle,
   ChevronRight,
-  Droplets,
   FileText,
+  Files,
+  Footprints,
+  HeartPulse,
   Home,
   Plus,
   Pill,
-  Scale,
-  Scissors,
   Stethoscope,
   Syringe,
   Trash2,
   TrendingUp,
   Utensils,
 } from 'lucide-react-native';
-import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 // ─── Colour palette (matches reference design system) ────────────────────────
 const C = {
@@ -126,6 +125,7 @@ type HealthHubScreenProps = {
   } | null;
   onPrimaryCta?: () => void;
   onAddRecord?: (payload: AddHealthRecordPayload) => void;
+  onCreateFlowClosed?: (result: 'saved' | 'cancelled', payload?: AddHealthRecordPayload) => void;
   onDeleteRecord?: (timelineItemId: string) => void;
   onOpenVetVisits?: () => void;
   onOpenHealthRecords?: () => void;
@@ -269,29 +269,6 @@ function timelineTypeAccent(type: Exclude<HealthHubCategory, 'all'>) {
 }
 
 function FolderHeartIcon({ size = 21, color = '#7aa2b8' }: { size?: number; color?: string }) {
-  const heartPulse = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(heartPulse, { toValue: 1, duration: 380, useNativeDriver: true }),
-        Animated.timing(heartPulse, { toValue: 0, duration: 420, useNativeDriver: true }),
-        Animated.delay(700),
-      ]),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [heartPulse]);
-
-  const heartScale = heartPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [1, 1.14],
-  });
-  const heartOpacity = heartPulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.88, 1],
-  });
-
   return (
     <View style={{ width: size, height: size }}>
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -303,15 +280,13 @@ function FolderHeartIcon({ size = 21, color = '#7aa2b8' }: { size?: number; colo
           strokeLinejoin="round"
         />
       </Svg>
-      <Animated.View
+      <View
         pointerEvents="none"
         style={[
           StyleSheet.absoluteFillObject,
           {
             alignItems: 'center',
             justifyContent: 'center',
-            transform: [{ scale: heartScale }],
-            opacity: heartOpacity,
           },
         ]}
       >
@@ -324,8 +299,30 @@ function FolderHeartIcon({ size = 21, color = '#7aa2b8' }: { size?: number; colo
             strokeLinejoin="round"
           />
         </Svg>
-      </Animated.View>
+      </View>
     </View>
+  );
+}
+
+function CombIcon({ size = 16, color = '#7fc4b8' }: { size?: number; color?: string }) {
+  const sw = 1.8;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="3.5" y="7.2" width="17" height="4.2" rx="2.1" stroke={color} strokeWidth={sw} />
+      <Path d="M6 11.4V17.2M9 11.4V17.2M12 11.4V17.2M15 11.4V17.2M18 11.4V16.1" stroke={color} strokeWidth={sw} strokeLinecap="round" />
+    </Svg>
+  );
+}
+
+function BathroomScaleIcon({ size = 20, color = '#7aa2b8' }: { size?: number; color?: string }) {
+  const sw = 1.9;
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Rect x="4.1" y="4.1" width="15.8" height="15.8" rx="4.2" stroke={color} strokeWidth={sw} />
+      <Path d="M8.4 11.1C8.9 8.8 10.2 7.7 12 7.7C13.8 7.7 15.1 8.8 15.6 11.1" stroke={color} strokeWidth={sw} strokeLinecap="round" />
+      <Circle cx="12" cy="10.2" r="0.9" fill={color} />
+      <Path d="M12 10.2L14 8.7" stroke={color} strokeWidth={1.7} strokeLinecap="round" />
+    </Svg>
   );
 }
 
@@ -342,8 +339,8 @@ function HealthHubCategoryIcon({
   if (kind === 'vet') return <Stethoscope size={size} strokeWidth={strokeWidth} color={colorOverride ?? C.fgVet} />;
   if (kind === 'records') return <FolderHeartIcon size={size} color={colorOverride ?? C.fgRecords} />;
   if (kind === 'vaccines') return <Syringe size={size} strokeWidth={strokeWidth} color={colorOverride ?? C.fgVaccines} />;
-  if (kind === 'weight') return <Scale size={size} strokeWidth={strokeWidth} color={colorOverride ?? C.fgWeight} />;
-  return <FileText size={size} strokeWidth={strokeWidth} color={colorOverride ?? C.fgDocuments} />;
+  if (kind === 'weight') return <BathroomScaleIcon size={size} color={colorOverride ?? C.fgWeight} />;
+  return <Files size={size} strokeWidth={strokeWidth} color={colorOverride ?? C.fgDocuments} />;
 }
 
 const RECORD_TYPES: AddHealthRecordType[] = ['vaccine', 'diagnosis', 'procedure', 'prescription', 'test'];
@@ -373,11 +370,11 @@ function fmtVisitDate(raw: string, isTr: boolean): string {
 // ─── Breed Insights helpers ───────────────────────────────────────────────────
 function DailyCareIcon({ category, size = 16, color = '#7fc4b8' }: { category: DailyCareCategory; size?: number; color?: string }) {
   const sw = 1.85;
-  if (category === 'grooming') return <Scissors size={size} color={color} strokeWidth={sw} />;
-  if (category === 'exercise') return <Activity size={size} color={color} strokeWidth={sw} />;
+  if (category === 'grooming') return <CombIcon size={size} color={color} />;
+  if (category === 'exercise') return <Footprints size={size} color={color} strokeWidth={sw} />;
   if (category === 'feeding') return <Utensils size={size} color={color} strokeWidth={sw} />;
   if (category === 'environment') return <Home size={size} color={color} strokeWidth={sw} />;
-  return <Droplets size={size} color={color} strokeWidth={sw} />;
+  return <HeartPulse size={size} color={color} strokeWidth={sw} />;
 }
 
 function BreedDnaIcon({ size = 22, color = '#7fc4b8' }: { size?: number; color?: string }) {
@@ -509,8 +506,8 @@ function BreedTeaserRow({
 const bs = StyleSheet.create({
   // ── Breed teaser card (in scroll) ──────────────────────────────────────────
   teaserRow: {
-    marginHorizontal: 16,
-    borderRadius: 18,
+    marginHorizontal: 0,
+    borderRadius: 20,
     backgroundColor: '#0f2d3a',
     borderWidth: 1,
     borderColor: 'rgba(127,196,184,0.14)',
@@ -528,9 +525,9 @@ const bs = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    paddingHorizontal: 14,
-    paddingTop: 14,
-    paddingBottom: 13,
+    paddingHorizontal: 16,
+    paddingTop: 15,
+    paddingBottom: 14,
   },
   teaserAvatarFrame: {
     width: 40,
@@ -573,12 +570,12 @@ const bs = StyleSheet.create({
   teaserDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: 'rgba(127,196,184,0.10)',
-    marginHorizontal: 14,
+    marginHorizontal: 16,
   },
   teaserBottomRow: {
-    paddingHorizontal: 14,
-    paddingTop: 11,
-    paddingBottom: 14,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 15,
     gap: 9,
   },
   teaserChips: {
@@ -679,6 +676,7 @@ const bs = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
+    paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 16,
   },
@@ -918,6 +916,7 @@ export default function HealthHubScreen({
   createPreset,
   onPrimaryCta,
   onAddRecord,
+  onCreateFlowClosed,
   onDeleteRecord,
   onOpenVetVisits,
   onOpenHealthRecords,
@@ -940,17 +939,6 @@ export default function HealthHubScreen({
   onUpgradePremium,
 }: HealthHubScreenProps) {
   const isTr = locale === 'tr';
-
-  // ── entrance animations ──
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(18)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 340, useNativeDriver: true }),
-      Animated.spring(slideAnim, { toValue: 0, damping: 20, stiffness: 220, mass: 0.85, useNativeDriver: true }),
-    ]).start();
-  }, [fadeAnim, slideAnim]);
 
   // ── local state ──
   const [category, setCategory] = useState<HealthHubCategory>(initialCategory);
@@ -1027,6 +1015,7 @@ export default function HealthHubScreen({
   );
   const iconAnimByKeyRef = useRef<Record<string, Animated.Value>>({});
   const cardScaleByKeyRef = useRef<Record<string, Animated.Value>>({});
+  const createSavedPayloadRef = useRef<AddHealthRecordPayload | null>(null);
   const headerBtnScale = useRef(new Animated.Value(1)).current;
   const qaScales = useRef([
     new Animated.Value(1),
@@ -1206,7 +1195,7 @@ export default function HealthHubScreen({
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
 
         {/* ── HEADER ── */}
-        <Animated.View style={[s.headerRow, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        <View style={s.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={s.headerLabel}>{isTr ? 'SAĞLIK KAYITLARI' : 'CARE RECORDS'}</Text>
             <Text style={s.headerTitle}>{isTr ? 'Sağlık Merkezi' : 'Health Hub'}</Text>
@@ -1222,7 +1211,7 @@ export default function HealthHubScreen({
               <Plus size={20} color="#7fc4b8" strokeWidth={2.4} />
             </Pressable>
           </Animated.View>
-        </Animated.View>
+        </View>
 
         {/* ── CATEGORY SECTION HEADER ── */}
         <View style={s.sectionHeaderRow}>
@@ -1231,7 +1220,7 @@ export default function HealthHubScreen({
         </View>
 
         {/* ── CATEGORY CARDS ── */}
-        <Animated.View style={[s.categoryList, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        <View style={s.categoryList}>
           {hubEntries.map((entry, idx) => {
             const rowTheme = AREA_ROW_THEMES[entry.key as Exclude<AreaRowKey, 'documents'>];
             const gradientId = `healthHubAreaGradient-${entry.key}`;
@@ -1310,13 +1299,13 @@ export default function HealthHubScreen({
               </Animated.View>
             );
           })}
-        </Animated.View>
+        </View>
 
         <View style={[s.sectionHeaderRow, s.sectionHeaderRowSpaced]}>
           <Text style={[s.sectionLabel, s.sectionLabelDocs]}>{isTr ? 'BELGELER' : 'DOCUMENTS'}</Text>
           <View style={[s.sectionHeaderLine, s.sectionHeaderLineDocs]} />
         </View>
-        <Animated.View style={[s.categoryList, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        <View style={s.categoryList}>
           {(() => {
             return (
               <Pressable
@@ -1383,7 +1372,7 @@ export default function HealthHubScreen({
               </Pressable>
             );
           })()}
-        </Animated.View>
+        </View>
 
         {/* ── ACTIVE MEDICATIONS ── */}
         {medicationCourses && medicationCourses.filter((m) => m.status === 'active' || m.status === 'paused').length > 0 ? (
@@ -1392,7 +1381,7 @@ export default function HealthHubScreen({
               <Text style={[s.sectionLabel, s.sectionLabelMeds]}>{isTr ? 'AKTİF İLAÇLAR' : 'ACTIVE MEDICATIONS'}</Text>
               <View style={[s.sectionHeaderLine, s.sectionHeaderLineMeds]} />
             </View>
-            <Animated.View style={[s.categoryList, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+            <View style={s.categoryList}>
               {medicationCourses
                 .filter((m) => m.status === 'active' || m.status === 'paused')
                 .map((med) => {
@@ -1426,7 +1415,7 @@ export default function HealthHubScreen({
                     </View>
                   );
                 })}
-            </Animated.View>
+            </View>
           </>
         ) : null}
 
@@ -1439,7 +1428,7 @@ export default function HealthHubScreen({
               </Text>
               <View style={[s.sectionHeaderLine, { backgroundColor: 'rgba(127,196,184,0.15)' }]} />
             </View>
-            <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }], marginBottom: 8 }}>
+            <View style={{ marginBottom: 8 }}>
               <BreedTeaserRow
                 entry={breedEntry}
                 isPremium={isPremium}
@@ -1449,12 +1438,12 @@ export default function HealthHubScreen({
                 insightText={breedInsight?.text}
                 petName={petName}
               />
-            </Animated.View>
+            </View>
           </>
         ) : null}
 
         {/* ── EXPENSE CHART ── */}
-        {summary.totalExpenses && false ? <Animated.View style={[s.expenseChartCard, { opacity: fadeAnim }]}>
+        {summary.totalExpenses && false ? <View style={s.expenseChartCard}>
           <View style={s.expenseChartHeader}>
             <Text style={s.expenseChartTitle}>{isTr ? 'Harcama Analizi' : 'Expense Breakdown'}</Text>
             <View style={s.expenseChartYearPill}>
@@ -1515,7 +1504,7 @@ export default function HealthHubScreen({
               </Text>
             </View>
           )}
-        </Animated.View> : null}
+        </View> : null}
 
       </ScrollView>
 
@@ -1573,12 +1562,31 @@ export default function HealthHubScreen({
               </Pressable>
             </Animated.View>
 
-            {/* Health Record */}
+            {/* Weight */}
             <Animated.View style={{ transform: [{ scale: qaScales[2] }] }}>
               <Pressable
                 style={({ pressed }) => [qa.row, pressed && qa.rowPressed]}
                 onPressIn={springDown(qaScales[2], 0.97)}
                 onPressOut={springUp(qaScales[2])}
+                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeQuickAdd(() => onAddWeightEntry ? onAddWeightEntry() : onOpenWeightTracking?.()); }}
+              >
+                <View style={[qa.iconBox, { backgroundColor: 'rgba(240,180,80,0.12)', borderColor: 'rgba(240,180,80,0.22)' }]}>
+                  <BathroomScaleIcon size={20} color="#e8c46a" />
+                </View>
+                <View style={qa.rowBody}>
+                  <Text style={qa.rowLabel}>{isTr ? 'Kilo' : 'Weight'}</Text>
+                  <Text style={qa.rowSub}>{isTr ? 'Güncel kilo ölçümü ekle' : 'Log a new weight measurement'}</Text>
+                </View>
+                <ChevronRight size={14} color="rgba(127,196,184,0.4)" strokeWidth={2.2} />
+              </Pressable>
+            </Animated.View>
+
+            {/* Health Record */}
+            <Animated.View style={{ transform: [{ scale: qaScales[3] }] }}>
+              <Pressable
+                style={({ pressed }) => [qa.row, qa.rowLast, pressed && qa.rowPressed]}
+                onPressIn={springDown(qaScales[3], 0.97)}
+                onPressOut={springUp(qaScales[3])}
                 onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeQuickAdd(() => openCreate('diagnosis', isTr ? 'Sağlık Kaydı' : 'Health Record')); }}
               >
                 <View style={[qa.iconBox, { backgroundColor: 'rgba(180,130,240,0.12)', borderColor: 'rgba(180,130,240,0.22)' }]}>
@@ -1588,25 +1596,6 @@ export default function HealthHubScreen({
                   <Text style={qa.rowLabel}>{isTr ? 'Sağlık Kaydı' : 'Health Record'}</Text>
                   <Text style={qa.rowSub}>{isTr ? 'Teşhis, reçete, test sonucu' : 'Diagnosis, prescription, test result'}</Text>
                 </View>
-                <ChevronRight size={14} color="rgba(127,196,184,0.4)" strokeWidth={2.2} />
-              </Pressable>
-            </Animated.View>
-
-            {/* Weight */}
-            <Animated.View style={{ transform: [{ scale: qaScales[3] }] }}>
-              <Pressable
-                style={({ pressed }) => [qa.row, qa.rowLast, pressed && qa.rowPressed]}
-                onPressIn={springDown(qaScales[3], 0.97)}
-                onPressOut={springUp(qaScales[3])}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeQuickAdd(() => onAddWeightEntry ? onAddWeightEntry() : onOpenWeightTracking?.()); }}
-              >
-              <View style={[qa.iconBox, { backgroundColor: 'rgba(240,180,80,0.12)', borderColor: 'rgba(240,180,80,0.22)' }]}>
-                <Scale size={20} color="#e8c46a" strokeWidth={1.8} />
-              </View>
-              <View style={qa.rowBody}>
-                <Text style={qa.rowLabel}>{isTr ? 'Kilo' : 'Weight'}</Text>
-                <Text style={qa.rowSub}>{isTr ? 'Güncel kilo ölçümü ekle' : 'Log a new weight measurement'}</Text>
-              </View>
                 <ChevronRight size={14} color="rgba(127,196,184,0.4)" strokeWidth={2.2} />
               </Pressable>
             </Animated.View>
@@ -1842,8 +1831,16 @@ export default function HealthHubScreen({
         initialTitle={addSheetPresetTitle}
         initialType={addSheetPresetType}
         locale={locale}
-        onClose={() => setAddSheetOpen(false)}
-        onSave={(payload) => onAddRecord?.(payload)}
+        onClose={() => {
+          const savedPayload = createSavedPayloadRef.current;
+          createSavedPayloadRef.current = null;
+          setAddSheetOpen(false);
+          onCreateFlowClosed?.(savedPayload ? 'saved' : 'cancelled', savedPayload ?? undefined);
+        }}
+        onSave={(payload) => {
+          createSavedPayloadRef.current = payload;
+          onAddRecord?.(payload);
+        }}
       />
     </View>
   );

@@ -89,7 +89,7 @@ export default function PetsScreen({
     const typeLabel = localizeType(pet.petType, locale);
     const meta =
       [typeLabel, pet.breed?.trim()].filter(Boolean).join(' / ') ||
-      (isTr ? 'Profil hazir' : 'Profile ready');
+      (isTr ? 'Profil hazır' : 'Profile ready');
 
     return {
       id: pet.id,
@@ -104,7 +104,7 @@ export default function PetsScreen({
   const mediumDenseList = viewItems.length >= 4;
   const maxDenseList = viewItems.length >= 7;
 
-  const screenTitle = isTr ? 'Pet Genel Bakis' : 'Pet Overview';
+  const screenTitle = isTr ? 'Pet Genel Bakış' : 'Pet Overview';
   const ctaLabel = isTr ? 'Yeni Pet Ekle' : 'Add Pet';
   const refreshOffset = Platform.OS === 'ios' ? 36 : 0;
 
@@ -265,7 +265,7 @@ export default function PetsScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#98D6D1',
+    backgroundColor: '#cdefe7',
   },
   safeArea: {
     flex: 1,

@@ -345,7 +345,7 @@ export default function PetHealthPassportScreen({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#faf9f8' },
   backLayer: { ...StyleSheet.absoluteFillObject },
-  frontLayer: { flex: 1, overflow: 'hidden' },
+  frontLayer: { flex: 1, overflow: 'hidden', backgroundColor: '#faf9f8' },
   content: { paddingHorizontal: 22, paddingTop: 34, paddingBottom: 110, gap: 14 },
   header: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f1ef', alignItems: 'center', justifyContent: 'center' },
@@ -422,6 +422,5 @@ const styles = StyleSheet.create({
   exportBtnDisabled: { opacity: 0.72 },
   exportBtnText: { fontSize: 16, lineHeight: 22, color: '#faf8f5', fontWeight: '700' },
 });
-
 
 

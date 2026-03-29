@@ -160,10 +160,12 @@ const ACTIVE_PET_STORAGE_KEY = 'vpaw_active_pet_id';
 const PET_LOCK_STORAGE_KEY = 'vpaw_pet_lock_enabled';
 const DARK_MODE_STORAGE_KEY = 'vpaw_dark_mode_enabled';
 const DATA_RESET_VERSION_STORAGE_KEY = 'vpaw_data_reset_version';
+const WEIGHT_HISTORY_RESET_VERSION_STORAGE_KEY = 'vpaw_weight_history_reset_version';
 const NOTIFICATION_READ_MAP_STORAGE_KEY = 'vpaw_notification_read_map';
 const NOTIFICATION_LAST_TRIGGERED_STORAGE_KEY = 'vpaw_notification_last_triggered_by_key';
 const NOTIFICATION_INBOX_STORAGE_KEY = 'vpaw_notification_inbox';
 const DATA_RESET_TARGET_VERSION = 'milo-clean-reset-2026-03-22';
+const WEIGHT_HISTORY_RESET_TARGET_VERSION = 'milo-weight-history-clear-2026-03-29-v2';
 
 type RuntimeState = {
   activePetId: string;
@@ -191,9 +193,14 @@ export default function AuthGate() {
     openCreate: boolean;
     nonce: number;
   } | null>(null);
+  const [healthCreateFlowContext, setHealthCreateFlowContext] = useState<{
+    origin: AppRoute;
+    successRoute: AppRoute;
+  } | null>(null);
   const [darkModeEnabled, setDarkModeEnabled] = useState(false);
   const [subBackRoute, setSubBackRoute] = useState<AppRoute>('home');
   const [petProfileBackRoute, setPetProfileBackRoute] = useState<AppRoute>('home');
+  const [weightBackRoute, setWeightBackRoute] = useState<AppRoute>('home');
   const [petEditBackRoute, setPetEditBackRoute] = useState<AppRoute>('home');
   const [passportBackRoute, setPassportBackRoute] = useState<AppRoute>('home');
   const [documentsBackRoute, setDocumentsBackRoute] = useState<AppRoute>('healthHub');
@@ -227,7 +234,11 @@ export default function AuthGate() {
   const [notificationReadById, setNotificationReadById] = useState<Record<string, boolean>>({});
   const [notificationInbox, setNotificationInbox] = useState<HealthNotification[]>([]);
   const [notificationLastTriggeredByKey, setNotificationLastTriggeredByKey] = useState<NotificationLastTriggeredByKey>({});
+  const [routeToastText, setRouteToastText] = useState<string | null>(null);
   const successOverlayRef = useRef<SuccessOverlayHandle>(null);
+  const routeToastOpacity = useRef(new Animated.Value(0)).current;
+  const routeToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const miloWeightResetAppliedRef = useRef(false);
   const activePetRef = useRef<string>('');
   const petLockRef = useRef(false);
   const reminderSyncInFlightRef = useRef(false);
@@ -246,6 +257,35 @@ export default function AuthGate() {
       setNotificationLastTriggeredByKey({});
     }
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (routeToastTimerRef.current) {
+        clearTimeout(routeToastTimerRef.current);
+      }
+    };
+  }, []);
+
+  const showRouteToast = (message: string) => {
+    if (routeToastTimerRef.current) {
+      clearTimeout(routeToastTimerRef.current);
+      routeToastTimerRef.current = null;
+    }
+    setRouteToastText(message);
+    routeToastOpacity.setValue(0);
+    Animated.timing(routeToastOpacity, {
+      toValue: 1,
+      duration: 160,
+      useNativeDriver: true,
+    }).start();
+    routeToastTimerRef.current = setTimeout(() => {
+      Animated.timing(routeToastOpacity, {
+        toValue: 0,
+        duration: 180,
+        useNativeDriver: true,
+      }).start(() => setRouteToastText(null));
+    }, 1350);
+  };
 
   const areReminderStatesEqual = (a: ByPet<Reminder>, b: ByPet<Reminder>) => {
     const allPetIds = Array.from(new Set([...Object.keys(a), ...Object.keys(b)]));
@@ -383,6 +423,7 @@ export default function AuthGate() {
           activeRaw,
           petLockRaw,
           dataResetVersionRaw,
+          weightHistoryResetVersionRaw,
           weightGoalsRaw,
           notificationReadMapRaw,
           notificationLastTriggeredRaw,
@@ -402,6 +443,7 @@ export default function AuthGate() {
           getLocalItem(ACTIVE_PET_STORAGE_KEY),
           getLocalItem(PET_LOCK_STORAGE_KEY),
           getLocalItem(DATA_RESET_VERSION_STORAGE_KEY),
+          getLocalItem(WEIGHT_HISTORY_RESET_VERSION_STORAGE_KEY),
           getLocalItem(WEIGHT_GOALS_BY_PET_STORAGE_KEY),
           getLocalItem(NOTIFICATION_READ_MAP_STORAGE_KEY),
           getLocalItem(NOTIFICATION_LAST_TRIGGERED_STORAGE_KEY),
@@ -629,6 +671,23 @@ export default function AuthGate() {
             localWeightsUpdatedAt = normalizeUpdatedAt(JSON.parse(weightsUpdatedAtRaw) as unknown);
           } catch {}
         }
+
+        const shouldResetWeightHistory = weightHistoryResetVersionRaw !== WEIGHT_HISTORY_RESET_TARGET_VERSION;
+        const miloPetIds = Object.entries(localProfiles)
+          .filter(([, pet]) => pet?.name?.trim().toLowerCase() === 'milo')
+          .map(([petId]) => petId);
+
+        if (shouldResetWeightHistory && miloPetIds.length > 0) {
+          const resetIso = new Date().toISOString();
+          localWeights = { ...localWeights };
+          localWeightsUpdatedAt = { ...localWeightsUpdatedAt };
+          miloPetIds.forEach((petId) => {
+            localWeights[petId] = [];
+            localWeightsUpdatedAt[petId] = resetIso;
+          });
+          setLocalItem(WEIGHT_HISTORY_RESET_VERSION_STORAGE_KEY, WEIGHT_HISTORY_RESET_TARGET_VERSION).catch(() => {});
+        }
+
         setWeightsUpdatedAt(localWeightsUpdatedAt);
         setLocalItem(WEIGHTS_UPDATED_AT_STORAGE_KEY, JSON.stringify(localWeightsUpdatedAt)).catch(() => {});
 
@@ -641,6 +700,14 @@ export default function AuthGate() {
             localHealthEvents = hasEvents ? normalizedHealthEvents : localHealthEvents;
           } catch {}
         }
+
+        if (shouldResetWeightHistory && miloPetIds.length > 0) {
+          localHealthEvents = { ...localHealthEvents };
+          miloPetIds.forEach((petId) => {
+            localHealthEvents[petId] = (localHealthEvents[petId] ?? []).filter((event) => event.type !== 'weight');
+          });
+        }
+
         setHealthEventsByPet(localHealthEvents);
         setLocalItem(HEALTH_EVENTS_STORAGE_KEY, JSON.stringify(localHealthEvents)).catch(() => {});
 
@@ -723,6 +790,41 @@ export default function AuthGate() {
     if (!petHydrated) return;
     setLocalItem(PET_PROFILES_STORAGE_KEY, JSON.stringify(petProfiles)).catch(() => {});
   }, [petProfiles, petHydrated]);
+
+  useEffect(() => {
+    if (!petHydrated || miloWeightResetAppliedRef.current) return;
+    const miloPetIds = Object.entries(petProfiles)
+      .filter(([, pet]) => pet?.name?.trim().toLowerCase() === 'milo')
+      .map(([petId]) => petId);
+    if (miloPetIds.length === 0) return;
+
+    miloWeightResetAppliedRef.current = true;
+    const resetIso = new Date().toISOString();
+
+    setWeightsByPet((prev) => {
+      const next = { ...prev };
+      miloPetIds.forEach((petId) => {
+        next[petId] = [];
+      });
+      return next;
+    });
+
+    setWeightsUpdatedAt((prev) => {
+      const next = { ...prev };
+      miloPetIds.forEach((petId) => {
+        next[petId] = resetIso;
+      });
+      return next;
+    });
+
+    setHealthEventsByPet((prev) => {
+      const next = { ...prev };
+      miloPetIds.forEach((petId) => {
+        next[petId] = (next[petId] ?? []).filter((event) => event.type !== 'weight');
+      });
+      return next;
+    });
+  }, [petHydrated, petProfiles]);
 
   useEffect(() => {
     if (!petHydrated) return;
@@ -1240,6 +1342,7 @@ export default function AuthGate() {
     setRoute,
     setSubBackRoute,
     setPetProfileBackRoute,
+    setWeightBackRoute,
     setPassportBackRoute,
     setDocumentsBackRoute,
     setNotificationsBackRoute,
@@ -1477,6 +1580,54 @@ export default function AuthGate() {
     }
 
     setPetProfilesUpdatedAt((prev) => ({ ...prev, [activePetId]: nowIso }));
+  };
+
+  const openHealthHubCreateWithContext = (
+    origin: AppRoute,
+    type: AddHealthRecordType,
+    category: HealthHubCategory,
+    successRoute: AppRoute = origin,
+    options?: { title?: string; note?: string },
+  ) => {
+    setHealthCreateFlowContext({ origin, successRoute });
+    openHealthHubCreate(type, category, options);
+  };
+
+  const resolveHealthCreateSuccessRoute = (payload?: AddHealthRecordPayload): AppRoute => {
+    if (!payload) return 'healthHub';
+    if (payload.type === 'vaccine') return 'vaccinations';
+    if (payload.type === 'procedure') return payload.visitReason ? 'vetVisits' : 'healthRecords';
+    return 'healthRecords';
+  };
+
+  const buildHealthCreateToast = (targetRoute: AppRoute) => {
+    if (locale === 'tr') {
+      if (targetRoute === 'vetVisits') return 'Kayıt eklendi • Veteriner Ziyaretleri';
+      if (targetRoute === 'vaccinations') return 'Kayıt eklendi • Aşılar';
+      if (targetRoute === 'healthRecords') return 'Kayıt eklendi • Sağlık Kayıtları';
+      return 'Kayıt eklendi';
+    }
+    if (targetRoute === 'vetVisits') return 'Saved • Vet Visits';
+    if (targetRoute === 'vaccinations') return 'Saved • Vaccinations';
+    if (targetRoute === 'healthRecords') return 'Saved • Health Records';
+    return 'Saved';
+  };
+
+  const handleHealthHubCreateFlowClosed = (result: 'saved' | 'cancelled', payload?: AddHealthRecordPayload) => {
+    if (result === 'saved') {
+      const targetRoute = healthCreateFlowContext?.successRoute ?? resolveHealthCreateSuccessRoute(payload);
+      showRouteToast(buildHealthCreateToast(targetRoute));
+      setHealthCreateFlowContext(null);
+      if (targetRoute === 'vaccinations' || targetRoute === 'vetVisits' || targetRoute === 'healthRecords') {
+        setSubBackRoute('healthHub');
+      }
+      setRoute(targetRoute);
+      return;
+    }
+
+    const cancelRoute = healthCreateFlowContext?.origin ?? 'healthHub';
+    setHealthCreateFlowContext(null);
+    setRoute(cancelRoute);
   };
 
   const vaccinationsBridge = useMemo(
@@ -2163,12 +2314,12 @@ export default function AuthGate() {
       .sort((a, b) => (parseUpdatedAtMs(b.eventDate ?? b.dueDate) ?? 0) - (parseUpdatedAtMs(a.eventDate ?? a.dueDate) ?? 0))[0];
 
     const countText = (count: number) => {
-      if (locale === 'tr') return `${count} kayit`;
+      if (locale === 'tr') return `${count} kayıt`;
       return `${count} ${count === 1 ? 'record' : 'records'}`;
     };
-    const statusUpToDate = locale === 'tr' ? 'Guncel' : 'Up to date';
+    const statusUpToDate = locale === 'tr' ? 'Güncel' : 'Up to date';
     const statusActionNeeded = locale === 'tr' ? 'Aksiyon gerekli' : 'Action needed';
-    const statusLogged = locale === 'tr' ? 'Kayitli' : 'Logged';
+    const statusLogged = locale === 'tr' ? 'Kayıtlı' : 'Logged';
     const statusNoData = locale === 'tr' ? 'Veri yok' : 'No Data';
     const formatShortDate = (raw?: string | null) => {
       const ms = raw ? parseUpdatedAtMs(raw) : null;
@@ -2187,16 +2338,16 @@ export default function AuthGate() {
       return `${value.toFixed(1)} kg`;
     };
     const formatVisitLabel = (visit?: VetVisit | null) => {
-      if (!visit) return locale === 'tr' ? 'Ziyaret kaydi' : 'Visit record';
+      if (!visit) return locale === 'tr' ? 'Ziyaret kaydı' : 'Visit record';
       if (visit.vetName?.trim()) return visit.vetName.trim();
       const reasonLabels: Record<VetVisitReasonCategory, string> = locale === 'tr'
         ? {
             checkup: 'Genel kontrol',
-            vaccine: 'Asi kaydi',
-            illness: 'Hastalik',
+            vaccine: 'Aşı kaydı',
+            illness: 'Hastalık',
             injury: 'Yaralanma',
             follow_up: 'Kontrol ziyareti',
-            other: 'Ziyaret kaydi',
+            other: 'Ziyaret kaydı',
           }
         : {
             checkup: 'General checkup',
@@ -2206,25 +2357,25 @@ export default function AuthGate() {
             follow_up: 'Follow-up visit',
             other: 'Visit record',
       };
-      return reasonLabels[visit.reasonCategory] ?? (locale === 'tr' ? 'Ziyaret kaydi' : 'Visit record');
+      return reasonLabels[visit.reasonCategory] ?? (locale === 'tr' ? 'Ziyaret kaydı' : 'Visit record');
     };
     const formatVaccineLabel = (event?: MvpMedicalEvent | null) => {
-      if (!event) return locale === 'tr' ? 'Asi kaydi' : 'Vaccine record';
+      if (!event) return locale === 'tr' ? 'Aşı kaydı' : 'Vaccine record';
       if (event.title?.trim()) return event.title.trim();
-      return locale === 'tr' ? 'Asi kaydi' : 'Vaccine record';
+      return locale === 'tr' ? 'Aşı kaydı' : 'Vaccine record';
     };
     const formatRecordLabel = (event?: MvpMedicalEvent | null) => {
-      if (!event) return locale === 'tr' ? 'Saglik kaydi' : 'Health record';
+      if (!event) return locale === 'tr' ? 'Sağlık kaydı' : 'Health record';
       if (event.title?.trim()) return event.title.trim();
       const fallbackByType: Partial<Record<MedicalEventType, string>> = locale === 'tr'
         ? {
-            diagnosis: 'Tani kaydi',
-            procedure: 'Prosedur kaydi',
-            test: 'Test kaydi',
-            prescription: 'Recete kaydi',
+            diagnosis: 'Tanı kaydı',
+            procedure: 'Prosedür kaydı',
+            test: 'Test kaydı',
+            prescription: 'Reçete kaydı',
             note: 'Klinik not',
             attachment: 'Ek belge',
-            other: 'Saglik kaydi',
+            other: 'Sağlık kaydı',
           }
         : {
             diagnosis: 'Diagnosis record',
@@ -2235,12 +2386,12 @@ export default function AuthGate() {
             attachment: 'Attachment record',
             other: 'Health record',
           };
-      return fallbackByType[event.type] ?? (locale === 'tr' ? 'Saglik kaydi' : 'Health record');
+      return fallbackByType[event.type] ?? (locale === 'tr' ? 'Sağlık kaydı' : 'Health record');
     };
     const formatDocumentLabel = (document?: { title?: string | null } | null) => {
-      if (!document) return locale === 'tr' ? 'Belge kaydi' : 'Document record';
+      if (!document) return locale === 'tr' ? 'Belge kaydı' : 'Document record';
       if (document.title?.trim()) return document.title.trim();
-      return locale === 'tr' ? 'Belge kaydi' : 'Document record';
+      return locale === 'tr' ? 'Belge kaydı' : 'Document record';
     };
 
     return {
@@ -2727,11 +2878,98 @@ export default function AuthGate() {
         value: rounded,
         date,
         change: nextChange,
+        note: options?.note?.trim() || undefined,
       };
 
       return {
         ...prev,
         [activePetId]: [...current, nextEntry],
+      };
+    });
+
+    setWeightsUpdatedAt((prev) => {
+      const nowIso = now.toISOString();
+      return {
+        ...prev,
+        [activePetId]: nowIso,
+      };
+    });
+  };
+
+  const updateWeightEntryForActivePet = (
+    sortedIndex: number,
+    value: number,
+    options?: { date?: string; note?: string },
+  ) => {
+    const now = new Date();
+    const rounded = Number(value.toFixed(1));
+
+    setWeightsByPet((prev) => {
+      const current = prev[activePetId] ?? [];
+      if (!current.length || sortedIndex < 0) return prev;
+
+      const decorated = current.map((entry, originalIndex) => ({
+        ...entry,
+        originalIndex,
+      }));
+
+      const sorted = [...decorated].sort((a, b) => {
+        const da = new Date(a.date).getTime();
+        const db = new Date(b.date).getTime();
+        const sa = Number.isFinite(da) ? da : Number.MAX_SAFE_INTEGER;
+        const sb = Number.isFinite(db) ? db : Number.MAX_SAFE_INTEGER;
+        return sa - sb;
+      });
+
+      if (sortedIndex >= sorted.length) return prev;
+
+      const target = sorted[sortedIndex];
+      const selectedDateMs = options?.date ? new Date(options.date).getTime() : Number.NaN;
+      const nextDate = Number.isFinite(selectedDateMs) ? new Date(selectedDateMs).toISOString() : target.date;
+      const nextLabel = formatShortLabel(new Date(nextDate), locale);
+      const nextNote = options?.note?.trim() || undefined;
+
+      const updated = sorted.map((entry, idx) =>
+        idx === sortedIndex
+          ? {
+              ...entry,
+              value: rounded,
+              date: nextDate,
+              label: nextLabel,
+              note: nextNote,
+            }
+          : entry,
+      );
+
+      const recalculated = [...updated]
+        .sort((a, b) => {
+          const da = new Date(a.date).getTime();
+          const db = new Date(b.date).getTime();
+          const sa = Number.isFinite(da) ? da : Number.MAX_SAFE_INTEGER;
+          const sb = Number.isFinite(db) ? db : Number.MAX_SAFE_INTEGER;
+          return sa - sb;
+        })
+        .map((entry, idx, arr) => {
+          const prevEntry = arr[idx - 1];
+          const delta = prevEntry ? entry.value - prevEntry.value : 0;
+          const change = Math.abs(delta) < 0.01 ? 'Stable' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)} kg`;
+          return { ...entry, change };
+        });
+
+      const byOriginalIndex = new Map<number, WeightPoint>();
+      recalculated.forEach((entry) => {
+        byOriginalIndex.set(entry.originalIndex, {
+          label: entry.label,
+          value: entry.value,
+          date: entry.date,
+          change: entry.change,
+          note: entry.note,
+        });
+      });
+
+      return {
+        ...prev,
+        [activePetId]: current.map((entry, idx) => byOriginalIndex.get(idx) ?? entry),
       };
     });
 
@@ -2870,6 +3108,21 @@ export default function AuthGate() {
     return <View style={styles.previewFallback} />;
   };
 
+  const renderRouteToastOverlay = () => {
+    if (!routeToastText) return null;
+    return (
+      <Animated.View pointerEvents="none" style={[styles.routeToastWrap, { opacity: routeToastOpacity }]}>
+        <View style={styles.routeToastCapsule}>
+          <Text style={styles.routeToastText}>{routeToastText}</Text>
+        </View>
+      </Animated.View>
+    );
+  };
+
+  const resolveBackPreview = (target: AppRoute): ReactNode | undefined => {
+    return renderBackPreview(target);
+  };
+
   const renderPrimaryChrome = (content: ReactNode) => (
     <View style={styles.primaryShell}>
       {content}
@@ -2887,6 +3140,7 @@ export default function AuthGate() {
       />
 
       <SuccessOverlay ref={successOverlayRef} />
+      {renderRouteToastOverlay()}
     </View>
   );
   if (loading || !petHydrated || !petLockHydrated) {
@@ -2913,15 +3167,18 @@ export default function AuthGate() {
         ? 'ready'
         : 'empty';
     return (
-      <VaccinationsScreen
-        onBack={() => setRoute(subBackRoute)}
-        backPreview={renderBackPreview(subBackRoute)}
-        onAddVaccination={() => openHealthHubCreate('vaccine', 'vaccine')}
-        status={vaccinationsScreenStatus}
-        historyItems={vaccinationsBridge?.historyItems}
-        attentionCounts={vaccinationsBridge?.attentionCounts}
-        nextUpData={vaccinationsBridge?.nextUpData}
-      />
+      <>
+        <VaccinationsScreen
+          onBack={() => setRoute(subBackRoute)}
+          backPreview={resolveBackPreview(subBackRoute)}
+          onAddVaccination={() => openHealthHubCreateWithContext('vaccinations', 'vaccine', 'vaccine', 'vaccinations')}
+          status={vaccinationsScreenStatus}
+          historyItems={vaccinationsBridge?.historyItems}
+          attentionCounts={vaccinationsBridge?.attentionCounts}
+          nextUpData={vaccinationsBridge?.nextUpData}
+        />
+        {renderRouteToastOverlay()}
+      </>
     );
   }
 
@@ -2932,14 +3189,15 @@ export default function AuthGate() {
         ? 'ready'
         : 'empty';
     return (
-      <VetVisitsScreen
-        onBack={() => setRoute(subBackRoute)}
-        backPreview={renderBackPreview(subBackRoute)}
-        createPreset={vetVisitCreatePreset}
-        status={vetVisitsScreenStatus}
-        visits={vetVisitsBridge ?? undefined}
-        onOpenDocuments={() => openDocuments('vetVisits')}
-        onCreateVisit={(payload: CreateVetVisitPayload) => {
+      <>
+        <VetVisitsScreen
+          onBack={() => setRoute(subBackRoute)}
+          backPreview={resolveBackPreview(subBackRoute)}
+          createPreset={vetVisitCreatePreset}
+          status={vetVisitsScreenStatus}
+          visits={vetVisitsBridge ?? undefined}
+          onOpenDocuments={() => openDocuments('vetVisits')}
+          onCreateVisit={(payload: CreateVetVisitPayload) => {
           const reasonTitleMap: Record<VetVisitReasonCategory, string> = {
             checkup: 'General Checkup',
             vaccine: 'Vaccination Visit',
@@ -3014,9 +3272,10 @@ export default function AuthGate() {
             currency: payload.currency,
             outcomes,
           });
-
-        }}
-      />
+          }}
+        />
+        {renderRouteToastOverlay()}
+      </>
     );
   }
 
@@ -3046,20 +3305,22 @@ export default function AuthGate() {
   if (route === 'weightTracking' && petProfiles[activePetId]) {
     const activePet = petProfiles[activePetId];
     return (
-      <WeightTrackingScreen
-        onBack={() => { setWeightQuickAdd(false); setRoute(petProfileBackRoute); }}
-        backPreview={renderBackPreview(petProfileBackRoute)}
-        initialShowAdd={weightQuickAdd}
-        onOpenHealthRecords={() => openSubRoute('healthRecords', 'petProfile')}
-        onOpenVetVisits={() => openSubRoute('vetVisits', 'petProfile')}
-        petName={activePet.name}
-        petType={activePet.petType}
-        petBreed={activePet.breed}
-        microchip={activePet.microchip}
-        entries={weightsByPet[activePetId]}
-        onAddEntry={addWeightEntryForActivePet}
-        weightGoal={weightGoalsByPet[activePetId]}
-        onSetWeightGoal={(goal) => {
+      <>
+        <WeightTrackingScreen
+          onBack={() => { setWeightQuickAdd(false); setRoute(weightBackRoute); }}
+          backPreview={resolveBackPreview(weightBackRoute)}
+          initialShowAdd={weightQuickAdd}
+          onOpenHealthRecords={() => openSubRoute('healthRecords', weightBackRoute)}
+          onOpenVetVisits={() => openSubRoute('vetVisits', weightBackRoute)}
+          petName={activePet.name}
+          petType={activePet.petType}
+          petBreed={activePet.breed}
+          microchip={activePet.microchip}
+          entries={weightsByPet[activePetId]}
+          onAddEntry={addWeightEntryForActivePet}
+          onUpdateEntry={updateWeightEntryForActivePet}
+          weightGoal={weightGoalsByPet[activePetId]}
+          onSetWeightGoal={(goal) => {
           setWeightGoalsByPet((prev) => ({ ...prev, [activePetId]: goal }));
           const dueDate = new Date();
           dueDate.setDate(dueDate.getDate() + 30);
@@ -3080,8 +3341,10 @@ export default function AuthGate() {
               sourceType: 'manual',
             }).next,
           );
-        }}
-      />
+          }}
+        />
+        {renderRouteToastOverlay()}
+      </>
     );
   }
 
@@ -3255,6 +3518,7 @@ export default function AuthGate() {
     return (
       <DocumentsScreen
         onBack={() => setRoute(documentsBackRoute)}
+        backPreview={resolveBackPreview(documentsBackRoute)}
         petName={petProfiles[activePetId]?.name ?? ''}
         documents={documentsVaultForActivePet}
         locale={locale}
@@ -3288,6 +3552,7 @@ export default function AuthGate() {
         locale={locale}
         onPrimaryCta={() => openVetVisitWithPreset('healthHub', { source: 'other', reason: 'checkup', actions: [] })}
         onAddRecord={handleAddHealthRecord}
+        onCreateFlowClosed={handleHealthHubCreateFlowClosed}
         onDeleteRecord={handleDeleteHealthRecord}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'healthHub')}
         onOpenHealthRecords={() => openSubRoute('healthRecords', 'healthHub')}
@@ -3317,13 +3582,17 @@ export default function AuthGate() {
         ? 'ready'
         : 'empty';
     return (
-      <HealthRecordsScreen
-        onBack={() => setRoute(subBackRoute ?? 'healthHub')}
-        backPreview={renderBackPreview(subBackRoute ?? 'healthHub')}
-        status={healthRecordsScreenStatus}
-        recordsData={healthRecordsForUI ?? undefined}
-        onAddRecord={() => openHealthHubCreate('diagnosis', 'record')}
-      />
+      <>
+        <HealthRecordsScreen
+          onBack={() => setRoute(subBackRoute ?? 'healthHub')}
+          backPreview={resolveBackPreview(subBackRoute ?? 'healthHub')}
+          status={healthRecordsScreenStatus}
+          recordsData={healthRecordsForUI ?? undefined}
+          onAddRecord={() => openHealthHubCreateWithContext('healthRecords', 'diagnosis', 'record', 'healthRecords')}
+          onOpenVetVisitSource={() => openSubRoute('vetVisits', 'healthRecords')}
+        />
+        {renderRouteToastOverlay()}
+      </>
     );
   }
 
@@ -3661,5 +3930,29 @@ const styles = StyleSheet.create({
   },
   menuToggleRow: {
     justifyContent: 'space-between',
+  },
+  routeToastWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 104,
+    alignItems: 'center',
+    zIndex: 1200,
+  },
+  routeToastCapsule: {
+    minHeight: 36,
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(33,35,32,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  routeToastText: {
+    color: '#f6f4f0',
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '600',
+    letterSpacing: 0.1,
   },
 });

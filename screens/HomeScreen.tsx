@@ -13,7 +13,6 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { SvgUri } from 'react-native-svg';
 import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
 import LottieView from 'lottie-react-native';
 import { hap } from '../lib/haptics';
@@ -23,7 +22,7 @@ import { useLocale } from '../hooks/useLocale';
 import { useAppSettings } from '../hooks/useAppSettings';
 import type { AiInsight } from '../lib/insightsEngine';
 
-const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
+const logoSource = require('../assets/vpaw-figma-logo.png');
 
 export type JourneyEventItem = {
   id: string;
@@ -213,8 +212,6 @@ export default function HomeScreen({
   const { settings } = useAppSettings();
   const isTr = locale === 'tr';
 
-  const enterOpacity = useRef(new Animated.Value(0)).current;
-  const enterTranslateY = useRef(new Animated.Value(14)).current;
   const cardDragY = useRef(new Animated.Value(0)).current;
   const switchFade = useRef(new Animated.Value(1)).current;
   const switchScale = useRef(new Animated.Value(1)).current;
@@ -257,21 +254,6 @@ export default function HomeScreen({
       { scale: weightCardPressScale },
     ],
   };
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(enterOpacity, {
-        toValue: 1,
-        duration: 280,
-        useNativeDriver: true,
-      }),
-      Animated.timing(enterTranslateY, {
-        toValue: 0,
-        duration: 280,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [enterOpacity, enterTranslateY]);
 
   const pets = useMemo<HomePetData[]>(() => {
     if (!petProfiles) return [];
@@ -556,7 +538,7 @@ export default function HomeScreen({
 
   if (!activePet) {
     return (
-      <Animated.View style={[styles.screen, { opacity: enterOpacity, transform: [{ translateY: enterTranslateY }] }]}>
+      <View style={styles.screen}>
         <StatusBar style="dark" />
         <View style={styles.noPetWrap}>
           <Text style={styles.noPetTitle}>{isTr ? 'Hoş geldin!' : 'Welcome!'}</Text>
@@ -565,12 +547,12 @@ export default function HomeScreen({
             <Text style={styles.noPetBtnText}>{isTr ? 'Profil' : 'Profile'}</Text>
           </Pressable>
         </View>
-      </Animated.View>
+      </View>
     );
   }
 
   return (
-    <Animated.View style={[styles.screen, { opacity: enterOpacity, transform: [{ translateY: enterTranslateY }] }]}>
+    <View style={styles.screen}>
       <StatusBar style="dark" />
       <ScrollView
         contentContainerStyle={styles.content}
@@ -579,7 +561,7 @@ export default function HomeScreen({
       >
         <View style={styles.topRow}>
           <View style={styles.brandWrap}>
-            <SvgUri uri={logoUri} width={24} height={24} />
+            <Image source={logoSource} style={styles.brandLogo} />
             <View>
               <Text style={styles.brandTitle}>V-Paw</Text>
               <Text style={styles.brandSub}>BY VIRNELO</Text>
@@ -602,7 +584,7 @@ export default function HomeScreen({
             </Pressable>
             <Pressable onPress={onOpenProfile} style={styles.avatarBtn}>
               {userAvatarUri ? (
-                <Image source={{ uri: userAvatarUri }} style={styles.avatarImage} />
+                <Image source={{ uri: userAvatarUri, cache: 'force-cache' }} fadeDuration={0} style={styles.avatarImage} />
               ) : (
                 <Text style={styles.avatarInitials}>{userInitials}</Text>
               )}
@@ -938,7 +920,7 @@ export default function HomeScreen({
           </Pressable>
         </Pressable>
       </Modal>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -1020,6 +1002,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  brandLogo: {
+    width: 24,
+    height: 24,
+    resizeMode: 'contain',
   },
   brandTitle: {
     fontSize: 22,

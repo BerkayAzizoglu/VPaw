@@ -420,16 +420,6 @@ export default function RemindersScreen({
   const [editFocused, setEditFocused] = useState<'title' | 'date' | null>(null);
   const saveScale = useMemo(() => new Animated.Value(1), []);
 
-  // ── entrance animation ──
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(16)).current;
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, { toValue: 1, duration: 400, useNativeDriver: true }),
-      Animated.timing(slideAnim, { toValue: 0, duration: 360, useNativeDriver: true }),
-    ]).start();
-  }, [fadeAnim, slideAnim]);
-
   const subtypeOptions = useMemo(
     () => (activePetType === 'Cat' ? BASE_SUBTYPES.filter((s) => s !== 'walk') : BASE_SUBTYPES),
     [activePetType],
@@ -547,7 +537,7 @@ export default function RemindersScreen({
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
         {/* ── Header ── */}
-        <Animated.View style={[styles.header, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
+        <View style={styles.header}>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerLabel}>{isTr ? 'PLANLAMA' : 'PLANNING'}</Text>
             <Text style={styles.headerTitle}>{isTr ? 'Hatırlatmalar' : 'Reminders'}</Text>
@@ -569,7 +559,7 @@ export default function RemindersScreen({
               <Text style={styles.addPillText}>{isTr ? 'Ekle' : 'Add'}</Text>
             </Pressable>
           </View>
-        </Animated.View>
+        </View>
 
         {/* ── Stats row (always visible when any data exists) ── */}
         {(totalActive > 0 || completed.length > 0) && (
@@ -591,7 +581,7 @@ export default function RemindersScreen({
           </View>
         )}
 
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
+        <View>
 
           {/* ── Suggestions strip ── */}
           {suggestions.length > 0 && (
@@ -719,7 +709,7 @@ export default function RemindersScreen({
             />
           )}
 
-        </Animated.View>
+        </View>
       </ScrollView>
 
       {/* ── Create Modal ── */}

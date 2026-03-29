@@ -5,6 +5,7 @@ export type WeightPoint = {
   value: number;
   date: string;
   change: string;
+  note?: string;
 };
 
 export type VetVisitReasonCategory =

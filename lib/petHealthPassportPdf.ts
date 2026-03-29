@@ -141,8 +141,8 @@ function getWeightTrendLabel(points: WeightPoint[], locale: 'en' | 'tr') {
   if (typeof first !== 'number' || typeof last !== 'number') return locale === 'tr' ? 'Yetersiz veri' : 'Not enough data';
   const delta = last - first;
   if (Math.abs(delta) < 0.05) return locale === 'tr' ? 'Stabil' : 'Stable';
-  if (delta > 0) return locale === 'tr' ? `Artis +${delta.toFixed(1)} kg` : `Up +${delta.toFixed(1)} kg`;
-  return locale === 'tr' ? `Dususte ${Math.abs(delta).toFixed(1)} kg` : `Down ${Math.abs(delta).toFixed(1)} kg`;
+  if (delta > 0) return locale === 'tr' ? `Artış +${delta.toFixed(1)} kg` : `Up +${delta.toFixed(1)} kg`;
+  return locale === 'tr' ? `Düşüşte ${Math.abs(delta).toFixed(1)} kg` : `Down ${Math.abs(delta).toFixed(1)} kg`;
 }
 
 function getVaccineStatusLabel(
@@ -150,17 +150,17 @@ function getVaccineStatusLabel(
   overdueCount: number,
   locale: 'en' | 'tr',
 ) {
-  if (vaccineCount === 0) return locale === 'tr' ? 'Kayit yok' : 'No records yet';
-  if (overdueCount > 0) return locale === 'tr' ? `${overdueCount} gecikmis` : `${overdueCount} overdue`;
-  return locale === 'tr' ? 'Guncel' : 'Up to date';
+  if (vaccineCount === 0) return locale === 'tr' ? 'Kayıt yok' : 'No records yet';
+  if (overdueCount > 0) return locale === 'tr' ? `${overdueCount} gecikmiş` : `${overdueCount} overdue`;
+  return locale === 'tr' ? 'Güncel' : 'Up to date';
 }
 
 function mapDocumentTypeLabel(type: HealthDocumentItem['type'], locale: 'en' | 'tr') {
   if (type === 'lab') return locale === 'tr' ? 'Lab' : 'Lab';
-  if (type === 'prescription') return locale === 'tr' ? 'Recete' : 'Prescription';
-  if (type === 'image') return locale === 'tr' ? 'Gorsel' : 'Image';
+  if (type === 'prescription') return locale === 'tr' ? 'Reçete' : 'Prescription';
+  if (type === 'image') return locale === 'tr' ? 'Görsel' : 'Image';
   if (type === 'document') return locale === 'tr' ? 'Belge' : 'Document';
-  return locale === 'tr' ? 'Diger' : 'Other';
+  return locale === 'tr' ? 'Diğer' : 'Other';
 }
 
 function getWeightChartSvg(points: Array<{ label: string; value: number; date: string }>) {
@@ -278,7 +278,7 @@ export function buildPetHealthPassportData(
     },
     summaryStats: {
       totalVetVisits: vetVisits.length,
-      lastVisit: healthCardSummary.lastVisit ? `${healthCardSummary.lastVisit.title} - ${healthCardSummary.lastVisit.date}` : (locale === 'tr' ? 'Kayit yok' : 'No records yet'),
+      lastVisit: healthCardSummary.lastVisit ? `${healthCardSummary.lastVisit.title} - ${healthCardSummary.lastVisit.date}` : (locale === 'tr' ? 'Kayıt yok' : 'No records yet'),
       vaccineStatus: getVaccineStatusLabel(vaccines?.historyItems.length ?? 0, overdueCount, locale),
       weightTrend: getWeightTrendLabel(weightEntries, locale),
       alerts: healthCardSummary.alerts,
@@ -289,11 +289,11 @@ export function buildPetHealthPassportData(
         subtitle: `${healthCardSummary.lastVisit.title} - ${healthCardSummary.lastVisit.date}`,
       } : null,
       healthCardSummary.vaccinesSummary.latest ? {
-        title: locale === 'tr' ? 'Son asi kaydi' : 'Latest vaccine',
+        title: locale === 'tr' ? 'Son aşı kaydı' : 'Latest vaccine',
         subtitle: healthCardSummary.vaccinesSummary.latest,
       } : null,
       healthCardSummary.recentEvents[0] ? {
-        title: locale === 'tr' ? 'Son saglik kaydi' : 'Recent health record',
+        title: locale === 'tr' ? 'Son sağlık kaydı' : 'Recent health record',
         subtitle: `${healthCardSummary.recentEvents[0].title} - ${healthCardSummary.recentEvents[0].date}`,
       } : null,
     ]).slice(0, 3),
@@ -303,7 +303,7 @@ export function buildPetHealthPassportData(
       .map((item) => ({
         id: item.id,
         date: formatDate(item.date, locale),
-        title: item.title || (locale === 'tr' ? 'Saglik kaydi' : 'Health record'),
+        title: item.title || (locale === 'tr' ? 'Sağlık kaydı' : 'Health record'),
         description: item.notes || '',
         type: item.type,
       })),
@@ -342,7 +342,7 @@ export function buildPetHealthPassportData(
       type: mapDocumentTypeLabel(document.type, locale),
       sourceLabel: document.sourceType === 'vet_visit'
         ? (locale === 'tr' ? 'Veteriner ziyareti' : 'Vet visit')
-        : (locale === 'tr' ? 'Saglik kaydi' : 'Health record'),
+        : (locale === 'tr' ? 'Sağlık kaydı' : 'Health record'),
       fileUrl: document.fileUrl,
     })),
     generatedAt,
