@@ -1,8 +1,12 @@
 import React from 'react';
 import PawLottie from '../components/PawLottie';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { BlurView } from 'expo-blur';
+import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
 import type { AiInsight } from '../lib/insightsEngine';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type InsightItem = {
   label: string;
@@ -11,6 +15,7 @@ type InsightItem = {
 };
 
 type InsightsScreenProps = {
+  scrollToTopSignal?: number;
   title?: string;
   items: InsightItem[];
   insights?: AiInsight[];
@@ -112,6 +117,7 @@ function iconForItem(label: string): { kind: 'stethoscope' | 'syringe' | 'pill' 
 }
 
 export default function InsightsScreen({
+  scrollToTopSignal = 0,
   title,
   items,
   insights = [],
@@ -122,10 +128,38 @@ export default function InsightsScreen({
   const isTr = locale === 'tr';
   const screenTitle = title ?? (isTr ? 'Akilli Ozet' : 'Smart Overview');
   const headline = insights[0];
+  const mainScrollRef = React.useRef<ScrollView | null>(null);
+  const scrollY = React.useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
+  const topInset = Math.max(insets.top, 14);
+  const topBarHeight = topInset + 56;
+  const topChromeHeight = topInset + 58;
+  const topChromeOpacity = scrollY.interpolate({
+    inputRange: [0, 8, 84],
+    outputRange: [0, 0.55, 1],
+    extrapolate: 'clamp',
+  });
+  const headerTitleScale = scrollY.interpolate({
+    inputRange: [0, 84, 180],
+    outputRange: [1.05, 0.97, 0.9],
+    extrapolate: 'clamp',
+  });
+
+  React.useEffect(() => {
+    mainScrollRef.current?.scrollTo?.({ y: 0, animated: true });
+  }, [scrollToTopSignal]);
 
   return (
     <View style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <StatusBar style="dark" />
+      <Animated.ScrollView
+        ref={mainScrollRef}
+        contentContainerStyle={[styles.content, { paddingTop: topBarHeight + 18 }]}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={24}
+        directionalLockEnabled
+      >
         <View style={styles.heroCard}>
           <Text style={styles.heroEyebrow}>{isTr ? 'INSIGHTS' : 'INSIGHTS'}</Text>
           <Text style={styles.heroTitle}>{screenTitle}</Text>
@@ -209,7 +243,26 @@ export default function InsightsScreen({
             ) : null}
           </View>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
+
+      <View pointerEvents="box-none" style={styles.topChrome}>
+        <Animated.View pointerEvents="none" style={[styles.topChromeSurface, { height: topChromeHeight, opacity: topChromeOpacity }]}>
+          <BlurView intensity={32} tint="light" style={StyleSheet.absoluteFillObject} />
+          <ExpoLinearGradient
+            colors={['rgba(242,246,250,0.95)', 'rgba(232,240,248,0.72)', 'rgba(242,246,250,0.20)', 'rgba(242,246,250,0)']}
+            locations={[0, 0.45, 0.8, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        </Animated.View>
+        <View style={[styles.topBarRow, { height: topBarHeight + 2, paddingTop: topInset + 2 }]}>
+          <Animated.Text numberOfLines={1} style={[styles.topBarTitleText, { transform: [{ scale: headerTitleScale }] }]}>
+            {isTr ? 'Analiz' : 'Insights'}
+          </Animated.Text>
+          <View style={styles.topBarGhost} />
+        </View>
+      </View>
     </View>
   );
 }
@@ -217,6 +270,41 @@ export default function InsightsScreen({
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   content: { paddingTop: 58, paddingHorizontal: 20, paddingBottom: 124, gap: 18 },
+  topChrome: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  topChromeSurface: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(95,118,140,0.20)',
+  },
+  topBarRow: {
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  topBarTitleText: {
+    flex: 1,
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '800',
+    color: '#30332e',
+    letterSpacing: -1,
+  },
+  topBarGhost: {
+    width: 42,
+    height: 42,
+  },
   heroCard: {
     borderRadius: 30,
     paddingHorizontal: 20,

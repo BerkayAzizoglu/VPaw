@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { FileText, HelpCircle, House, LogOut, MessageSquareMore, PawPrint, Settings2, Share2 } from 'lucide-react-native';
+import { BlurView } from 'expo-blur';
+import { FileText, HelpCircle, House, LogOut, MessageSquareMore, PawPrint, Settings2, Users } from 'lucide-react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
 import { useLocale } from '../hooks/useLocale';
@@ -13,7 +14,6 @@ import { hap } from '../lib/haptics';
 
 type ProfileRow = { full_name: string | null; avatar_url: string | null };
 type IconName = 'home' | 'edit' | 'card' | 'bell' | 'settings' | 'share' | 'help' | 'feedback' | 'clock' | 'chevronRight' | 'logout';
-type SectionTone = 'default' | 'management' | 'preferences' | 'support';
 type ProfileScreenProps = {
   onSaveSuccess?: () => void;
   onBackHome?: () => void;
@@ -46,13 +46,6 @@ const palette = {
   danger: '#9f6f6f',
 };
 
-const sectionToneStyles: Record<SectionTone, { iconBg: string; iconBorder: string; iconColor: string }> = {
-  default: { iconBg: '#f3f1ec', iconBorder: 'rgba(94, 86, 73, 0.08)', iconColor: '#6d675f' },
-  management: { iconBg: '#edf5ef', iconBorder: 'rgba(73, 104, 95, 0.08)', iconColor: '#58776b' },
-  preferences: { iconBg: '#f0f1f2', iconBorder: 'rgba(86, 104, 104, 0.08)', iconColor: '#677271' },
-  support: { iconBg: '#eef3f6', iconBorder: 'rgba(88, 108, 122, 0.08)', iconColor: '#647887' },
-};
-
 function getNavRows(isTr: boolean) {
   return {
     app: [
@@ -82,70 +75,12 @@ function AppIcon({ name, size = 16, color = palette.textMuted, strokeWidth = 1.9
 }
 
 function RowGlyph({ itemKey, color }: { itemKey: string; color: string }) {
-  if (itemKey === 'pet_health_card') return <FileText size={16} color={color} strokeWidth={2} />;
-  if (itemKey === 'pets') return <PawPrint size={16} color={color} strokeWidth={2} />;
-  if (itemKey === 'family_sharing') return <Share2 size={16} color={color} strokeWidth={2} />;
-  if (itemKey === 'help') return <HelpCircle size={16} color={color} strokeWidth={2} />;
-  if (itemKey === 'feedback') return <MessageSquareMore size={16} color={color} strokeWidth={2} />;
+  if (itemKey === 'pet_health_card') return <FileText size={18} color={color} strokeWidth={2.05} />;
+  if (itemKey === 'pets') return <PawPrint size={18} color={color} strokeWidth={2.05} />;
+  if (itemKey === 'family_sharing') return <Users size={18} color={color} strokeWidth={2.05} />;
+  if (itemKey === 'help') return <HelpCircle size={18} color={color} strokeWidth={2.05} />;
+  if (itemKey === 'feedback') return <MessageSquareMore size={18} color={color} strokeWidth={2.05} />;
   return <Settings2 size={16} color={color} strokeWidth={2} />;
-}
-
-function Section({
-  items,
-  onItemPress,
-  tone = 'default',
-  isPremiumPlan = false,
-  isTr = false,
-}: {
-  title?: string;
-  items: Array<{ key: string; label: string; icon: IconName; detail?: string; premiumFeature?: boolean }>;
-  onItemPress?: (key: string) => void;
-  tone?: SectionTone;
-  isPremiumPlan?: boolean;
-  isTr?: boolean;
-}) {
-  const toneStyles = sectionToneStyles[tone];
-
-  return (
-    <View style={styles.section}>
-      <View style={styles.listCard}>
-        <View pointerEvents="none" style={styles.cardHighlight} />
-        {items.map((item, idx) => (
-          <View key={item.key}>
-            <Pressable
-              style={({ pressed }) => [styles.listRow, pressed && styles.listRowPressed]}
-              onPress={() => {
-                hap.light();
-                onItemPress?.(item.key);
-              }}
-            >
-              <View style={styles.listRowLeft}>
-                <View style={[styles.iconBox, { backgroundColor: toneStyles.iconBg, borderColor: toneStyles.iconBorder }]}>
-                  <RowGlyph itemKey={item.key} color={toneStyles.iconColor} />
-                </View>
-                <Text style={styles.listRowLabel}>{item.label}</Text>
-              </View>
-              <View style={styles.listRowRight}>
-                {item.premiumFeature ? (
-                  isPremiumPlan ? (
-                    <Text style={[styles.listRowMeta, styles.listRowMetaActive]}>
-                      {item.key === 'pet_health_card' ? 'Share' : 'Set Up'}
-                    </Text>
-                  ) : (
-                    <View style={styles.premiumMiniBadge}>
-                      <View style={styles.premiumMiniDot} />
-                    </View>
-                  )
-                ) : item.detail ? <Text style={styles.listRowMeta}>{item.detail}</Text> : null}
-                <AppIcon name="chevronRight" size={14} color="#c4ccca" strokeWidth={1.85} />
-              </View>
-            </Pressable>
-            {idx !== items.length - 1 ? <View style={styles.listInsetSeparator} /> : null}
-          </View>
-        ))}
-      </View>
-    </View>
-  );
 }
 
 export default function ProfileScreen({
@@ -163,6 +98,7 @@ export default function ProfileScreen({
 }: ProfileScreenProps) {
   const { locale } = useLocale();
   const { user, signOut } = useAuth();
+  const insets = useSafeAreaInsets();
   const isTr = locale === 'tr';
   const navRows = getNavRows(isTr);
   const [profile, setProfile] = useState<ProfileRow | null>(null);
@@ -175,11 +111,21 @@ export default function ProfileScreen({
   const displayName = profile?.full_name?.trim() || user?.user_metadata?.full_name || user?.email?.split('@')[0] || (isTr ? 'Kullanıcı' : 'User');
   const accountEmail = user?.email ?? '-';
   const membershipLabel = isPremiumPlan ? 'VPaw Premium' : (isTr ? 'Ücretsiz Plan' : 'Free Plan');
-  const managementItems = [
+  const menuItems = [
     navRows.management[0],
     navRows.management[2],
     navRows.management[1],
+    ...navRows.app,
   ];
+  const recordCount = orderedPets.reduce((total, pet) => {
+    const petWeightCount = weightsByPet?.[pet.id]?.length ?? 0;
+    return total
+      + (pet.vaccinations?.length ?? 0)
+      + (pet.surgeriesLog?.length ?? 0)
+      + (pet.allergiesLog?.length ?? 0)
+      + (pet.diabetesLog?.length ?? 0)
+      + petWeightCount;
+  }, 0);
 
   useEffect(() => {
     let active = true;
@@ -213,10 +159,21 @@ export default function ProfileScreen({
   }, [isTr, user?.id]);
 
   return (
-    <LinearGradient colors={['#CDEFE7', '#E3F6EF', '#F4ECD6']} locations={[0, 0.55, 1]} start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 1 }} style={styles.screen}>
+    <View style={styles.screen}>
+      <View pointerEvents="none" style={styles.bgPattern}>
+        <Svg width="100%" height="100%" viewBox="0 0 100 180" preserveAspectRatio="none">
+          <Path d="M-10 18C15 8 28 28 48 20C67 12 82 1 110 12" stroke="rgba(255,255,255,0.34)" strokeWidth="0.6" fill="none" />
+          <Path d="M-8 58C14 48 30 67 50 60C70 53 88 42 108 55" stroke="rgba(255,255,255,0.25)" strokeWidth="0.6" fill="none" />
+          <Path d="M-4 104C18 90 33 112 52 101C71 90 86 86 106 95" stroke="rgba(255,255,255,0.24)" strokeWidth="0.6" fill="none" />
+          <Path d="M-6 148C16 138 30 158 49 150C70 142 86 131 108 142" stroke="rgba(255,255,255,0.22)" strokeWidth="0.6" fill="none" />
+          <Path d="M18 -8C28 15 10 38 21 61C31 84 50 97 43 122C36 145 12 156 18 186" stroke="rgba(164,140,98,0.12)" strokeWidth="0.7" fill="none" />
+          <Path d="M76 -10C69 14 86 28 78 50C70 73 56 88 63 112C70 137 92 149 84 184" stroke="rgba(164,140,98,0.1)" strokeWidth="0.7" fill="none" />
+        </Svg>
+      </View>
+      <BlurView pointerEvents="none" intensity={18} tint="light" style={styles.glassVeil} />
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.topBar}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={false} bounces={false}>
+        <View style={[styles.topBar, { paddingTop: Math.max(insets.top - 2, 10) }]}>
           {onBackHome ? (
             <Pressable style={({ pressed }) => [styles.topButton, pressed && styles.topButtonPressed]} onPress={onBackHome}>
               <House size={17} color="#48605a" strokeWidth={1.9} />
@@ -229,89 +186,100 @@ export default function ProfileScreen({
           </Pressable>
         </View>
 
-        <View style={styles.profileHeader}>
-          <Image source={{ uri: profile?.avatar_url || fallbackAvatar }} style={styles.headerAvatar} />
-          <Text style={styles.headerName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>{displayName}</Text>
-          <Text style={styles.headerEmail} numberOfLines={1}>{accountEmail}</Text>
-          <View style={styles.headerMetaRow}>
-            <View style={[styles.planBadge, isPremiumPlan && styles.planBadgePremium]}>
-              <Text style={[styles.planBadgeText, isPremiumPlan && styles.planBadgeTextPremium]}>{membershipLabel}</Text>
+        <View style={styles.profileShell}>
+          <View style={styles.profileHeader}>
+            <Pressable style={({ pressed }) => [styles.avatarRing, pressed && styles.avatarRingPressed]} onPress={onOpenProfileEdit}>
+              <Image source={{ uri: profile?.avatar_url || fallbackAvatar }} style={styles.headerAvatar} />
+            </Pressable>
+            <Text style={styles.headerName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.72}>{displayName}</Text>
+            <Text style={styles.headerEmail} numberOfLines={1}>{accountEmail}</Text>
+            <View style={styles.statsRow}>
+              <View style={styles.statPill}>
+                <Text style={styles.statPillText}>{petsCount} {isTr ? 'Pet' : 'Pets'}</Text>
+              </View>
+              <View style={styles.statPill}>
+                <Text style={styles.statPillText}>{recordCount} {isTr ? 'Kayit' : 'Records'}</Text>
+              </View>
             </View>
-            <Pressable style={({ pressed }) => [styles.inlineAction, pressed && styles.inlineActionPressed]} onPress={onOpenProfileEdit}>
-              <AppIcon name="edit" size={16} color={palette.accent} strokeWidth={2.05} />
+            <Pressable style={({ pressed }) => [styles.membershipButton, pressed && styles.membershipButtonPressed]} onPress={onOpenPremium}>
+              <Text style={styles.membershipButtonText}>
+                {isPremiumPlan ? 'VPaw Premium' : 'VPaw Premium'}
+              </Text>
+            </Pressable>
+            {loading ? <ActivityIndicator size="small" color={palette.premium} style={styles.headerLoader} /> : null}
+          </View>
+
+          <View style={styles.menuCard}>
+            <BlurView pointerEvents="none" intensity={14} tint="light" style={styles.menuCardBlur} />
+            {menuItems.map((item, idx) => (
+              <View key={item.key}>
+                <Pressable
+                  style={({ pressed }) => [styles.menuRow, pressed && styles.menuRowPressed]}
+                  onPress={() => {
+                    hap.light();
+                    if (item.key === 'pet_health_card') onOpenPetPassport?.();
+                    if (item.key === 'pets') onOpenPetProfiles?.();
+                    if (item.key === 'family_sharing') Alert.alert(isTr ? 'Aile paylaşımı yakında' : 'Family sharing coming soon');
+                    if (item.key === 'help') Alert.alert(isTr ? 'Yardım yakında' : 'Help coming soon');
+                    if (item.key === 'feedback') Alert.alert(isTr ? 'Geri bildirim yakında' : 'Feedback coming soon');
+                  }}
+                >
+                  <View style={styles.menuRowLeft}>
+                    <View style={[styles.menuIconWrap, item.key === 'pet_health_card' && styles.menuIconWrapFeatured]}>
+                      <RowGlyph itemKey={item.key} color={item.key === 'pet_health_card' ? '#7b5b21' : '#56493c'} />
+                    </View>
+                    <Text style={styles.menuRowLabel}>{item.label}</Text>
+                  </View>
+                  <AppIcon name="chevronRight" size={14} color="#ccbda9" strokeWidth={1.85} />
+                </Pressable>
+                {idx !== menuItems.length - 1 ? <View style={styles.menuSeparator} /> : null}
+              </View>
+            ))}
+
+            <Pressable style={({ pressed }) => [styles.signOutButton, pressed && styles.signOutButtonPressed]} onPress={signOut}>
+              <View style={styles.signOutIconWrap}>
+                <LogOut size={14} color="#8c6a31" strokeWidth={2.1} />
+              </View>
+              <Text style={styles.signOutText}>{isTr ? 'Çıkış Yap' : 'Log Out'}</Text>
             </Pressable>
           </View>
-          {loading ? <ActivityIndicator size="small" color={palette.accent} style={styles.headerLoader} /> : null}
-        </View>
 
-        {!isPremiumPlan ? (
-          <Pressable style={({ pressed }) => [styles.premiumCard, pressed && styles.premiumCardPressed]} onPress={onOpenPremium}>
-            <View style={styles.premiumCopy}>
-              <Text style={styles.premiumLabel}>VPaw Premium</Text>
-              <Text style={styles.premiumTitle}>
-                {isTr ? 'Sınırsız pet ve sağlık kartı dışa aktarma' : 'Unlimited pets and health card export'}
-              </Text>
-              <Text style={styles.premiumText}>
-                {isTr ? 'Tüm premium avantajları açmak için planı görün.' : 'View the plan to unlock the full premium set.'}
-              </Text>
-            </View>
-            <AppIcon name="chevronRight" size={15} color="#b6a58a" strokeWidth={1.9} />
-          </Pressable>
-        ) : null}
-
-        <Section
-          items={managementItems}
-          tone="management"
-          isPremiumPlan={isPremiumPlan}
-          isTr={isTr}
-          onItemPress={(key) => {
-            if (key === 'pet_health_card') onOpenPetPassport?.();
-            if (key === 'pets') onOpenPetProfiles?.();
-            if (key === 'family_sharing') Alert.alert(isTr ? 'Aile paylaşımı yakında' : 'Family sharing coming soon');
-          }}
-        />
-
-        <Section
-          items={navRows.app}
-          tone="support"
-          isPremiumPlan={isPremiumPlan}
-          isTr={isTr}
-          onItemPress={(key) => {
-            if (key === 'settings') onOpenSettings?.();
-            if (key === 'help') Alert.alert(isTr ? 'Yardım yakında' : 'Help coming soon');
-            if (key === 'feedback') Alert.alert(isTr ? 'Geri bildirim yakında' : 'Feedback coming soon');
-          }}
-        />
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <View style={styles.footer}>
-          <Pressable style={({ pressed }) => [styles.signOutButton, pressed && styles.signOutButtonPressed]} onPress={signOut}>
-            <View style={styles.signOutIconWrap}>
-              <LogOut size={14} color="#ffffff" strokeWidth={2.1} />
-            </View>
-            <Text style={styles.signOutText}>{isTr ? 'Çıkış Yap' : 'Log Out'}</Text>
-          </Pressable>
+          {error ? <Text style={styles.errorText}>{error}</Text> : null}
         </View>
       </ScrollView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: palette.bg,
+    backgroundColor: 'rgb(220, 217, 212)',
+  },
+  bgPattern: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  glassVeil: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.34,
   },
   content: {
-    paddingTop: 56,
-    paddingHorizontal: 20,
-    paddingBottom: 28,
-    gap: 18,
+    paddingTop: 10,
+    paddingHorizontal: 14,
+    paddingBottom: 24,
+    alignItems: 'center',
+  },
+  profileShell: {
+    width: '100%',
+    maxWidth: 364,
+    paddingHorizontal: 6,
+    paddingTop: 12,
+    paddingBottom: 16,
   },
   profileHeader: {
     alignItems: 'center',
-    paddingTop: 2,
+    paddingTop: 4,
+    paddingBottom: 14,
   },
   headerAvatar: {
     width: 96,
@@ -319,36 +287,102 @@ const styles = StyleSheet.create({
     borderRadius: 48,
     backgroundColor: palette.surfaceAlt,
   },
+  avatarRing: {
+    width: 122,
+    height: 122,
+    borderRadius: 61,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.6)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.88)',
+    shadowColor: '#8b7658',
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
+  },
+  avatarRingPressed: {
+    transform: [{ scale: 0.985 }],
+    opacity: 0.92,
+  },
   headerName: {
     marginTop: 10,
     maxWidth: '88%',
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: '700',
-    color: palette.text,
+    fontSize: 26,
+    lineHeight: 31,
+    fontWeight: '800',
+    color: '#2f2a24',
     letterSpacing: -0.9,
     textAlign: 'center',
   },
   headerEmail: {
-    marginTop: 1,
+    marginTop: 3,
     maxWidth: '90%',
     fontSize: 15,
     lineHeight: 20,
-    color: 'rgba(97, 112, 107, 0.78)',
+    color: 'rgba(104, 95, 84, 0.72)',
     fontWeight: '500',
     textAlign: 'center',
   },
-  headerMetaRow: {
-    marginTop: 6,
+  statsRow: {
+    marginTop: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 10,
+  },
+  statPill: {
+    minHeight: 30,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(230, 223, 214, 0.92)',
+    shadowColor: '#b8ab99',
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
+    justifyContent: 'center',
+  },
+  statPillText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#746b5f',
+    fontWeight: '700',
+  },
+  membershipButton: {
+    marginTop: 10,
+    minHeight: 38,
+    paddingHorizontal: 22,
+    borderRadius: 999,
+    backgroundColor: '#c79e58',
+    justifyContent: 'center',
+    shadowColor: '#af8542',
+    shadowOpacity: 0.3,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 4,
+  },
+  membershipButtonPressed: {
+    transform: [{ scale: 0.985 }],
+    opacity: 0.9,
+  },
+  membershipButtonText: {
+    fontSize: 15,
+    lineHeight: 19,
+    color: '#5d3d0d',
+    fontWeight: '800',
+    letterSpacing: -0.2,
   },
   headerLoader: {
     marginTop: 8,
   },
   topBar: {
+    width: '100%',
+    maxWidth: 360,
+    marginBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -377,317 +411,102 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
   },
-  cardHighlight: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-  },
-  inlineAction: {
-    width: 34,
-    height: 34,
-    borderRadius: 14,
-    backgroundColor: 'rgba(245,242,236,0.78)',
+  menuCard: {
+    marginTop: 56,
+    backgroundColor: 'rgba(247, 241, 232, 0.78)',
     borderWidth: 1,
-    borderColor: 'rgba(217, 223, 221, 0.74)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  inlineActionPressed: {
-    backgroundColor: 'rgba(238,234,226,0.86)',
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
-  planBadge: {
-    minHeight: 30,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 9,
-    backgroundColor: palette.surfaceAlt,
-    borderWidth: 1,
-    borderColor: palette.border,
-    justifyContent: 'center',
-  },
-  planBadgePremium: {
-    backgroundColor: '#f2ecdf',
-    borderColor: 'rgba(208, 197, 177, 0.58)',
-  },
-  planBadgeText: {
-    fontSize: 11,
-    lineHeight: 14,
-    color: palette.textMuted,
-    fontWeight: '600',
-    letterSpacing: 0.05,
-  },
-  planBadgeTextPremium: {
-    color: palette.premium,
-  },
-  featuredModule: {
-    gap: 12,
-    marginTop: 4,
-  },
-  section: {
-    gap: 12,
-  },
-  sectionTitle: {
-    fontSize: 13,
-    lineHeight: 17,
-    color: 'rgba(110, 123, 118, 0.72)',
-    fontWeight: '600',
-    marginLeft: 4,
-  },
-  premiumCard: {
-    backgroundColor: palette.premiumSoft,
-    borderWidth: 1,
-    borderColor: 'rgba(233, 228, 218, 0.95)',
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 14,
+    borderColor: 'rgba(255,255,255,0.72)',
+    borderRadius: 28,
     overflow: 'hidden',
-  },
-  premiumCardPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
-  premiumCopy: {
-    flex: 1,
-    gap: 4,
-  },
-  premiumLabel: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: palette.premium,
-    fontWeight: '600',
-  },
-  premiumTitle: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#43331b',
-    fontWeight: '600',
-  },
-  premiumText: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#74654e',
-    fontWeight: '500',
-  },
-  listCard: {
-    backgroundColor: palette.surface,
-    borderWidth: 1,
-    borderColor: 'rgba(235, 239, 236, 0.94)',
-    borderRadius: 24,
-    overflow: 'hidden',
-  },
-  listRow: {
-    minHeight: 62,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 14,
-  },
-  listRowPressed: {
-    backgroundColor: '#f7f3ed',
-    opacity: 0.85,
-    transform: [{ scale: 0.98 }],
-  },
-  listInsetSeparator: {
-    height: 1,
-    marginLeft: 64,
-    marginRight: 16,
-    backgroundColor: 'rgba(43, 56, 50, 0.05)',
-  },
-  listRowLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  listRowRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginLeft: 10,
-  },
-  iconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  listRowLabel: {
-    flex: 1,
-    fontSize: 16,
-    lineHeight: 20,
-    color: palette.text,
-    fontWeight: '600',
-  },
-  listRowMeta: {
-    fontSize: 14,
-    lineHeight: 18,
-    color: 'rgba(105, 117, 113, 0.76)',
-    fontWeight: '500',
-    letterSpacing: -0.1,
-  },
-  listRowMetaActive: {
-    color: '#60756f',
-  },
-  premiumMiniBadge: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f3ede2',
-    borderWidth: 1,
-    borderColor: 'rgba(205, 193, 169, 0.62)',
-  },
-  premiumMiniDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#90724f',
-  },
-  featuredTile: {
-    minHeight: 146,
-    backgroundColor: palette.surface,
-    borderWidth: 1,
-    borderColor: 'rgba(235, 239, 236, 0.94)',
-    borderRadius: 30,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 16,
-    overflow: 'hidden',
-    shadowColor: '#7d928f',
+    paddingTop: 6,
+    paddingBottom: 8,
+    paddingHorizontal: 2,
+    shadowColor: '#b49a74',
     shadowOpacity: 0.08,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 12 },
-    elevation: 3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
-  featuredTilePressed: {
-    backgroundColor: '#faf8f4',
-    opacity: 0.9,
-    transform: [{ scale: 0.985 }],
-    shadowOpacity: 0.09,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 7 },
+  menuCardBlur: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.55,
   },
-  featuredLeading: {
-    paddingTop: 2,
-  },
-  featuredIconTile: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
-  },
-  featuredBody: {
-    flex: 1,
-    gap: 7,
-    paddingTop: 1,
-  },
-  featuredTopRow: {
+  menuRow: {
+    minHeight: 58,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
+    gap: 10,
+  },
+  menuRowPressed: {
+    backgroundColor: 'rgba(250, 243, 232, 0.82)',
+    opacity: 0.85,
+    transform: [{ scale: 0.98 }],
+  },
+  menuSeparator: {
+    height: 1,
+    marginLeft: 62,
+    marginRight: 12,
+    backgroundColor: 'rgba(104, 90, 72, 0.08)',
+  },
+  menuRowLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 12,
   },
-  featuredTitle: {
-    fontSize: 18,
-    lineHeight: 23,
-    color: palette.text,
-    fontWeight: '600',
-    letterSpacing: -0.3,
+  menuIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(219, 209, 194, 0.9)',
+    backgroundColor: 'rgba(255,255,255,0.26)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuIconWrapFeatured: {
+    backgroundColor: 'rgba(223, 194, 123, 0.34)',
+    borderColor: 'rgba(220, 184, 98, 0.46)',
+    shadowColor: '#c79e58',
+    shadowOpacity: 0.22,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  menuRowLabel: {
     flex: 1,
-  },
-  featuredStatusChip: {
-    minHeight: 24,
-    borderRadius: 12,
-    paddingHorizontal: 9,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f3ede2',
-    borderWidth: 1,
-    borderColor: 'rgba(205, 193, 169, 0.62)',
-  },
-  featuredStatusText: {
-    fontSize: 10,
-    lineHeight: 12,
-    color: '#90724f',
+    fontSize: 17,
+    lineHeight: 22,
+    color: '#3f352b',
     fontWeight: '600',
-    letterSpacing: 0.15,
-  },
-  featuredText: {
-    fontSize: 14,
-    lineHeight: 19,
-    color: palette.textMuted,
-    fontWeight: '500',
-    maxWidth: '90%',
-  },
-  featuredMetaChip: {
-    alignSelf: 'flex-start',
-    minHeight: 22,
-    paddingHorizontal: 8,
-    borderRadius: 11,
-    justifyContent: 'center',
-    backgroundColor: 'rgba(244, 246, 245, 0.98)',
-    borderWidth: 1,
-    borderColor: 'rgba(208, 215, 213, 0.82)',
-  },
-  featuredMeta: {
-    fontSize: 10,
-    lineHeight: 12,
-    color: '#7b8b87',
-    fontWeight: '600',
-    letterSpacing: 0.12,
-  },
-  featuredChevronWrap: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: 'rgba(235, 244, 241, 0.92)',
-    borderWidth: 1,
-    borderColor: 'rgba(77, 144, 142, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
   },
   errorText: {
     color: palette.danger,
     fontSize: 13,
     lineHeight: 19,
     textAlign: 'center',
-  },
-  footer: {
-    paddingTop: 10,
-    paddingBottom: 4,
-    alignItems: 'center',
+    marginTop: 12,
   },
   signOutButton: {
-    minHeight: 40,
-    paddingLeft: 7,
-    paddingRight: 14,
+    marginTop: 8,
+    minHeight: 46,
+    paddingLeft: 12,
+    paddingRight: 16,
     borderRadius: 999,
     borderWidth: 1,
-    borderColor: 'rgba(217, 223, 221, 0.9)',
-    backgroundColor: 'rgba(255, 255, 255, 0.76)',
+    borderColor: 'rgba(222, 212, 198, 0.95)',
+    backgroundColor: 'rgba(255, 255, 255, 0.7)',
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 8,
   },
   signOutButtonPressed: {
     opacity: 0.84,
-    backgroundColor: 'rgba(248, 248, 247, 0.9)',
+    backgroundColor: 'rgba(248, 243, 237, 0.92)',
     transform: [{ scale: 0.98 }],
   },
   signOutIconWrap: {
@@ -696,10 +515,10 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(176, 64, 70, 0.96)',
+    backgroundColor: 'rgba(255,255,255,0.62)',
   },
   signOutText: {
-    color: '#6f7d79',
+    color: '#5c5145',
     fontSize: 14,
     lineHeight: 18,
     fontWeight: '600',

@@ -61,6 +61,13 @@ const PW_ROW_HEIGHT = 34;
 const PW_WHEEL_HEIGHT = 136;
 const PW_ROW_PADDING = (PW_WHEEL_HEIGHT - PW_ROW_HEIGHT) / 2;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
+const WEIGHT_CARD_BG = '#c99272';
+const WEIGHT_HEADER_OVERLAY: [string, string, string, string] = [
+  'rgba(201,146,114,0.34)',
+  'rgba(201,146,114,0.22)',
+  'rgba(201,146,114,0.10)',
+  'rgba(201,146,114,0)',
+];
 
 // ─── Unit conversion ─────────────────────────────────────────────────────────
 
@@ -331,6 +338,7 @@ export default function WeightTrackingScreen({
   microchip: _microchip,
   entries,
   onAddEntry,
+  onUpdateEntry,
   weightGoal,
   onSetWeightGoal,
   totalExpenses: _totalExpenses,
@@ -840,10 +848,17 @@ export default function WeightTrackingScreen({
       return;
     }
 
-    onAddEntry(toKgFromUnit(parsed, weightUnit), {
-      date: parsedDate.toISOString(),
-      note: entryNote.trim() || undefined,
-    });
+    if (entryFormMode === 'edit' && editingEntryIndex !== null) {
+      onUpdateEntry?.(editingEntryIndex, toKgFromUnit(parsed, weightUnit), {
+        date: parsedDate.toISOString(),
+        note: entryNote.trim() || undefined,
+      });
+    } else {
+      onAddEntry(toKgFromUnit(parsed, weightUnit), {
+        date: parsedDate.toISOString(),
+        note: entryNote.trim() || undefined,
+      });
+    }
     setNewWeight('');
     setEntryDate(toYmd(new Date()));
     setWeightWhole('0');
@@ -886,12 +901,13 @@ export default function WeightTrackingScreen({
             },
           ]}
           showsVerticalScrollIndicator={false}
-          scrollEnabled={!previewMode && !isScrubbing && !edgeSwipeResponder.isSwiping}
+          scrollEnabled={!previewMode && !isScrubbing}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
             { useNativeDriver: true },
           )}
-          scrollEventThrottle={16}
+          scrollEventThrottle={24}
+          directionalLockEnabled
         >
           {/* ── Current weight card ─────────────────────────────────────────── */}
           <View style={styles.currentCard}>
@@ -906,7 +922,7 @@ export default function WeightTrackingScreen({
                   <Text style={styles.currentUnit}>{weightUnit}</Text>
                 </Text>
                 <View style={styles.changePill}>
-                  <Icon kind="spark" size={10} color="#47664a" />
+                  <Icon kind="spark" size={10} color="#8f5d42" />
                   <Text style={styles.changePillText}>{comparisonText}</Text>
                 </View>
               </View>
@@ -941,7 +957,7 @@ export default function WeightTrackingScreen({
                     <Text style={styles.goalDiffLabel}>{isTr ? 'Fark' : 'Gap'}</Text>
                     <Text style={[
                       styles.goalDiffValue,
-                      { color: currentWeightForGoal <= weightGoal ? '#47664a' : '#c96a6a' },
+                      { color: currentWeightForGoal <= weightGoal ? '#8f5d42' : '#c96a6a' },
                     ]}>
                       {currentWeightForGoal <= weightGoal ? '' : '+'}{toDisplayVal(currentWeightForGoal - weightGoal, weightUnit).toFixed(1)} {weightUnit}
                     </Text>
@@ -963,7 +979,7 @@ export default function WeightTrackingScreen({
                 }}
               >
                 <View style={styles.setGoalLeft}>
-                  <Icon kind="up" size={16} color="#47664a" />
+                  <Icon kind="up" size={16} color="#c99272" />
                   <Text style={styles.setGoalTitle}>{isTr ? 'Hedef Kilo Belirle' : 'Set Weight Goal'}</Text>
                 </View>
                 <Text style={styles.setGoalArrow}>→</Text>
@@ -1003,8 +1019,8 @@ export default function WeightTrackingScreen({
                 <Svg width={chartWidth} height={chartHeight}>
                   <Defs>
                     <LinearGradient id="areaFade" x1="0" y1="0" x2="0" y2="1">
-                      <Stop offset="0" stopColor="#47664a" stopOpacity="0.22" />
-                      <Stop offset="1" stopColor="#47664a" stopOpacity="0" />
+                      <Stop offset="0" stopColor="#c99272" stopOpacity="0.22" />
+                      <Stop offset="1" stopColor="#c99272" stopOpacity="0" />
                     </LinearGradient>
                   </Defs>
 
@@ -1013,7 +1029,7 @@ export default function WeightTrackingScreen({
                     y={refBandY}
                     width={chartWidth - CHART_INSET * 2}
                     height={Math.max(2, refBandH)}
-                    fill="rgba(71,102,74,0.10)"
+                    fill="rgba(201,146,114,0.10)"
                     rx={6}
                   />
 
@@ -1035,7 +1051,7 @@ export default function WeightTrackingScreen({
                       <AnimatedPath
                         d={chart.linePath}
                         fill="none"
-                        stroke="#47664a"
+                        stroke="#c99272"
                         strokeWidth={4}
                         strokeLinecap="round"
                         strokeLinejoin="round"
@@ -1048,13 +1064,13 @@ export default function WeightTrackingScreen({
                         y1={displayedY}
                         x2={displayedX}
                         y2={chartHeight - CHART_INSET}
-                        stroke="rgba(71,102,74,0.24)"
+                        stroke="rgba(201,146,114,0.24)"
                         strokeWidth={1}
                         strokeDasharray="4 4"
                       />
 
-                      <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 8.5 : 7.2} fill="#ffffff" stroke="#47664a" strokeWidth={2} />
-                      <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 3.6 : 3} fill="#47664a" />
+                      <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 8.5 : 7.2} fill="#ffffff" stroke="#c99272" strokeWidth={2} />
+                      <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 3.6 : 3} fill="#c99272" />
                     </>
                   ) : null}
                 </Svg>
@@ -1146,10 +1162,13 @@ export default function WeightTrackingScreen({
           <Text style={styles.sectionTitle}>{copy.history}</Text>
           {hasEntries ? (
             <View style={styles.historyCard}>
-              {safeEntries.slice().reverse().map((item, idx) => (
-                <View
+              {safeEntries.slice().reverse().map((item, idx) => {
+                const sortedIndex = safeEntries.length - 1 - idx;
+                return (
+                <Pressable
                   key={`${item.date}-${idx}`}
                   style={[styles.historyRow, idx !== safeEntries.length - 1 && styles.historyDivider]}
+                  onPress={() => openAddSheet('edit', item.value, new Date(item.date), item.note ?? '', sortedIndex)}
                 >
                   <View style={styles.historyLeft}>
                     <View style={styles.historyDateIconBox}>
@@ -1163,8 +1182,9 @@ export default function WeightTrackingScreen({
                       <Text style={styles.historyDeltaText}>{item.change}</Text>
                     </View>
                   </View>
-                </View>
-              ))}
+                </Pressable>
+                );
+              })}
             </View>
           ) : (
             <View style={styles.historyEmptyCard}>
@@ -1180,7 +1200,9 @@ export default function WeightTrackingScreen({
           title={isTr ? 'KILO PROFILI' : 'WEIGHT PROFILE'}
           topInset={topInset}
           scrollY={scrollY}
-          titleColor="#2b3432"
+          titleColor={WEIGHT_CARD_BG}
+          overlayColors={WEIGHT_HEADER_OVERLAY}
+          borderColor="rgba(151,98,69,0.16)"
           leftSlot={(
             <Pressable style={styles.backCircle} onPress={onBack}>
               <Icon kind="back" size={22} color="#5d605a" />
@@ -1422,13 +1444,13 @@ const styles = StyleSheet.create({
   expenseBadgeValue: {
     fontSize: 15,
     lineHeight: 20,
-    color: '#47664a',
+    color: '#c99272',
     fontWeight: '800',
   },
   goalPill: {
     height: 32,
     borderRadius: 999,
-    backgroundColor: '#47664a',
+    backgroundColor: WEIGHT_CARD_BG,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -1444,12 +1466,14 @@ const styles = StyleSheet.create({
   // Current weight card
   currentCard: {
     borderRadius: 24,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255,249,245,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(201,146,114,0.16)',
     paddingHorizontal: 22,
     paddingTop: 20,
     paddingBottom: 18,
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
+    shadowColor: '#8f5d42',
+    shadowOpacity: 0.10,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
@@ -1459,7 +1483,7 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     fontWeight: '800',
     letterSpacing: 1.2,
-    color: '#5d605a',
+    color: WEIGHT_CARD_BG,
     textTransform: 'uppercase',
   },
   currentValueRow: {
@@ -1502,9 +1526,9 @@ const styles = StyleSheet.create({
   changePill: {
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#eef6ef',
+    backgroundColor: '#faede2',
     borderWidth: 1,
-    borderColor: '#d4e8d6',
+    borderColor: '#e8c4a0',
     paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1514,14 +1538,14 @@ const styles = StyleSheet.create({
   changePillText: {
     fontSize: 12,
     lineHeight: 14,
-    color: '#47664a',
+    color: '#8f5d42',
     fontWeight: '700',
   },
   currentSub: {
     marginTop: 6,
     fontSize: 15,
     lineHeight: 20,
-    color: '#5d605a',
+    color: '#6a5a50',
     fontWeight: '500',
   },
 
@@ -1545,22 +1569,24 @@ const styles = StyleSheet.create({
     color: '#30332e',
   },
   goalBarTrack: {
-    height: 5,
+    height: 8,
     borderRadius: 999,
-    backgroundColor: '#eeeee8',
+    backgroundColor: 'rgba(143,93,66,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(201,146,114,0.16)',
     overflow: 'hidden',
   },
   goalBarFill: {
-    height: 5,
+    height: 8,
     borderRadius: 999,
-    backgroundColor: '#47664a',
+    backgroundColor: WEIGHT_CARD_BG,
   },
 
   referenceLine: {
     marginTop: 10,
     fontSize: 13,
     lineHeight: 18,
-    color: '#5d605a',
+    color: '#6f5a4d',
     fontWeight: '700',
   },
   microchipLine: {
@@ -1574,7 +1600,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     lineHeight: 17,
-    color: '#5d605a',
+    color: '#7b685e',
     fontWeight: '400',
   },
 
@@ -1624,7 +1650,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   xLabelActive: {
-    color: '#47664a',
+    color: '#c99272',
   },
   chartEmptyState: {
     marginTop: 14,
@@ -1947,9 +1973,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#f6f4f0',
   },
   fieldInputFocused: {
-    borderColor: '#47664a',
+    borderColor: '#c99272',
     backgroundColor: '#fff',
-    shadowColor: '#47664a',
+    shadowColor: '#c99272',
     shadowOpacity: 0.15,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
@@ -1989,7 +2015,7 @@ const styles = StyleSheet.create({
   sheetSaveBtn: {
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#47664a',
+    backgroundColor: '#c99272',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
@@ -2023,7 +2049,7 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
   rowActive: {
-    backgroundColor: 'rgba(71,102,74,0.08)',
+    backgroundColor: 'rgba(201,146,114,0.10)',
   },
   rowText: {
     fontSize: 16,
@@ -2055,9 +2081,9 @@ const styles = StyleSheet.create({
   setGoalCard: {
     marginTop: 14,
     borderRadius: 14,
-    backgroundColor: '#eef6ef',
+    backgroundColor: '#f7ede5',
     borderWidth: 1,
-    borderColor: 'rgba(71,102,74,0.15)',
+    borderColor: 'rgba(201,146,114,0.22)',
     paddingHorizontal: 14,
     paddingVertical: 12,
     flexDirection: 'row',
@@ -2072,12 +2098,12 @@ const styles = StyleSheet.create({
   setGoalTitle: {
     fontSize: 14,
     lineHeight: 18,
-    color: '#47664a',
+    color: '#8f5d42',
     fontWeight: '700',
   },
   setGoalArrow: {
     fontSize: 16,
-    color: '#47664a',
+    color: '#8f5d42',
     fontWeight: '700',
   },
 
@@ -2085,9 +2111,9 @@ const styles = StyleSheet.create({
   goalSection: {
     marginTop: 14,
     borderRadius: 14,
-    backgroundColor: '#eef6ef',
+    backgroundColor: '#f7e8dc',
     borderWidth: 1,
-    borderColor: 'rgba(71,102,74,0.15)',
+    borderColor: 'rgba(201,146,114,0.30)',
     paddingHorizontal: 14,
     paddingTop: 12,
     paddingBottom: 10,
@@ -2108,7 +2134,7 @@ const styles = StyleSheet.create({
   goalSectionLabel: {
     fontSize: 10,
     lineHeight: 14,
-    color: '#47664a',
+    color: '#8f5d42',
     fontWeight: '800',
     letterSpacing: 0.6,
   },
@@ -2121,12 +2147,12 @@ const styles = StyleSheet.create({
   goalSectionUnit: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#5d605a',
+    color: '#6f5a4d',
   },
   goalDiffLabel: {
     fontSize: 11,
     lineHeight: 14,
-    color: '#5d605a',
+    color: '#6f5a4d',
     fontWeight: '600',
   },
   goalDiffValue: {
@@ -2137,7 +2163,7 @@ const styles = StyleSheet.create({
   goalEditHint: {
     fontSize: 11,
     lineHeight: 14,
-    color: '#47664a',
+    color: '#8f5d42',
     fontWeight: '600',
     textAlign: 'right',
   },

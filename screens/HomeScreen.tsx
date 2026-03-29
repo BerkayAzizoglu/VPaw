@@ -13,14 +13,16 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgUri } from 'react-native-svg';
-import LottieView from 'lottie-react-native';
+import { Bell } from 'lucide-react-native';
 import { hap } from '../lib/haptics';
 import type { PetProfile } from '../lib/petProfileTypes';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
 import { useAppSettings } from '../hooks/useAppSettings';
 import type { AiInsight } from '../lib/insightsEngine';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
 
@@ -69,6 +71,7 @@ type HomePetData = {
 };
 
 type HomeScreenProps = {
+  scrollToTopSignal?: number;
   onOpenProfile?: () => void;
   onOpenReminders?: () => void;
   onOpenNotifications?: () => void;
@@ -76,6 +79,7 @@ type HomeScreenProps = {
   reminderBadgeCount?: number;
   userAvatarUri?: string;
   userInitials?: string;
+  userName?: string;
   onOpenPetProfile?: (petId?: string) => void;
   onOpenWeightTracking?: () => void;
   onOpenVaccinations?: (petId?: string) => void;
@@ -147,6 +151,24 @@ function formatDeltaByUnit(deltaKg: number, unit: 'kg' | 'lb') {
   const label = unit === 'lb' ? 'lb' : 'kg';
   return `${converted >= 0 ? '+' : ''}${converted.toFixed(1)} ${label}`;
 }
+
+function toDisplayName(value: string | undefined, locale: 'en' | 'tr') {
+  const raw = value?.trim() ?? '';
+  if (!raw) return locale === 'tr' ? 'İsim Soyisim' : 'User Name';
+  const cleaned = raw
+    .replace(/@.*$/, '')
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return locale === 'tr' ? 'İsim Soyisim' : 'User Name';
+  return cleaned.replace(/\b\p{L}/gu, (char) => char.toLocaleUpperCase(locale === 'tr' ? 'tr-TR' : 'en-US'));
+}
+
+function toFirstName(value: string | undefined, locale: 'en' | 'tr') {
+  const display = toDisplayName(value, locale);
+  return display.split(/\s+/).filter(Boolean)[0] ?? display;
+}
+
 const MONTHS_SHORT_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTHS_SHORT_TR = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
 function fmtWeightDate(raw: string | undefined, isTr: boolean): string {
@@ -175,6 +197,7 @@ function buildSmoothPath(points: Array<{ x: number; y: number }>) {
 }
 
 export default function HomeScreen({
+  scrollToTopSignal = 0,
   onOpenProfile,
   onOpenReminders,
   onOpenNotifications,
@@ -182,6 +205,7 @@ export default function HomeScreen({
   reminderBadgeCount = 0,
   userAvatarUri,
   userInitials = 'VP',
+  userName,
   onOpenPetProfile,
   onOpenWeightTracking,
   onOpenVaccinations,
@@ -210,7 +234,37 @@ export default function HomeScreen({
 }: HomeScreenProps) {
   const { locale } = useLocale();
   const { settings } = useAppSettings();
+  const insets = useSafeAreaInsets();
   const isTr = locale === 'tr';
+  const homeGreeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (isTr) {
+      if (hour >= 5 && hour < 12) return 'Günaydın!';
+      if (hour >= 12 && hour < 18) return 'İyi günler!';
+      if (hour >= 18 && hour < 22) return 'İyi akşamlar!';
+      return 'İyi geceler!';
+    }
+    if (hour >= 5 && hour < 12) return 'Good morning!';
+    if (hour >= 12 && hour < 18) return 'Good afternoon!';
+    if (hour >= 18 && hour < 22) return 'Good evening!';
+    return 'Good night!';
+  }, [isTr]);
+  const homeDisplayName = useMemo(() => {
+    return toFirstName(userName, isTr ? 'tr' : 'en');
+  }, [isTr, userName]);
+  const headerSmallLine = homeGreeting;
+  const headerTitle = homeDisplayName;
+
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const mainScrollRef = useRef<ScrollView | null>(null);
+  const topInset = Math.max(insets.top, 14);
+  const topBarHeight = topInset + 56;
+  const topChromeHeight = topInset + 58;
+  const topChromeOpacity = scrollY.interpolate({
+    inputRange: [0, 8, 82],
+    outputRange: [0, 0.55, 1],
+    extrapolate: 'clamp',
+  });
 
   const cardDragY = useRef(new Animated.Value(0)).current;
   const switchFade = useRef(new Animated.Value(1)).current;
@@ -221,6 +275,10 @@ export default function HomeScreen({
   const [quickWeightVisible, setQuickWeightVisible] = useState(false);
   const [quickWeightValue, setQuickWeightValue] = useState('');
   const [quickWeightSaved, setQuickWeightSaved] = useState(false);
+
+  useEffect(() => {
+    mainScrollRef.current?.scrollTo?.({ y: 0, animated: true });
+  }, [scrollToTopSignal]);
 
   // ── Native Animated: weight card breathing + urgent pulse + press ──
   const breathAnim = useRef(new Animated.Value(0)).current;
@@ -252,6 +310,12 @@ export default function HomeScreen({
     transform: [
       { scale: breathAnim.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.004] }) },
       { scale: weightCardPressScale },
+    ],
+  };
+  const headerLogoAnimStyle = {
+    transform: [
+      { translateY: breathAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -1.5] }) },
+      { scale: breathAnim.interpolate({ inputRange: [0, 1], outputRange: [1, 1.035] }) },
     ],
   };
 
@@ -439,6 +503,7 @@ export default function HomeScreen({
   }, [quickWeightSaved]);
 
   const openQuickWeight = () => {
+    hap.medium();
     const parsed = Number(activePet.weight.replace(',', '.').split(' ')[0]);
     setQuickWeightValue(Number.isFinite(parsed) && parsed > 0 ? parsed.toFixed(1) : '');
     setQuickWeightVisible(true);
@@ -554,46 +619,14 @@ export default function HomeScreen({
   return (
     <View style={styles.screen}>
       <StatusBar style="dark" />
-      <ScrollView
-        contentContainerStyle={styles.content}
+      <Animated.ScrollView
+        ref={mainScrollRef}
+        contentContainerStyle={[styles.content, { paddingTop: topBarHeight + 14 }]}
         showsVerticalScrollIndicator={false}
         scrollEnabled={!isGestureActive}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={16}
       >
-        <View style={styles.topRow}>
-          <View style={styles.brandWrap}>
-            <View style={styles.brandLogoWrap}>
-              <SvgUri uri={logoUri} width={28} height={28} />
-            </View>
-            <View>
-              <Text style={styles.brandTitle}>VPaw</Text>
-              <Text style={styles.brandSub}>BY VIRNELO</Text>
-            </View>
-          </View>
-
-          <View style={styles.topActions}>
-            <Pressable onPress={onOpenNotifications ?? onOpenReminders} style={styles.notifyBtn}>
-              <LottieView
-                source={require('../assets/animations/empty-notifications.json')}
-                autoPlay
-                loop
-                style={styles.notifyLottie}
-              />
-              {reminderBadgeCount > 0 ? (
-                <View style={styles.notifyBadge}>
-                  <Text style={styles.notifyBadgeText}>{Math.min(reminderBadgeCount, 9)}</Text>
-                </View>
-              ) : null}
-            </Pressable>
-            <Pressable onPress={onOpenProfile} style={styles.avatarBtn}>
-              {userAvatarUri ? (
-                <Image source={{ uri: userAvatarUri, cache: 'force-cache' }} fadeDuration={0} style={styles.avatarImage} />
-              ) : (
-                <Text style={styles.avatarInitials}>{userInitials}</Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-
         <View style={styles.heroStackWrap}>
           <View style={styles.backCardWrap}>
             {backPet ? (
@@ -891,7 +924,44 @@ export default function HomeScreen({
           )}
         </View>
 
-      </ScrollView>
+      </Animated.ScrollView>
+
+      <View pointerEvents="box-none" style={styles.topChrome}>
+        <Animated.View pointerEvents="none" style={[styles.topChromeSurface, { height: topChromeHeight, opacity: topChromeOpacity }]}>
+          <BlurView intensity={32} tint="light" style={StyleSheet.absoluteFillObject} />
+          <View style={styles.topChromeTint} />
+        </Animated.View>
+
+        <View style={[styles.topRow, styles.topRowFixed, { height: topBarHeight + 2, paddingTop: topInset + 2 }]}>
+          <View style={styles.brandWrap}>
+            <Animated.View style={[styles.brandLogoWrap, headerLogoAnimStyle]}>
+              <SvgUri uri={logoUri} width={28} height={28} />
+            </Animated.View>
+            <View style={styles.greetingWrap}>
+              <Text style={styles.greetingSmall} numberOfLines={1}>{headerSmallLine}</Text>
+              <Text style={styles.greetingName} numberOfLines={1}>{headerTitle}</Text>
+            </View>
+          </View>
+
+          <View style={styles.topActions}>
+            <Pressable onPress={onOpenNotifications ?? onOpenReminders} style={styles.notifyBtn}>
+              <Bell size={18} color="#40443d" strokeWidth={2.1} />
+              {reminderBadgeCount > 0 ? (
+                <View style={styles.notifyBadge}>
+                  <Text style={styles.notifyBadgeText}>{Math.min(reminderBadgeCount, 9)}</Text>
+                </View>
+              ) : null}
+            </Pressable>
+            <Pressable onPress={onOpenProfile} style={styles.avatarBtn}>
+              {userAvatarUri ? (
+                <Image source={{ uri: userAvatarUri, cache: 'force-cache' }} fadeDuration={0} style={styles.avatarImage} />
+              ) : (
+                <Text style={styles.avatarInitials}>{userInitials}</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </View>
 
       <Modal
         visible={quickWeightVisible}
@@ -995,56 +1065,93 @@ const styles = StyleSheet.create({
     paddingBottom: 132,
     gap: 16,
   },
+  topChrome: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+  },
+  topChromeSurface: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(130,130,120,0.16)',
+  },
+  topChromeTint: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(246,244,240,0.62)',
+  },
   topRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  topRowFixed: {
+    paddingHorizontal: 22,
+  },
   brandWrap: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+    alignItems: 'flex-start',
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
   },
   brandLogoWrap: {
-    width: 30,
-    height: 30,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 7,
   },
-  brandTitle: {
-    fontSize: 22,
-    lineHeight: 24,
-    color: '#2d2d2d',
-    fontWeight: '700',
+  greetingWrap: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+    paddingRight: 8,
   },
-  brandSub: {
-    fontSize: 10,
-    lineHeight: 12,
-    color: '#8d8d8d',
-    letterSpacing: 1.7,
+  greetingSmall: {
+    fontSize: 12,
+    lineHeight: 15,
+    color: '#7f7f78',
     fontWeight: '600',
+    letterSpacing: -0.1,
+  },
+  greetingName: {
+    fontSize: 25,
+    lineHeight: 28,
+    color: '#1f2f2a',
+    fontWeight: '700',
+    letterSpacing: -0.35,
   },
   topActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
+    paddingTop: 6,
   },
   notifyBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'transparent',
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.72)',
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  notifyLottie: {
-    width: 35,
-    height: 35,
+    borderWidth: 1,
+    borderColor: 'rgba(70,74,66,0.08)',
+    shadowColor: '#685d51',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 2,
   },
   notifyBadge: {
     position: 'absolute',
-    top: -2,
-    right: -2,
+    top: -3,
+    right: -3,
     minWidth: 16,
     height: 16,
     borderRadius: 8,
@@ -1062,9 +1169,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   avatarBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',

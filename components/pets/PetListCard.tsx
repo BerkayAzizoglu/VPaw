@@ -85,7 +85,7 @@ export default function PetListCard({
                 pressed && styles.chevronButtonPressed,
               ]}
             >
-              <ChevronRight size={22} color="#2C8E84" strokeWidth={2.5} />
+              <ChevronRight size={22} color="#7f634f" strokeWidth={2.5} />
             </Pressable>
           </View>
         </BlurView>
@@ -103,16 +103,16 @@ const styles = StyleSheet.create({
   petCard: {
     position: 'relative',
     overflow: 'hidden',
-    backgroundColor: 'rgba(248,251,250,0.7)',
-    borderRadius: 28,
+    backgroundColor: 'rgba(255,250,244,0.74)',
+    borderRadius: 34,
     paddingHorizontal: 18,
     paddingVertical: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.48)',
-    shadowColor: '#173832',
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 6 },
+    borderColor: 'rgba(255,255,255,0.68)',
+    shadowColor: '#7e5f47',
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 4,
   },
   petCardHighlight: {
@@ -121,7 +121,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 16,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
   },
   petCardCompact: {
     borderRadius: 24,
@@ -135,8 +135,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   petCardActive: {
-    borderColor: 'rgba(255,255,255,0.48)',
-    shadowOpacity: 0.08,
+    borderColor: 'rgba(227,190,154,0.38)',
+    backgroundColor: 'rgba(255,248,241,0.82)',
+    shadowOpacity: 0.1,
   },
   petCardPressed: {
     transform: [{ scale: 0.985 }],
@@ -146,10 +147,10 @@ const styles = StyleSheet.create({
   petImage: {
     width: 88,
     height: 88,
-    borderRadius: 44,
+    borderRadius: 28,
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.72)',
-    shadowColor: '#173B37',
+    shadowColor: '#7e5f47',
     shadowOpacity: 0.12,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -157,18 +158,18 @@ const styles = StyleSheet.create({
   petImageCompact: {
     width: 74,
     height: 74,
-    borderRadius: 37,
+    borderRadius: 24,
   },
   initialAvatar: {
     width: 88,
     height: 88,
-    borderRadius: 44,
-    backgroundColor: '#7090B8',
+    borderRadius: 28,
+    backgroundColor: '#b69277',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.72)',
-    shadowColor: '#173B37',
+    shadowColor: '#7e5f47',
     shadowOpacity: 0.12,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -176,7 +177,7 @@ const styles = StyleSheet.create({
   initialAvatarCompact: {
     width: 74,
     height: 74,
-    borderRadius: 37,
+    borderRadius: 24,
   },
   initialText: {
     fontSize: 22,
@@ -199,7 +200,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 26,
     fontWeight: '700',
-    color: '#163936',
+    color: '#2a1710',
     letterSpacing: -0.5,
     marginBottom: 2,
   },
@@ -213,7 +214,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 19,
     fontWeight: '500',
-    color: 'rgba(78,96,93,0.9)',
+    color: 'rgba(86,67,55,0.88)',
     marginBottom: 4,
   },
   petMetaCompact: {
@@ -231,7 +232,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 20,
     fontWeight: '700',
-    color: '#18324E',
+    color: '#5d463a',
   },
   petWeightCompact: {
     fontSize: 15,
@@ -242,7 +243,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
     fontWeight: '600',
-    color: '#31897F',
+    color: '#9a7a62',
   },
   petUpdatedCompact: {
     fontSize: 13,
@@ -252,19 +253,19 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.72)',
+    backgroundColor: 'rgba(255,248,239,0.78)',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.74)',
-    shadowColor: '#8ca5a0',
-    shadowOpacity: 0.03,
-    shadowRadius: 4,
+    borderColor: 'rgba(171,143,116,0.16)',
+    shadowColor: '#7e5f47',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 1,
   },
   chevronButtonPressed: {
     transform: [{ scale: 0.95 }],
-    backgroundColor: 'rgba(232,244,240,0.95)',
+    backgroundColor: 'rgba(247,238,228,0.95)',
   },
 });

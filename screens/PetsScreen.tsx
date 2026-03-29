@@ -118,10 +118,10 @@ export default function PetsScreen(props: PetsScreenProps) {
   }, [onAddPet]);
 
   const title = isTr ? 'Petler' : 'Your Pets';
-  const introTitle = isTr ? 'Evcil dostlarin tek yerde' : 'Your household, in one place';
+  const introTitle = isTr ? 'Pet aileniz' : 'Your pet family';
   const introBody = isTr
-    ? 'Tum profilleri ayni premium akis icinde yonet, son kayitlari hizla gor.'
-    : 'Manage every profile in one calm premium flow and glance at the latest updates.';
+    ? 'Tum profilleri ayni sakin akista gor, son kayitlari tek bakista takip et.'
+    : 'Keep every profile in one calm flow and glance at the latest updates.';
   const addTitle = isTr ? 'Yeni pet ekle' : 'Add another pet';
   const addBody = isTr
     ? 'Bir sonraki profili ayni aile duzenine ekle.'
@@ -130,16 +130,37 @@ export default function PetsScreen(props: PetsScreenProps) {
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={['#35AE9D', '#8ED5CA', '#F6F4F0', '#F6F4F0']}
-        locations={[0, 0.22, 0.48, 1]}
-        start={{ x: 0.2, y: 0 }}
-        end={{ x: 0.7, y: 1 }}
+        colors={['#f8f4ed', '#f1e3d3', '#deccb9']}
+        locations={[0, 0.48, 1]}
+        start={{ x: 0.06, y: 0.02 }}
+        end={{ x: 0.96, y: 0.98 }}
         style={StyleSheet.absoluteFillObject}
+      />
+      <LinearGradient
+        colors={['rgba(255,255,255,0)', 'rgba(255,252,247,0.94)', 'rgba(255,255,255,0)']}
+        locations={[0, 0.5, 1]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.ribbonPrimary}
+      />
+      <LinearGradient
+        colors={['rgba(255,255,255,0)', 'rgba(255,248,236,0.72)', 'rgba(255,255,255,0)']}
+        locations={[0, 0.5, 1]}
+        start={{ x: 0, y: 0.1 }}
+        end={{ x: 1, y: 0.9 }}
+        style={styles.ribbonSecondary}
+      />
+      <LinearGradient
+        colors={['rgba(255,255,255,0)', 'rgba(255,243,224,0.68)', 'rgba(255,255,255,0)']}
+        locations={[0, 0.45, 1]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={styles.ribbonAccent}
       />
 
       <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
         <View style={styles.screen} {...swipePanResponder.panHandlers}>
-          <AppleTopBar title={title} onBack={onBack} blurIntensity={20} backgroundColor="rgba(246, 244, 240, 0.58)" />
+          <AppleTopBar title={title} onBack={onBack} blurIntensity={20} backgroundColor="rgba(248, 244, 237, 0.62)" />
 
           <ScrollView
             contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 76, paddingBottom: 48 + insets.bottom }]}
@@ -149,26 +170,29 @@ export default function PetsScreen(props: PetsScreenProps) {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-                tintColor="#2d6d65"
-                colors={['#2d6d65']}
+                tintColor="#8b6a53"
+                colors={['#8b6a53']}
                 progressViewOffset={24}
               />
             }
           >
-            <View style={styles.heroBlock}>
-              <Text style={styles.heroTitle}>{introTitle}</Text>
-              <Text style={styles.heroBody}>{introBody}</Text>
-              <View style={styles.heroMetaRow}>
-                <View style={styles.metaPill}>
-                  <Text style={styles.metaPillText}>
-                    {viewItems.length} {isTr ? 'profil' : viewItems.length === 1 ? 'profile' : 'profiles'}
-                  </Text>
-                </View>
-                {isPremiumPlan ? (
-                  <View style={[styles.metaPill, styles.metaPillPremium]}>
-                    <Text style={[styles.metaPillText, styles.metaPillPremiumText]}>VPaw Premium</Text>
+            <View style={styles.heroCard}>
+              <View pointerEvents="none" style={styles.heroCardGlow} />
+              <View style={styles.heroBlock}>
+                <Text style={styles.heroTitle}>{introTitle}</Text>
+                <Text style={styles.heroBody}>{introBody}</Text>
+                <View style={styles.heroMetaRow}>
+                  <View style={styles.metaPill}>
+                    <Text style={styles.metaPillText}>
+                      {viewItems.length} {isTr ? 'profil' : viewItems.length === 1 ? 'profile' : 'profiles'}
+                    </Text>
                   </View>
-                ) : null}
+                  {isPremiumPlan ? (
+                    <View style={[styles.metaPill, styles.metaPillPremium]}>
+                      <Text style={[styles.metaPillText, styles.metaPillPremiumText]}>VPaw Premium</Text>
+                    </View>
+                  ) : null}
+                </View>
               </View>
             </View>
 
@@ -202,13 +226,13 @@ export default function PetsScreen(props: PetsScreenProps) {
             {canAddPet ? (
               <Pressable onPress={handleAddPet} style={({ pressed }) => [styles.addCard, pressed && styles.addCardPressed]}>
                 <LinearGradient
-                  colors={['rgba(53,174,157,0.18)', 'rgba(31,127,115,0.08)']}
+                  colors={['rgba(245,234,219,0.38)', 'rgba(255,255,255,0.08)']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
                   style={StyleSheet.absoluteFillObject}
                 />
                 <View style={styles.addIconShell}>
-                  <Plus size={19} color="#2a6f67" strokeWidth={2.1} />
+                  <Plus size={19} color="#8b6a53" strokeWidth={2.1} />
                 </View>
                 <View style={styles.addBody}>
                   <Text style={styles.addTitle}>{addTitle}</Text>
@@ -226,35 +250,87 @@ export default function PetsScreen(props: PetsScreenProps) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#f6f4f0',
+    backgroundColor: '#ead8c8',
   },
   safeArea: {
     flex: 1,
   },
   screen: {
     flex: 1,
+    backgroundColor: 'transparent',
+  },
+  ribbonPrimary: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 240,
+    height: 1040,
+    opacity: 0.94,
+    transform: [{ rotate: '24deg' }],
+  },
+  ribbonSecondary: {
+    position: 'absolute',
+    top: 120,
+    left: 156,
+    width: 160,
+    height: 980,
+    opacity: 0.78,
+    transform: [{ rotate: '36deg' }],
+  },
+  ribbonAccent: {
+    position: 'absolute',
+    top: 280,
+    right: -20,
+    width: 110,
+    height: 680,
+    opacity: 0.52,
+    transform: [{ rotate: '17deg' }],
   },
   scrollContent: {
     paddingHorizontal: 20,
     gap: 18,
   },
+  heroCard: {
+    position: 'relative',
+    overflow: 'hidden',
+    borderRadius: 34,
+    backgroundColor: 'rgba(255,250,244,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.68)',
+    shadowColor: '#7e5f47',
+    shadowOpacity: 0.09,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
+  },
+  heroCardGlow: {
+    position: 'absolute',
+    top: -24,
+    right: -16,
+    width: 180,
+    height: 110,
+    borderRadius: 90,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    transform: [{ rotate: '-14deg' }],
+  },
   heroBlock: {
-    paddingTop: 6,
-    paddingHorizontal: 2,
-    gap: 8,
+    paddingTop: 18,
+    paddingHorizontal: 18,
+    paddingBottom: 18,
+    gap: 10,
   },
   heroTitle: {
-    fontSize: 31,
-    lineHeight: 35,
+    fontSize: 34,
+    lineHeight: 38,
     fontWeight: '800',
-    color: '#164942',
-    letterSpacing: -0.9,
+    color: '#2a1710',
+    letterSpacing: -1,
   },
   heroBody: {
-    maxWidth: 310,
+    maxWidth: 300,
     fontSize: 15,
     lineHeight: 22,
-    color: 'rgba(41, 75, 70, 0.80)',
+    color: 'rgba(73, 52, 40, 0.84)',
     fontWeight: '500',
   },
   heroMetaRow: {
@@ -264,23 +340,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   metaPill: {
-    height: 30,
+    height: 31,
     borderRadius: 999,
     paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.62)',
+    backgroundColor: 'rgba(255,249,243,0.76)',
     borderWidth: 1,
-    borderColor: 'rgba(78,109,103,0.08)',
+    borderColor: 'rgba(169,143,118,0.16)',
   },
   metaPillPremium: {
-    backgroundColor: 'rgba(249,243,227,0.88)',
-    borderColor: 'rgba(177,149,95,0.14)',
+    backgroundColor: 'rgba(242,226,201,0.9)',
+    borderColor: 'rgba(174,138,91,0.16)',
   },
   metaPillText: {
     fontSize: 12,
     lineHeight: 15,
-    color: '#43645f',
+    color: '#5d473b',
     fontWeight: '700',
   },
   metaPillPremiumText: {
@@ -288,19 +364,20 @@ const styles = StyleSheet.create({
   },
   listWrap: {
     gap: 14,
+    marginTop: 2,
   },
   addCard: {
     minHeight: 108,
-    borderRadius: 30,
+    borderRadius: 34,
     paddingHorizontal: 18,
     paddingVertical: 18,
     borderWidth: 1,
-    borderColor: 'rgba(97,130,122,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.70)',
-    shadowColor: '#5d8c83',
+    borderColor: 'rgba(171,143,116,0.14)',
+    backgroundColor: 'rgba(255,250,244,0.76)',
+    shadowColor: '#7e5f47',
     shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 3,
     flexDirection: 'row',
     alignItems: 'center',
@@ -314,12 +391,12 @@ const styles = StyleSheet.create({
   addIconShell: {
     width: 52,
     height: 52,
-    borderRadius: 16,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(248,252,251,0.84)',
+    backgroundColor: 'rgba(255,248,239,0.78)',
     borderWidth: 1,
-    borderColor: 'rgba(105,134,126,0.10)',
+    borderColor: 'rgba(169,143,118,0.14)',
   },
   addBody: {
     flex: 1,
@@ -329,34 +406,34 @@ const styles = StyleSheet.create({
     fontSize: 19,
     lineHeight: 24,
     fontWeight: '700',
-    color: '#1d4741',
+    color: '#2b1810',
     letterSpacing: -0.3,
   },
   addText: {
     fontSize: 14,
     lineHeight: 20,
-    color: '#68807b',
+    color: '#7d6658',
     fontWeight: '500',
   },
   emptyCard: {
-    borderRadius: 26,
+    borderRadius: 32,
     paddingHorizontal: 20,
     paddingVertical: 22,
-    backgroundColor: 'rgba(255,255,255,0.68)',
+    backgroundColor: 'rgba(255,250,244,0.74)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.56)',
+    borderColor: 'rgba(255,255,255,0.7)',
   },
   emptyTitle: {
     fontSize: 18,
     lineHeight: 22,
     fontWeight: '700',
-    color: '#1c2f2c',
+    color: '#2a1710',
     letterSpacing: -0.3,
   },
   emptySub: {
     marginTop: 8,
     fontSize: 14,
     lineHeight: 20,
-    color: 'rgba(28,47,44,0.62)',
+    color: 'rgba(74, 56, 45, 0.72)',
   },
 });

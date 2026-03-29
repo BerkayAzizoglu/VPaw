@@ -12,13 +12,14 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getBreedHealthEntry, type BreedHealthEntry, type DailyCareCategory } from '../lib/breedHealthData';
 import { generateBreedInsight } from '../lib/breedInsightsEngine';
 import type { AiInsight } from '../lib/insightsEngine';
 import AddRecordSheet, { type AddRecordMode } from '../components/AddRecordSheet';
 import {
-  CheckCircle,
   ChevronRight,
   FileText,
   Files,
@@ -26,14 +27,12 @@ import {
   HeartPulse,
   Home,
   Plus,
-  Pill,
   Stethoscope,
   Syringe,
-  Trash2,
   TrendingUp,
   Utensils,
 } from 'lucide-react-native';
-import Svg, { Circle, Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 // ─── Colour palette (matches reference design system) ────────────────────────
 const C = {
@@ -148,6 +147,7 @@ export type HealthHubAreaCard = {
       };
 };
 type HealthHubScreenProps = {
+  scrollToTopSignal?: number;
   summary: HealthHubSummary;
   timeline: HealthHubTimelineItem[];
   initialCategory?: HealthHubCategory;
@@ -1041,6 +1041,7 @@ const bs = StyleSheet.create({
 
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function HealthHubScreen({
+  scrollToTopSignal = 0,
   summary,
   timeline,
   initialCategory = 'all',
@@ -1074,6 +1075,7 @@ export default function HealthHubScreen({
   onUpgradePremium,
 }: HealthHubScreenProps) {
   const isTr = locale === 'tr';
+  const insets = useSafeAreaInsets();
 
   // ── local state ──
   const [category, setCategory] = useState<HealthHubCategory>(initialCategory);
@@ -1084,6 +1086,8 @@ export default function HealthHubScreen({
   const [addSheetPresetTitle, setAddSheetPresetTitle] = useState('');
   const [addSheetPresetType, setAddSheetPresetType] = useState<AddHealthRecordType>('diagnosis');
   const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const mainScrollRef = useRef<ScrollView | null>(null);
   const quickTranslateY = useRef(new Animated.Value(500)).current;
   const quickBackdropOpacity = useRef(new Animated.Value(0)).current;
   const quickHeightRef = useRef(500);
@@ -1168,6 +1172,10 @@ export default function HealthHubScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [createPreset?.nonce, createPreset?.openCreate]);
 
+  useEffect(() => {
+    mainScrollRef.current?.scrollTo?.({ y: 0, animated: true });
+  }, [scrollToTopSignal]);
+
   // ── derived ──
   const filteredTimeline = useMemo(
     () => (category === 'all' ? timeline : timeline.filter((i) => i.type === category)),
@@ -1230,13 +1238,59 @@ export default function HealthHubScreen({
     () => areaCards?.find((item) => item.key === 'documents'),
     [areaCards],
   );
+  const hasDocumentsPreview = !!documentsPreview?.[0]?.title;
+  const documentCountValue = Number.parseInt(documentCard?.countText ?? '', 10);
+  const documentPrimaryText = !hasDocumentsPreview && (Number.isNaN(documentCountValue) ? false : documentCountValue <= 0)
+    ? (isTr ? 'Veri yok' : 'No data')
+    : (documentCard?.highlight.primary ?? '');
   const focusedAreaKey = categoryToAreaKey(category);
   const primaryInsight = topInsights?.[0] ?? null;
   const secondaryInsight = topInsights?.[1] ?? null;
   const moduleCardWidth = Math.max(148, Math.floor((width - 22 * 2 - 14) / 2));
-  const moduleCardHeight = Math.max(194, Math.min(226, Math.round(moduleCardWidth * 1.12)));
-  const documentsCardHeight = Math.max(174, Math.min(212, Math.round(moduleCardHeight * 0.9)));
-  const compactDateLayout = moduleCardWidth < 170;
+  const moduleCardHeight = moduleCardWidth;
+  const documentsCardHeight = Math.max(118, Math.min(134, Math.round(moduleCardHeight * 0.66)));
+  const compactDateLayout = moduleCardWidth < 182;
+  const adaptiveCardTitleSize = moduleCardWidth < 160 ? 13 : moduleCardWidth < 172 ? 14 : 15;
+  const adaptiveCardTitleLineHeight = adaptiveCardTitleSize + 3;
+  const adaptivePrimarySize = moduleCardWidth < 160 ? 17 : 19;
+  const adaptivePrimaryLineHeight = adaptivePrimarySize + 4;
+  const adaptiveDateDetailSize = moduleCardWidth < 160 ? 14 : 15;
+  const adaptiveCardPadding = moduleCardWidth < 160 ? 14 : 16;
+  const adaptiveIconWrapSize = moduleCardWidth < 160 ? 34 : 38;
+  const adaptiveIconGlyph = moduleCardWidth < 160 ? 16 : 18;
+  const adaptiveDateBadgeSize = moduleCardWidth < 160 ? 58 : 64;
+  const adaptiveWatermarkSize = moduleCardWidth < 160 ? 74 : 84;
+  const adaptiveCountPillPaddingH = moduleCardWidth < 160 ? 8 : 9;
+  const adaptiveCountPillPaddingV = moduleCardWidth < 160 ? 4 : 5;
+  const adaptiveCountFontSize = moduleCardWidth < 160 ? 10 : 11;
+  const topInset = Math.max(insets.top, 14);
+  const topBarHeight = topInset + 56;
+  const topChromeHeight = topInset + 58;
+  const topChromeOpacity = scrollY.interpolate({
+    inputRange: [0, 8, 84],
+    outputRange: [0, 0.55, 1],
+    extrapolate: 'clamp',
+  });
+  const headerTitleScale = scrollY.interpolate({
+    inputRange: [0, 84, 180],
+    outputRange: [1.06, 0.97, 0.9],
+    extrapolate: 'clamp',
+  });
+  const headerTitleTranslateX = scrollY.interpolate({
+    inputRange: [0, 80],
+    outputRange: [0, 0],
+    extrapolate: 'clamp',
+  });
+  const headerTitleTranslateY = scrollY.interpolate({
+    inputRange: [0, 80],
+    outputRange: [3, 0],
+    extrapolate: 'clamp',
+  });
+  const headerColorBlendOpacity = scrollY.interpolate({
+    inputRange: [4, 56, 170],
+    outputRange: [0, 0.46, 0.74],
+    extrapolate: 'clamp',
+  });
 
   // ── form helpers ──
   const openCreate = (presetType: AddHealthRecordType = 'diagnosis', presetTitle = '') => {
@@ -1329,42 +1383,21 @@ export default function HealthHubScreen({
 
   // ─────────────────────────────────────────────────────────────────────────────
   return (
-    <View style={s.screen}>
-      <View pointerEvents="none" style={s.pageBgLayer}>
-        <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-          <Defs>
-            <LinearGradient id="healthHubPageBg" x1="0.5" y1="0" x2="0.5" y2="1">
-              <Stop offset="0%" stopColor="#A4C3B2" />
-              <Stop offset="100%" stopColor="#CCE3DE" />
-            </LinearGradient>
-          </Defs>
-          <Rect x="0" y="0" width="100" height="100" fill="url(#healthHubPageBg)" />
-        </Svg>
-      </View>
-      <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+    <ExpoLinearGradient
+      colors={['#FFFFFF', '#ECE9E6']}
+      locations={[0, 1]}
+      start={{ x: 0, y: 0.5 }}
+      end={{ x: 1, y: 0.5 }}
+      style={s.screen}
+    >
+      <Animated.ScrollView
+        ref={mainScrollRef}
+        contentContainerStyle={[s.content, { paddingTop: topBarHeight + 12 }]}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={16}
+      >
         <View style={s.heroBlock}>
-          <View style={s.heroTopRow}>
-            <View style={s.heroTextWrap}>
-              <Text style={s.heroTitle}>Health Hub</Text>
-              <Text style={s.heroDescription}>
-                {isTr
-                  ? 'Ziyaretler, asilar, saglik kayitlari ve kilo takibini tek bir net saglik merkezinde gorun.'
-                  : 'See visits, vaccines, records, and weight tracking in one clear health center.'}
-              </Text>
-            </View>
-            <Animated.View style={{ transform: [{ scale: headerBtnScale }] }}>
-              <Pressable
-                style={s.heroActionButton}
-                onPressIn={springDown(headerBtnScale, 0.9)}
-                onPressOut={springUp(headerBtnScale)}
-                onPress={openQuickAdd}
-                android_ripple={{ color: 'rgba(71,102,74,0.10)', borderless: false }}
-              >
-                <Plus size={18} color={C.primary} strokeWidth={2.4} />
-              </Pressable>
-            </Animated.View>
-          </View>
-
           {category !== 'all' ? (
             <Pressable style={s.focusChip} onPress={() => setCategory('all')}>
               <Text style={s.focusChipText}>
@@ -1374,7 +1407,7 @@ export default function HealthHubScreen({
           ) : null}
         </View>
 
-        <View style={s.moduleCardsGrid}>
+        <View style={[s.moduleCardsGrid, { minHeight: Math.max(moduleCardHeight, 206) * 2 + 14 }]}>
           {moduleCards.map((card) => {
             const entry = hubEntries.find((item) => item.key === card.key);
             if (!entry) return null;
@@ -1391,29 +1424,66 @@ export default function HealthHubScreen({
             return (
               <Animated.View key={entry.key} style={[s.moduleCardGridItem, { width: moduleCardWidth, transform: [{ scale: getCardScale(entry.key) }] }]}>
                 <Pressable
-                  style={[s.moduleCard, { backgroundColor: theme.background, shadowColor: theme.shadow, height: moduleCardHeight }, active && s.moduleCardActive]}
+                  style={[
+                    s.moduleCard,
+                    {
+                      backgroundColor: theme.background,
+                      shadowColor: theme.shadow,
+                      height: moduleCardHeight,
+                      paddingHorizontal: adaptiveCardPadding,
+                      paddingTop: adaptiveCardPadding,
+                      paddingBottom: adaptiveCardPadding,
+                    },
+                    active && s.moduleCardActive,
+                  ]}
                   onPressIn={springDown(getCardScale(entry.key), 0.985)}
                   onPressOut={springUp(getCardScale(entry.key))}
                   onPress={() => entry.onPress?.()}
                 >
                   <View style={s.moduleCardWatermark}>
-                    <HealthHubCategoryIcon kind={entry.key as Exclude<AreaRowKey, 'documents'>} size={84} colorOverride={theme.watermark} />
+                    <HealthHubCategoryIcon kind={entry.key as Exclude<AreaRowKey, 'documents'>} size={adaptiveWatermarkSize} colorOverride={theme.watermark} />
                   </View>
 
                   <View style={s.moduleCardContent}>
                     <View style={s.moduleCardHeaderRow}>
-                      <View style={[s.moduleCardIcon, { backgroundColor: theme.iconBg }]}>
-                        <HealthHubCategoryIcon kind={entry.key as Exclude<AreaRowKey, 'documents'>} size={18} colorOverride={theme.iconColor} />
+                      <View
+                        style={[
+                          s.moduleCardIcon,
+                          {
+                            backgroundColor: theme.iconBg,
+                            width: adaptiveIconWrapSize,
+                            height: adaptiveIconWrapSize,
+                            borderRadius: adaptiveIconWrapSize / 2,
+                          },
+                        ]}
+                      >
+                        <HealthHubCategoryIcon kind={entry.key as Exclude<AreaRowKey, 'documents'>} size={adaptiveIconGlyph} colorOverride={theme.iconColor} />
                       </View>
                       <View style={s.moduleCardHeaderText}>
-                        <Text style={[s.moduleCardTitle, isLightCard && s.moduleCardTitleDark]} numberOfLines={2}>{card.title}</Text>
+                        <Text
+                          style={[s.moduleCardTitle, { fontSize: adaptiveCardTitleSize, lineHeight: adaptiveCardTitleLineHeight }, isLightCard && s.moduleCardTitleDark]}
+                          numberOfLines={2}
+                        >
+                          {card.title}
+                        </Text>
                       </View>
                     </View>
 
                     {card.highlight.kind === 'date' ? (
                       <View style={[s.moduleDateBlock, showAttention && s.moduleHighlightAttentionPanel]}>
                         <View style={[s.moduleDateRow, compactDateLayout && s.moduleDateRowCompact]}>
-                          <View style={[s.moduleDateBadge, isLightCard && s.moduleDateBadgeLight]}>
+                          <View
+                            style={[
+                              s.moduleDateBadge,
+                              {
+                                width: adaptiveDateBadgeSize,
+                                minHeight: adaptiveDateBadgeSize,
+                                borderRadius: Math.round(adaptiveDateBadgeSize * 0.22),
+                                paddingVertical: moduleCardWidth < 160 ? 8 : 9,
+                              },
+                              isLightCard && s.moduleDateBadgeLight,
+                            ]}
+                          >
                             <Text style={[s.moduleDatePrimary, s.moduleDatePrimaryCompact, isLightCard && s.moduleDatePrimaryDark, showAttention && s.moduleDatePrimaryAttention]}>
                               {card.highlight.primary}
                             </Text>
@@ -1424,7 +1494,7 @@ export default function HealthHubScreen({
                           <View style={[s.moduleDateTextCol, compactDateLayout && s.moduleDateTextColCompact]}>
                             {card.highlight.detail ? (
                               <Text
-                                style={[s.moduleMetricPrimary, s.moduleMetricPrimaryCompact, s.moduleDateDetailText, isLightCard && s.moduleMetricPrimaryDark, showAttention && s.moduleMetricPrimaryAttention]}
+                                style={[s.moduleMetricPrimary, s.moduleMetricPrimaryCompact, { fontSize: adaptiveDateDetailSize, lineHeight: adaptiveDateDetailSize + 4 }, s.moduleDateDetailText, isLightCard && s.moduleMetricPrimaryDark, showAttention && s.moduleMetricPrimaryAttention]}
                                 numberOfLines={compactDateLayout ? 1 : 2}
                               >
                                 {card.highlight.detail}
@@ -1435,7 +1505,10 @@ export default function HealthHubScreen({
                       </View>
                     ) : (
                       <View style={[s.moduleMetricBlock, showAttention && s.moduleHighlightAttentionPanel]}>
-                        <Text style={[s.moduleMetricPrimary, isLightCard && s.moduleMetricPrimaryDark, showAttention && s.moduleMetricPrimaryAttention]} numberOfLines={2}>
+                        <Text
+                          style={[s.moduleMetricPrimary, { fontSize: adaptivePrimarySize, lineHeight: adaptivePrimaryLineHeight }, isLightCard && s.moduleMetricPrimaryDark, showAttention && s.moduleMetricPrimaryAttention]}
+                          numberOfLines={2}
+                        >
                           {card.highlight.primary}
                         </Text>
                         {card.highlight.secondary ? (
@@ -1453,9 +1526,18 @@ export default function HealthHubScreen({
 
                     <View style={s.moduleCardFooterAbsolute}>
                       {card.countText ? (
-                        <View style={[s.moduleCardCountPill, isLightCard && s.moduleCardCountPillDark]}>
+                        <View
+                          style={[
+                            s.moduleCardCountPill,
+                            {
+                              paddingHorizontal: adaptiveCountPillPaddingH,
+                              paddingVertical: adaptiveCountPillPaddingV,
+                            },
+                            isLightCard && s.moduleCardCountPillDark,
+                          ]}
+                        >
                           <View style={[s.moduleCardCountDot, isLightCard && s.moduleCardCountDotDark]} />
-                          <Text style={[s.moduleCardCountText, isLightCard && s.moduleCardCountTextDark]}>{card.countText}</Text>
+                          <Text style={[s.moduleCardCountText, { fontSize: adaptiveCountFontSize }, isLightCard && s.moduleCardCountTextDark]}>{card.countText}</Text>
                         </View>
                       ) : null}
                     </View>
@@ -1464,76 +1546,69 @@ export default function HealthHubScreen({
               </Animated.View>
             );
           })}
-
-          <Animated.View style={[s.documentsFullWidthWrap, { transform: [{ scale: getCardScale('documents') }] }]}>
-            <Pressable
-              style={[s.moduleCard, s.documentCard, s.documentCardLight, { backgroundColor: HEALTH_MODULE_CARD_THEMES.documents.background, shadowColor: HEALTH_MODULE_CARD_THEMES.documents.shadow, minHeight: documentsCardHeight }]}
-              onPressIn={springDown(getCardScale('documents'), 0.985)}
-              onPressOut={springUp(getCardScale('documents'))}
-              onPress={() => onOpenDocuments?.()}
-            >
-              <View style={s.moduleCardWatermark}>
-                <HealthHubCategoryIcon kind="documents" size={84} colorOverride={HEALTH_MODULE_CARD_THEMES.documents.watermark} />
-              </View>
-
-              <View style={s.moduleCardContent}>
-                <View style={s.moduleCardHeaderRow}>
-                  <View style={[s.moduleCardIcon, { backgroundColor: HEALTH_MODULE_CARD_THEMES.documents.iconBg }]}>
-                    <HealthHubCategoryIcon kind="documents" size={18} colorOverride={HEALTH_MODULE_CARD_THEMES.documents.iconColor} />
-                  </View>
-                  <View style={s.moduleCardHeaderText}>
-                    <Text style={[s.moduleCardTitle, s.moduleCardTitleDark, s.documentCardTitle]}>
-                      {documentCard?.title ?? (isTr ? 'Belgeler' : 'Documents')}
-                    </Text>
-                  </View>
-                </View>
-
-                {documentCard?.highlight.primary ? (
-                  <View style={s.moduleMetricBlock}>
-                    {documentCard.highlight.label ? (
-                      <Text style={[s.moduleHighlightLabel, s.moduleHighlightLabelDark]}>{documentCard.highlight.label}</Text>
-                    ) : null}
-                    <Text style={[s.moduleMetricPrimary, s.moduleMetricPrimaryDark]} numberOfLines={2}>
-                      {documentCard.highlight.primary}
-                    </Text>
-                    {documentCard.highlight.secondary ? (
-                      <Text style={[s.moduleMetricSecondary, s.moduleMetricSecondaryDark]} numberOfLines={2}>
-                        {documentCard.highlight.secondary}
-                      </Text>
-                    ) : null}
-                    {documentCard.highlight.detail ? (
-                      <Text style={[s.moduleHighlightDetail, s.moduleHighlightDetailDark]} numberOfLines={2}>
-                        {documentCard.highlight.detail}
-                      </Text>
-                    ) : null}
-                  </View>
-                ) : documentsPreview?.[0]?.title ? (
-                  <Text style={[s.documentCardPreview, s.documentCardPreviewDark]} numberOfLines={1}>
-                    {documentsPreview[0].title}
-                  </Text>
-                ) : null}
-
-                <View style={s.moduleCardFooterAbsolute}>
-                  {documentCard?.countText ? (
-                    <View style={[s.moduleCardCountPill, s.moduleCardCountPillDark]}>
-                      <View style={[s.moduleCardCountDot, s.moduleCardCountDotDark]} />
-                      <Text style={[s.moduleCardCountText, s.moduleCardCountTextDark]}>{documentCard.countText}</Text>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-            </Pressable>
-          </Animated.View>
         </View>
 
+        <Animated.View style={[s.documentsFullWidthWrap, { transform: [{ scale: getCardScale('documents') }] }]}>
+          <Pressable
+            style={[s.moduleCard, s.documentCard, s.documentCardLight, { backgroundColor: HEALTH_MODULE_CARD_THEMES.documents.background, shadowColor: HEALTH_MODULE_CARD_THEMES.documents.shadow, height: documentsCardHeight }]}
+            onPressIn={springDown(getCardScale('documents'), 0.985)}
+            onPressOut={springUp(getCardScale('documents'))}
+            onPress={() => onOpenDocuments?.()}
+          >
+            <View style={[s.moduleCardContent, s.documentCardContent]}>
+              <View style={s.moduleCardHeaderRow}>
+                <View style={[s.moduleCardIcon, { backgroundColor: HEALTH_MODULE_CARD_THEMES.documents.iconBg }]}>
+                  <HealthHubCategoryIcon kind="documents" size={18} colorOverride={HEALTH_MODULE_CARD_THEMES.documents.iconColor} />
+                </View>
+                <View style={s.moduleCardHeaderText}>
+                  <Text style={[s.moduleCardTitle, { fontSize: adaptiveCardTitleSize, lineHeight: adaptiveCardTitleLineHeight }, s.moduleCardTitleDark, s.documentCardTitle]}>
+                    {documentCard?.title ?? (isTr ? 'Belgeler' : 'Documents')}
+                  </Text>
+                </View>
+              </View>
+
+              {documentPrimaryText ? (
+                <View style={s.documentMetricBlock}>
+                  {documentCard?.highlight.label ? (
+                    <Text style={[s.moduleHighlightLabel, s.moduleHighlightLabelDark]}>{documentCard.highlight.label}</Text>
+                  ) : null}
+                  <Text style={[s.moduleMetricPrimary, s.moduleMetricPrimaryDark]} numberOfLines={1}>
+                    {documentPrimaryText}
+                  </Text>
+                  {documentCard?.highlight.secondary ? (
+                    <Text style={[s.moduleMetricSecondary, s.moduleMetricSecondaryDark]} numberOfLines={1}>
+                      {documentCard.highlight.secondary}
+                    </Text>
+                  ) : null}
+                  {documentCard?.highlight.detail ? (
+                    <Text style={[s.moduleHighlightDetail, s.moduleHighlightDetailDark]} numberOfLines={2}>
+                      {documentCard.highlight.detail}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : documentsPreview?.[0]?.title ? (
+                <Text style={[s.documentCardPreview, s.documentCardPreviewDark]} numberOfLines={1}>
+                  {documentsPreview[0].title}
+                </Text>
+              ) : null}
+
+              <View style={s.documentCardFooter}>
+                {documentCard?.countText ? (
+                  <View style={[s.moduleCardCountPill, s.moduleCardCountPillDark]}>
+                    <View style={[s.moduleCardCountDot, s.moduleCardCountDotDark]} />
+                    <Text style={[s.moduleCardCountText, s.moduleCardCountTextDark]}>{documentCard.countText}</Text>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </Pressable>
+        </Animated.View>
+
         {breedEntry ? (
-          <View style={s.sectionBlock}>
+          <View style={[s.sectionBlock, s.breedSectionBlock]}>
             <View style={s.sectionHeaderCompact}>
               <View style={s.sectionTextWrap}>
                 <Text style={s.sectionTitle}>{isTr ? 'Irk İçgörüleri' : 'Breed Insights'}</Text>
-                <Text style={s.sectionSubtitle}>
-                  {isTr ? 'Tıbbi kayıtların yanında bağlamsal sağlık farkındalığı.' : 'Contextual breed awareness beside clinical records.'}
-                </Text>
               </View>
             </View>
             <BreedTeaserRow
@@ -1552,9 +1627,6 @@ export default function HealthHubScreen({
           <View style={s.sectionHeaderCompact}>
             <View style={s.sectionTextWrap}>
               <Text style={s.sectionTitle}>{isTr ? 'AI Önizleme' : 'AI Insight Preview'}</Text>
-              <Text style={s.sectionSubtitle}>
-                {isTr ? 'Derin analiz Insights ekranında kalır.' : 'Full analysis stays in the Insights screen.'}
-              </Text>
             </View>
             {onOpenInsights ? (
               <Pressable style={s.sectionActionGhost} onPress={onOpenInsights}>
@@ -1589,13 +1661,9 @@ export default function HealthHubScreen({
               )}
             </Text>
 
-            <Text style={s.aiPreviewSecondary}>
-              {secondaryInsight?.message ?? (
-                isTr
-                  ? 'Buradaki amaç tam rapor değil, bir sonraki mantıklı sağlık aksiyonuna hızlıca yönlendirmektir.'
-                  : 'The goal here is not a full report, but a quick lead toward the next sensible health action.'
-              )}
-            </Text>
+            {secondaryInsight?.message ? (
+              <Text style={s.aiPreviewSecondary}>{secondaryInsight.message}</Text>
+            ) : null}
 
             <View style={s.aiPreviewFooter}>
               <Text style={s.aiPreviewFooterText}>{isTr ? 'Tüm analizleri aç' : 'Open full Insights'}</Text>
@@ -1604,322 +1672,65 @@ export default function HealthHubScreen({
           </Pressable>
         </View>
 
-        {false && (<>
+      </Animated.ScrollView>
 
-        {/* ── HEADER ── */}
-        <View style={s.headerRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={s.headerLabel}>{isTr ? 'SAĞLIK KAYITLARI' : 'CARE RECORDS'}</Text>
-            <Text style={s.headerTitle}>{isTr ? 'Sağlık Merkezi' : 'Health Hub'}</Text>
-          </View>
+      <View pointerEvents="box-none" style={s.topChrome}>
+        <Animated.View pointerEvents="none" style={[s.topChromeSurface, { height: topChromeHeight, opacity: topChromeOpacity }]}>
+          <BlurView intensity={32} tint="light" style={StyleSheet.absoluteFillObject} />
+          <Animated.View style={[s.headerColorBlendWrap, { opacity: headerColorBlendOpacity }]}>
+            <ExpoLinearGradient
+              colors={['rgba(46,66,48,0.22)', 'rgba(86,117,124,0.18)', 'rgba(201,146,114,0.18)', 'rgba(216,195,165,0.15)']}
+              locations={[0, 0.35, 0.7, 1]}
+              start={{ x: 0, y: 0.5 }}
+              end={{ x: 1, y: 0.5 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <ExpoLinearGradient
+              colors={['rgba(86,117,124,0.14)', 'rgba(216,195,165,0.11)', 'rgba(46,66,48,0.12)', 'rgba(201,146,114,0.11)']}
+              locations={[0, 0.35, 0.65, 1]}
+              start={{ x: 0.1, y: 0 }}
+              end={{ x: 0.9, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+          </Animated.View>
+          <ExpoLinearGradient
+            colors={['rgba(255,255,255,0.96)', 'rgba(255,255,255,0.75)', 'rgba(255,255,255,0.24)', 'rgba(255,255,255,0)']}
+            locations={[0, 0.45, 0.8, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        </Animated.View>
+
+        <View style={[s.topBarRow, { height: topBarHeight + 2, paddingTop: topInset + 2 }]}>
+          <Animated.Text
+            numberOfLines={1}
+            style={[
+              s.topBarTitle,
+              {
+                transform: [
+                  { translateX: headerTitleTranslateX },
+                  { translateY: headerTitleTranslateY },
+                  { scale: headerTitleScale },
+                ],
+              },
+            ]}
+          >
+            Health Hub
+          </Animated.Text>
           <Animated.View style={{ transform: [{ scale: headerBtnScale }] }}>
             <Pressable
-              style={s.headerAddBtn}
-              onPressIn={springDown(headerBtnScale, 0.88)}
+              style={s.heroActionButton}
+              onPressIn={springDown(headerBtnScale, 0.9)}
               onPressOut={springUp(headerBtnScale)}
               onPress={openQuickAdd}
-              android_ripple={{ color: 'rgba(127,196,184,0.18)', borderless: true, radius: 24 }}
+              android_ripple={{ color: 'rgba(71,102,74,0.10)', borderless: false }}
             >
-              <Plus size={20} color="#7fc4b8" strokeWidth={2.4} />
+              <Plus size={18} color={C.primary} strokeWidth={2.4} />
             </Pressable>
           </Animated.View>
         </View>
-
-        {/* ── CATEGORY SECTION HEADER ── */}
-        <View style={s.sectionHeaderRow}>
-          <Text style={[s.sectionLabel, s.sectionLabelAreas]}>{isTr ? 'SAĞLIK ALANLARI' : 'HEALTH AREAS'}</Text>
-          <View style={[s.sectionHeaderLine, s.sectionHeaderLineAreas]} />
-        </View>
-
-        {/* ── CATEGORY CARDS ── */}
-        <View style={s.categoryList}>
-          {hubEntries.map((entry, idx) => {
-            const rowTheme = AREA_ROW_THEMES[entry.key as Exclude<AreaRowKey, 'documents'>];
-            const gradientId = `healthHubAreaGradient-${entry.key}`;
-            return (
-              <Animated.View key={entry.key} style={{ transform: [{ scale: getCardScale(entry.key) }] }}>
-              <Pressable
-                style={[
-                  s.categoryCard,
-                  idx < hubEntries.length - 1 && s.categoryCardDividerSoft,
-                ]}
-                onPressIn={springDown(getCardScale(entry.key), 0.97)}
-                onPressOut={springUp(getCardScale(entry.key))}
-                onPress={() => entry.onPress?.()}
-                android_ripple={{ color: 'rgba(255,255,255,0.12)' }}
-              >
-                <View pointerEvents="none" style={s.rowGradientFill}>
-                  <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-                    <Defs>
-                      <LinearGradient id={gradientId} x1="0" y1="0.5" x2="1" y2="0.5">
-                        <Stop offset="0%" stopColor={rowTheme.start} />
-                        <Stop offset="100%" stopColor={rowTheme.end} />
-                      </LinearGradient>
-                    </Defs>
-                    <Rect x="0" y="0" width="100" height="100" fill={`url(#${gradientId})`} />
-                  </Svg>
-                </View>
-
-                <View
-                  style={[
-                    s.categoryIconBox,
-                    {
-                      backgroundColor: entry.iconBg,
-                      borderColor: `${rowTheme.chevron}66`,
-                      shadowColor: rowTheme.chevron,
-                    },
-                  ]}
-                >
-                  <Animated.View
-                    style={{
-                      transform: [
-                        {
-                          scale: getIconAnim(entry.key).interpolate({
-                            inputRange: [0, 0.5, 1],
-                            outputRange: [1, 1.04, 1],
-                          }),
-                        },
-                      ],
-                    }}
-                  >
-                    {entry.icon}
-                  </Animated.View>
-                </View>
-
-                <View style={s.categoryCardBody}>
-                  <Text style={[s.categoryCardTitle, { color: rowTheme.titleColor }]}>{entry.title}</Text>
-                  <Text style={[s.categoryCardSub, { color: rowTheme.subColor }]} numberOfLines={1}>
-                    {entry.overview?.infoText ?? entry.subtitle}
-                  </Text>
-                </View>
-
-                <View style={s.categoryCardRight}>
-                  {entry.overview?.countText ? (
-                    <View style={[s.countBadge, { backgroundColor: rowTheme.badgeBg, borderColor: `${rowTheme.chevron}4D` }]}>
-                      <Text style={[s.countBadgeText, { color: rowTheme.badgeText }]}>{entry.overview.countText}</Text>
-                    </View>
-                  ) : null}
-                  {entry.overview?.statusText ? (
-                    <Text style={[s.categoryStatusText, { color: rowTheme.statusText }]} numberOfLines={1}>
-                      {entry.overview.statusText}
-                    </Text>
-                  ) : null}
-                </View>
-
-                <ChevronRight size={16} color={rowTheme.chevron} />
-              </Pressable>
-              </Animated.View>
-            );
-          })}
-        </View>
-
-        <View style={[s.sectionHeaderRow, s.sectionHeaderRowSpaced]}>
-          <Text style={[s.sectionLabel, s.sectionLabelDocs]}>{isTr ? 'BELGELER' : 'DOCUMENTS'}</Text>
-          <View style={[s.sectionHeaderLine, s.sectionHeaderLineDocs]} />
-        </View>
-        <View style={s.categoryList}>
-          {(() => {
-            return (
-              <Pressable
-                style={({ pressed }) => [s.categoryCard, pressed && s.categoryCardPressed]}
-                onPress={() => onOpenDocuments?.()}
-                android_ripple={{ color: 'rgba(255,255,255,0.12)' }}
-              >
-            <View pointerEvents="none" style={s.rowGradientFill}>
-              <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-                <Defs>
-                  <LinearGradient id="healthHubAreaGradient-documents" x1="0" y1="0.5" x2="1" y2="0.5">
-                    <Stop offset="0%" stopColor={AREA_ROW_THEMES.documents.start} />
-                    <Stop offset="100%" stopColor={AREA_ROW_THEMES.documents.end} />
-                  </LinearGradient>
-                </Defs>
-                <Rect x="0" y="0" width="100" height="100" fill="url(#healthHubAreaGradient-documents)" />
-              </Svg>
-            </View>
-            <View
-              style={[
-                s.categoryIconBox,
-                {
-                  backgroundColor: AREA_ROW_THEMES.documents.iconBg,
-                  borderColor: `${AREA_ROW_THEMES.documents.chevron}66`,
-                  shadowColor: AREA_ROW_THEMES.documents.chevron,
-                },
-              ]}
-            >
-              <Animated.View
-                style={{
-                  transform: [
-                    {
-                      scale: getIconAnim('documents').interpolate({
-                        inputRange: [0, 0.5, 1],
-                        outputRange: [1, 1.04, 1],
-                      }),
-                    },
-                  ],
-                }}
-              >
-                <HealthHubCategoryIcon kind="documents" size={21} colorOverride={AREA_ROW_THEMES.documents.iconTint} />
-              </Animated.View>
-            </View>
-            <View style={s.categoryCardBody}>
-              <Text style={[s.categoryCardTitle, { color: AREA_ROW_THEMES.documents.titleColor }]}>{isTr ? 'Belgeler' : 'Documents'}</Text>
-              <Text style={[s.categoryCardSub, { color: AREA_ROW_THEMES.documents.subColor }]} numberOfLines={1}>
-                {domainOverview?.documents?.infoText ?? (isTr ? 'Tüm kayıt ekleri tek yerde' : 'All record attachments in one place')}
-              </Text>
-              {(documentsPreview?.length ?? 0) > 0 ? (
-                <Text style={[s.vaultPreviewText, { color: AREA_ROW_THEMES.documents.subColor }]} numberOfLines={2}>
-                  {(documentsPreview ?? []).map((item) => item.title).slice(0, 2).join(' • ')}
-                </Text>
-              ) : null}
-            </View>
-            <View style={s.categoryCardRight}>
-              {domainOverview?.documents?.countText ? (
-                <View style={[s.countBadge, { backgroundColor: AREA_ROW_THEMES.documents.badgeBg, borderColor: `${AREA_ROW_THEMES.documents.chevron}4D` }]}>
-                  <Text style={[s.countBadgeText, { color: AREA_ROW_THEMES.documents.badgeText }]}>{domainOverview?.documents?.countText}</Text>
-                </View>
-              ) : null}
-              <Text style={[s.vaultCtaText, { color: AREA_ROW_THEMES.documents.statusText }]}>{isTr ? 'Tüm Belgeler' : 'View All'}</Text>
-            </View>
-            <ChevronRight size={16} color={AREA_ROW_THEMES.documents.chevron} />
-              </Pressable>
-            );
-          })()}
-        </View>
-
-        {/* ── ACTIVE MEDICATIONS ── */}
-        {medicationCourses && (medicationCourses ?? []).filter((m) => m.status === 'active' || m.status === 'paused').length > 0 ? (
-          <>
-            <View style={[s.sectionHeaderRow, s.sectionHeaderRowSpaced]}>
-              <Text style={[s.sectionLabel, s.sectionLabelMeds]}>{isTr ? 'AKTİF İLAÇLAR' : 'ACTIVE MEDICATIONS'}</Text>
-              <View style={[s.sectionHeaderLine, s.sectionHeaderLineMeds]} />
-            </View>
-            <View style={s.categoryList}>
-              {(medicationCourses ?? [])
-                .filter((m) => m.status === 'active' || m.status === 'paused')
-                .map((med) => {
-                  const doseLabel = med.dose ? `${med.dose}${med.doseUnit ?? ''} ${med.frequency ?? ''}`.trim() : (isTr ? 'Doz belirtilmedi' : 'No dose specified');
-                  return (
-                    <View key={med.id} style={s.medCard}>
-                      <View style={s.medIconBox}>
-                        <Pill size={18} color="#7a4a9a" strokeWidth={1.9} />
-                      </View>
-                      <View style={s.medBody}>
-                        <Text style={s.medName} numberOfLines={1}>{med.name}</Text>
-                        <Text style={s.medSub} numberOfLines={1}>{doseLabel}</Text>
-                        {med.status === 'paused' ? (
-                          <View style={s.medPausedPill}>
-                            <Text style={s.medPausedText}>{isTr ? 'Duraklatıldı' : 'Paused'}</Text>
-                          </View>
-                        ) : null}
-                      </View>
-                      <View style={s.medActions}>
-                        {onCompleteMedication ? (
-                          <Pressable style={s.medCompleteBtn} onPress={() => onCompleteMedication(med.id)}>
-                            <CheckCircle size={16} color="#3a6e45" strokeWidth={2} />
-                          </Pressable>
-                        ) : null}
-                        {onDeleteMedication ? (
-                          <Pressable style={s.medDeleteBtn} onPress={() => onDeleteMedication(med.id)}>
-                            <Trash2 size={14} color="#c0392b" strokeWidth={2} />
-                          </Pressable>
-                        ) : null}
-                      </View>
-                    </View>
-                  );
-                })}
-            </View>
-          </>
-        ) : null}
-
-        {/* ── BREED INSIGHTS ── */}
-        {breedEntry ? (
-          <>
-            <View style={[s.sectionHeaderRow, s.sectionHeaderRowSpaced]}>
-              <Text style={[s.sectionLabel, { color: 'rgba(127,196,184,0.55)' }]}>
-                {isTr ? 'IRK SAĞLIK PROFİLİ' : 'BREED INSIGHTS'}
-              </Text>
-              <View style={[s.sectionHeaderLine, { backgroundColor: 'rgba(127,196,184,0.15)' }]} />
-            </View>
-            <View style={{ marginBottom: 8 }}>
-              <BreedTeaserRow
-                entry={breedEntry!}
-                isPremium={isPremium}
-                onPress={openBreedSheet}
-                isTr={isTr}
-                avatarUri={petAvatarUri}
-                insightText={breedInsight?.text}
-                petName={petName}
-              />
-            </View>
-          </>
-        ) : null}
-
-        {/* ── EXPENSE CHART ── */}
-        {summary.totalExpenses && false ? <View style={s.expenseChartCard}>
-          <View style={s.expenseChartHeader}>
-            <Text style={s.expenseChartTitle}>{isTr ? 'Harcama Analizi' : 'Expense Breakdown'}</Text>
-            <View style={s.expenseChartYearPill}>
-              <Text style={s.expenseChartYearText}>{new Date().getFullYear()}</Text>
-            </View>
-          </View>
-
-          {summary.totalExpenses?.breakdown.length ? (() => {
-            const { total, currency, breakdown } = summary.totalExpenses!;
-            return (
-              <>
-                {/* Stacked proportional bar */}
-                <View style={s.expenseStackBar}>
-                  {breakdown.map((item: { label: string; amount: number; color: string }, i: number) => (
-                    <View
-                      key={item.label}
-                      style={[
-                        s.expenseStackSegment,
-                        { flex: item.amount / total, backgroundColor: item.color },
-                        i === 0 && s.expenseStackFirst,
-                        i === breakdown.length - 1 && s.expenseStackLast,
-                      ]}
-                    />
-                  ))}
-                </View>
-
-                {/* Per-category rows */}
-                <View style={s.expenseChartRows}>
-                  {breakdown.map((item: { label: string; amount: number; color: string }) => {
-                    const pct = Math.round((item.amount / total) * 100);
-                    return (
-                      <View key={item.label} style={s.expenseChartRow}>
-                        <View style={[s.expenseChartDot, { backgroundColor: item.color }]} />
-                        <Text style={s.expenseChartLabel}>{item.label}</Text>
-                        <View style={s.expenseChartBarWrap}>
-                          <View style={[s.expenseChartBarFill, { flex: item.amount / total, backgroundColor: item.color + '40' }]} />
-                          <View style={{ flex: 1 - item.amount / total }} />
-                        </View>
-                        <Text style={s.expenseChartPct}>{pct}%</Text>
-                        <Text style={s.expenseChartAmt}>{item.amount.toLocaleString('tr-TR')} {currency}</Text>
-                      </View>
-                    );
-                  })}
-                </View>
-
-                <View style={s.expenseChartFooter}>
-                  <Text style={s.expenseChartFooterLabel}>{isTr ? 'Toplam' : 'Total'}</Text>
-                  <Text style={s.expenseChartFooterValue}>{total.toLocaleString('tr-TR')} {currency}</Text>
-                </View>
-              </>
-            );
-          })() : (
-            <View style={s.expenseChartEmpty}>
-              <Text style={s.expenseChartEmptyText}>
-                {isTr
-                  ? 'Veteriner ziyareti ekleyince harcama özeti burada görünür.'
-                  : 'Add a vet visit with a cost to see your expense breakdown here.'}
-              </Text>
-            </View>
-          )}
-        </View> : null}
-        </>)}
-
-      </ScrollView>
+      </View>
 
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* QUICK-ADD BOTTOM SHEET                                                */}
@@ -2255,7 +2066,7 @@ export default function HealthHubScreen({
           onAddRecord?.(payload);
         }}
       />
-    </View>
+    </ExpoLinearGradient>
   );
 }
 
@@ -2263,21 +2074,50 @@ export default function HealthHubScreen({
 const s = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#CCE3DE',
-  },
-  pageBgLayer: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: 40,
-    overflow: 'hidden',
+    backgroundColor: '#ECE9E6',
   },
   content: {
     paddingTop: 56,
     paddingHorizontal: 22,
-    paddingBottom: 132,
+    paddingBottom: 164,
   },
   heroBlock: {
-    marginBottom: 18,
+    marginBottom: 10,
     gap: 12,
+  },
+  topChrome: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 30,
+  },
+  topChromeSurface: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(115,139,134,0.20)',
+  },
+  headerColorBlendWrap: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  topBarRow: {
+    paddingHorizontal: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  topBarTitle: {
+    flex: 1,
+    textAlign: 'left',
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '800',
+    color: '#24342d',
+    letterSpacing: -1,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -2293,13 +2133,6 @@ const s = StyleSheet.create({
     fontWeight: '800',
     color: '#24342d',
     letterSpacing: -1,
-  },
-  heroDescription: {
-    marginTop: 8,
-    fontSize: 14,
-    lineHeight: 21,
-    fontWeight: '500',
-    color: 'rgba(48,51,46,0.72)',
   },
   heroActionButton: {
     width: 44,
@@ -2379,14 +2212,15 @@ const s = StyleSheet.create({
     flexWrap: 'wrap',
     justifyContent: 'space-between',
     rowGap: 14,
+    marginBottom: 12,
   },
   moduleCardGridItem: {
     marginBottom: 0,
   },
   documentsFullWidthWrap: {
     width: '100%',
-    marginTop: 2,
-    marginBottom: 26,
+    marginTop: 8,
+    marginBottom: 22,
   },
   moduleCard: {
     minHeight: 206,
@@ -2432,13 +2266,13 @@ const s = StyleSheet.create({
   moduleCardContent: {
     flex: 1,
     marginTop: 10,
-    paddingBottom: 34,
+    paddingBottom: 28,
     gap: 8,
     justifyContent: 'space-between',
   },
   moduleCardHeaderRow: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 10,
   },
   moduleCardHeaderText: {
@@ -2470,7 +2304,7 @@ const s = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   moduleDateBlock: {
-    marginTop: 6,
+    marginTop: 4,
     gap: 0,
   },
   moduleDateRow: {
@@ -2484,9 +2318,9 @@ const s = StyleSheet.create({
     gap: 8,
   },
   moduleDateBadge: {
-    width: 72,
-    minHeight: 72,
-    borderRadius: 16,
+    width: 66,
+    minHeight: 66,
+    borderRadius: 14,
     backgroundColor: 'rgba(255,255,255,0.10)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.18)',
@@ -2661,7 +2495,23 @@ const s = StyleSheet.create({
     color: 'rgba(94,105,77,0.84)',
   },
   documentCard: {
-    minHeight: 160,
+    minHeight: 112,
+    borderRadius: 24,
+  },
+  documentCardContent: {
+    marginTop: 0,
+    paddingBottom: 2,
+    gap: 5,
+    justifyContent: 'flex-start',
+  },
+  documentMetricBlock: {
+    marginTop: 2,
+    gap: 2,
+  },
+  documentCardFooter: {
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
   },
   documentCardLight: {
     borderWidth: 1,
@@ -2713,7 +2563,10 @@ const s = StyleSheet.create({
     color: '#5a625d',
   },
   sectionBlockLast: {
-    marginBottom: 8,
+    marginBottom: 18,
+  },
+  breedSectionBlock: {
+    marginTop: 4,
   },
   sectionHeaderCompact: {
     flexDirection: 'row',
@@ -2731,12 +2584,6 @@ const s = StyleSheet.create({
     fontWeight: '800',
     color: '#24342d',
     letterSpacing: -0.5,
-  },
-  sectionSubtitle: {
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '500',
-    color: 'rgba(48,51,46,0.60)',
   },
   sectionMetaText: {
     fontSize: 12,
@@ -3052,39 +2899,8 @@ const s = StyleSheet.create({
   },
 
   // Header
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    marginBottom: 18,
-  },
-  headerAddBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: 'rgba(127,196,184,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(127,196,184,0.20)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
   headerAddBtnPressed: {
     backgroundColor: 'rgba(127,196,184,0.18)',
-  },
-  headerLabel: {
-    fontSize: 13,
-    fontWeight: '700',
-    letterSpacing: 1.8,
-    color: 'rgba(181,226,229,0.78)',
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  headerTitle: {
-    fontSize: 40,
-    fontWeight: '900',
-    color: '#f1fbfc',
-    letterSpacing: -1.2,
-    lineHeight: 44,
   },
   addBtn: {
     height: 40,
@@ -3422,182 +3238,6 @@ const s = StyleSheet.create({
     opacity: 0.7,
   },
 
-  // Expense chart card
-  expenseChartCard: {
-    borderRadius: 22,
-    backgroundColor: '#eef6ef',
-    borderWidth: 1,
-    borderColor: '#d4e8d6',
-    padding: 18,
-    gap: 14,
-    shadowColor: '#47664a',
-    shadowOpacity: 0.10,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
-  },
-  expenseChartHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  expenseChartTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: '#30332e',
-    letterSpacing: 0.2,
-  },
-  expenseChartYearPill: {
-    borderRadius: 8,
-    backgroundColor: '#eef6ef',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  expenseChartYearText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#47664a',
-  },
-  expenseStackBar: {
-    flexDirection: 'row',
-    height: 10,
-    borderRadius: 6,
-    overflow: 'hidden',
-    backgroundColor: '#cde5cf',
-    gap: 2,
-  },
-  expenseStackSegment: {
-    height: '100%',
-  },
-  expenseStackFirst: {
-    borderTopLeftRadius: 6,
-    borderBottomLeftRadius: 6,
-  },
-  expenseStackLast: {
-    borderTopRightRadius: 6,
-    borderBottomRightRadius: 6,
-  },
-  expenseChartRows: {
-    gap: 10,
-  },
-  expenseChartRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  expenseChartDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    flexShrink: 0,
-  },
-  expenseChartLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#5d605a',
-    width: 60,
-    flexShrink: 0,
-  },
-  expenseChartBarWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    height: 6,
-    borderRadius: 3,
-    overflow: 'hidden',
-    backgroundColor: '#cde5cf',
-  },
-  expenseChartBarFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  expenseChartPct: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#9a9c95',
-    width: 32,
-    textAlign: 'right',
-    flexShrink: 0,
-  },
-  expenseChartAmt: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#30332e',
-    width: 80,
-    textAlign: 'right',
-    flexShrink: 0,
-  },
-  expenseChartFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#c8deca',
-    paddingTop: 10,
-  },
-  expenseChartFooterLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#5d605a',
-  },
-  expenseChartFooterValue: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: '#30332e',
-  },
-  expenseChartEmpty: {
-    paddingVertical: 20,
-    alignItems: 'center',
-  },
-  expenseChartEmptyText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#5d7c60',
-    textAlign: 'center',
-    lineHeight: 19,
-    opacity: 0.75,
-  },
-
-  // Section headers
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    gap: 12,
-    marginBottom: 10,
-  },
-  sectionHeaderRowSpaced: {
-    marginTop: 8,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1.8,
-    color: 'rgba(196,222,234,0.78)',
-    textTransform: 'uppercase',
-  },
-  sectionLabelAreas: {
-    color: 'rgba(143,223,223,0.92)',
-  },
-  sectionLabelDocs: {
-    color: 'rgba(184,205,214,0.88)',
-  },
-  sectionLabelMeds: {
-    color: 'rgba(139,210,196,0.92)',
-  },
-  sectionHeaderLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: 'rgba(189,216,227,0.18)',
-  },
-  sectionHeaderLineAreas: {
-    backgroundColor: 'rgba(143,223,223,0.24)',
-  },
-  sectionHeaderLineDocs: {
-    backgroundColor: 'rgba(184,205,214,0.22)',
-  },
-  sectionHeaderLineMeds: {
-    backgroundColor: 'rgba(139,210,196,0.28)',
-  },
   timelineCountText: {
     fontSize: 11,
     fontWeight: '600',
@@ -3605,36 +3245,6 @@ const s = StyleSheet.create({
   },
 
   // Category cards
-  categoryList: {
-    backgroundColor: 'rgba(255,255,255,0.035)',
-    borderRadius: 24,
-    marginBottom: 22,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(170,222,222,0.08)',
-    shadowColor: '#07151b',
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 3,
-  },
-  categoryCard: {
-    position: 'relative',
-    overflow: 'hidden',
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 14,
-  },
-  categoryCardPressed: {
-    transform: [{ scale: 0.992 }],
-    opacity: 0.95,
-  },
-  categoryCardDividerSoft: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(225,247,247,0.08)',
-  },
   categoryCardDivider: {
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: C.surfaceContainer,
@@ -3645,166 +3255,23 @@ const s = StyleSheet.create({
   vaccineCategoryCardDivider: {
     borderBottomColor: 'rgba(255,255,255,0.2)',
   },
-  rowGradientFill: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  categoryIconBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    borderWidth: 1,
-    borderColor: 'rgba(231,250,249,0.22)',
-    shadowOpacity: 0.26,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 7 },
-  },
   vaccineCategoryIconBox: {
     borderColor: 'rgba(255,255,255,0.25)',
-  },
-  categoryCardBody: {
-    flex: 1,
-    gap: 5,
-  },
-  categoryCardTitle: {
-    fontSize: 16.5,
-    fontWeight: '800',
-    color: C.onSurface,
-    letterSpacing: -0.35,
   },
   vaccineCategoryTitle: {
     color: '#ecfffb',
   },
-  categoryCardSub: {
-    fontSize: 12.5,
-    fontWeight: '500',
-    color: C.onSurfaceVariant,
-    lineHeight: 18,
-  },
   vaccineCategorySub: {
     color: 'rgba(236,255,251,0.84)',
-  },
-  vaultPreviewText: {
-    marginTop: 4,
-    fontSize: 12,
-    lineHeight: 16,
-    color: 'rgba(225,238,243,0.78)',
-    fontWeight: '600',
-  },
-  categoryCardRight: {
-    alignItems: 'flex-end',
-    gap: 6,
-    minWidth: 92,
-  },
-  countBadge: {
-    backgroundColor: C.surfaceContainer,
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(235,251,251,0.22)',
   },
   vaccineCountBadge: {
     backgroundColor: 'rgba(255,255,255,0.2)',
   },
-  countBadgeText: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: C.primary,
-  },
   vaccineCountBadgeText: {
     color: '#ecfffb',
   },
-  categoryStatusText: {
-    fontSize: 10.5,
-    fontWeight: '700',
-    color: C.onSurfaceVariant,
-    maxWidth: 94,
-    textAlign: 'right',
-  },
   vaccineCategoryStatusText: {
     color: 'rgba(236,255,251,0.84)',
-  },
-  vaultCtaText: {
-    fontSize: 11.5,
-    fontWeight: '800',
-    color: '#d9eef4',
-    letterSpacing: 0.15,
-  },
-
-  // Medication cards
-  medCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: C.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    padding: 12,
-    gap: 10,
-    marginBottom: 8,
-  },
-  medIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: '#f3eaf9',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  medBody: {
-    flex: 1,
-    gap: 2,
-  },
-  medName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: C.onSurface,
-  },
-  medSub: {
-    fontSize: 12,
-    color: C.onSurfaceVariant,
-  },
-  medPausedPill: {
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-    backgroundColor: '#fdf4e3',
-    borderWidth: 1,
-    borderColor: 'rgba(180,130,0,0.2)',
-  },
-  medPausedText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#8a6800',
-  },
-  medActions: {
-    flexDirection: 'row',
-    gap: 6,
-  },
-  medCompleteBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: '#e9ffe6',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(58,110,69,0.15)',
-  },
-  medDeleteBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: '#fdf0ef',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(192,57,43,0.15)',
   },
 
   // Filter chips

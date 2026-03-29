@@ -465,15 +465,15 @@ export default function HealthRecordsScreen({
             {
               paddingTop: getStickyHeaderContentTop(topInset),
             },
-          ]}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={!swipePanResponder.isSwiping}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true },
-          )}
-          scrollEventThrottle={16}
-        >
+        ]}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={24}
+        directionalLockEnabled
+      >
           {/* ── Header ─────────────────────────────────────────────────────── */}
           <View style={styles.headerRow}>
             <Pressable style={styles.navCircle} onPress={onBack}>
@@ -600,6 +600,8 @@ export default function HealthRecordsScreen({
           topInset={topInset}
           scrollY={scrollY}
           titleColor="#2f3634"
+          overlayColors={['rgba(227,209,167,0.56)', 'rgba(227,209,167,0.38)', 'rgba(227,209,167,0.18)', 'rgba(227,209,167,0)']}
+          borderColor="rgba(171,150,107,0.24)"
           leftSlot={(
             <Pressable style={styles.navCircle} onPress={onBack}>
               <Icon kind="back" size={22} color="#5d605a" />

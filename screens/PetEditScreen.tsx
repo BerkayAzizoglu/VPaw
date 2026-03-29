@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
@@ -480,24 +480,24 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
 
     if (requiresConfirm) {
       const confirmTitle = field === 'name'
-        ? (isTr ? 'İsmi güncelle?' : 'Apply name update?')
+        ? (isTr ? 'Ä°smi gÃ¼ncelle?' : 'Apply name update?')
         : field === 'microchip'
-          ? (isTr ? 'Mikroçipi güncelle?' : 'Apply microchip update?')
+          ? (isTr ? 'MikroÃ§ipi gÃ¼ncelle?' : 'Apply microchip update?')
           : field === 'birthDate'
-          ? (isTr ? 'Doğum tarihini güncelle?' : 'Apply birth date change?')
-          : (isTr ? 'Temel bilgiyi güncelle?' : 'Apply this basic info change?');
+          ? (isTr ? 'DoÄŸum tarihini gÃ¼ncelle?' : 'Apply birth date change?')
+          : (isTr ? 'Temel bilgiyi gÃ¼ncelle?' : 'Apply this basic info change?');
       const confirmMessage = field === 'name'
-        ? (isTr ? 'İsim değişikliği geçmiş kayıtlarla eşleşmeyi etkileyebilir. Devam edilsin mi?' : 'Changing the pet name can affect how past records are matched. Continue?')
+        ? (isTr ? 'Ä°sim deÄŸiÅŸikliÄŸi geÃ§miÅŸ kayÄ±tlarla eÅŸleÅŸmeyi etkileyebilir. Devam edilsin mi?' : 'Changing the pet name can affect how past records are matched. Continue?')
         : field === 'microchip'
-          ? (isTr ? 'Mikroçip değişikliği resmi kayıt eşleşmesini etkileyebilir. Devam edilsin mi?' : 'Changing the microchip can affect official record matching. Continue?')
+          ? (isTr ? 'MikroÃ§ip deÄŸiÅŸikliÄŸi resmi kayÄ±t eÅŸleÅŸmesini etkileyebilir. Devam edilsin mi?' : 'Changing the microchip can affect official record matching. Continue?')
           : field === 'birthDate'
-          ? (isTr ? 'Doğum tarihi değişikliği yaş hesabını ve özetleri etkileyebilir. Devam edilsin mi?' : 'Changing birth date updates age calculations and can affect summaries/insights for this pet profile. Continue?')
-          : (isTr ? 'Bu değişiklik bu profilin özet ve içgörülerini etkileyebilir. Devam edilsin mi?' : 'This update can affect summaries and insights for this pet profile. Continue?');
+          ? (isTr ? 'DoÄŸum tarihi deÄŸiÅŸikliÄŸi yaÅŸ hesabÄ±nÄ± ve Ã¶zetleri etkileyebilir. Devam edilsin mi?' : 'Changing birth date updates age calculations and can affect summaries/insights for this pet profile. Continue?')
+          : (isTr ? 'Bu deÄŸiÅŸiklik bu profilin Ã¶zet ve iÃ§gÃ¶rÃ¼lerini etkileyebilir. Devam edilsin mi?' : 'This update can affect summaries and insights for this pet profile. Continue?');
       Alert.alert(
         confirmTitle,
         confirmMessage,
         [
-          { text: isTr ? 'İptal' : 'Cancel', style: 'cancel' },
+          { text: isTr ? 'Ä°ptal' : 'Cancel', style: 'cancel' },
           { text: isTr ? 'Uygula' : 'Apply', style: 'destructive', onPress: () => setDraft(next) },
         ],
       );
@@ -555,27 +555,49 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
       <View style={styles.screen} {...swipePanResponder.panHandlers}>
         <StatusBar style="dark" />
         <LinearGradient
-          colors={['#CDEFE7', '#E2F6EE', '#F4ECD6']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
+          colors={['#f8f4ed', '#f1e3d3', '#deccb9']}
+          locations={[0, 0.48, 1]}
+          start={{ x: 0.06, y: 0.02 }}
+          end={{ x: 0.96, y: 0.98 }}
           style={StyleSheet.absoluteFill}
+        />
+        <LinearGradient
+          colors={['rgba(255,255,255,0)', 'rgba(255,252,247,0.94)', 'rgba(255,255,255,0)']}
+          locations={[0, 0.5, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.ribbonPrimary}
+        />
+        <LinearGradient
+          colors={['rgba(255,255,255,0)', 'rgba(255,248,236,0.72)', 'rgba(255,255,255,0)']}
+          locations={[0, 0.5, 1]}
+          start={{ x: 0, y: 0.1 }}
+          end={{ x: 1, y: 0.9 }}
+          style={styles.ribbonSecondary}
+        />
+        <LinearGradient
+          colors={['rgba(255,255,255,0)', 'rgba(255,243,224,0.68)', 'rgba(255,255,255,0)']}
+          locations={[0, 0.45, 1]}
+          start={{ x: 0.1, y: 0 }}
+          end={{ x: 0.9, y: 1 }}
+          style={styles.ribbonAccent}
         />
         <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
           <View style={styles.editTopRow}>
             <Pressable style={styles.editCircleAction} onPress={onBack}>
-              <X size={20} color="#2f605c" strokeWidth={2.4} />
+              <X size={20} color="#5d4537" strokeWidth={2.4} />
             </Pressable>
             <Pressable style={[styles.editCircleAction, styles.editSaveAction]} onPress={handleSave}>
-              <Check size={20} color="#2f605c" strokeWidth={2.7} />
+              <Check size={20} color="#5d4537" strokeWidth={2.7} />
             </Pressable>
           </View>
 
           <View style={styles.editHeaderBlock}>
-            <Text style={styles.editHeaderEyebrow}>{isTr ? 'PROF�L� D�ZENLE' : 'EDIT PROFILE'}</Text>
-            <Text style={styles.editHeaderTitle}>{isTr ? `${draft.name} D�zenle` : `Edit ${draft.name}`}</Text>
+            <Text style={styles.editHeaderEyebrow}>{isTr ? 'PROFİLİ DÜZENLE' : 'EDIT PROFILE'}</Text>
+            <Text style={styles.editHeaderTitle}>{isTr ? `${draft.name} Düzenle` : `Edit ${draft.name}`}</Text>
             <Text style={styles.editHeaderSub}>
               {isTr
-                ? 'Temel profil alanlar�n� sakin ve odakl� bir d�zenleme ak���nda g�ncelle.'
+                ? 'Temel profil alanlarını sakin ve odaklı bir düzenleme akışında güncelle.'
                 : 'Update core profile details in one calm, focused editing flow.'}
             </Text>
           </View>
@@ -591,7 +613,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
                   </View>
                   <View style={styles.editHeroChip}>
                     <Text style={styles.editHeroChipText}>
-                      {draft.gender === 'female' ? (isTr ? 'Di�i' : 'Female') : (isTr ? 'Erkek' : 'Male')}
+                      {draft.gender === 'female' ? (isTr ? 'Dişi' : 'Female') : (isTr ? 'Erkek' : 'Male')}
                     </Text>
                   </View>
                 </View>
@@ -604,7 +626,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
               <Text style={styles.editInsightLabel}>PROFILE NOTE</Text>
               <Text style={styles.editInsightText}>
                 {isTr
-                  ? 'Temel profil alanlar�n� do�ru tutmak, �zetler, �rk i�g�r�leri ve bak�m �nerileri i�in daha temiz veri sa�lar.'
+                  ? 'Temel profil alanlarını doğru tutmak, özetler, ırk içgörüleri ve bakım önerileri için daha temiz veri sağlar.'
                   : 'Keeping core profile fields accurate gives cleaner data for summaries, breed insights, and care suggestions.'}
               </Text>
             </View>
@@ -612,28 +634,28 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
 
           <Text style={styles.editSectionTitle}>{isTr ? 'Temel Bilgiler' : 'Basic Info'}</Text>
           <View style={styles.editSectionCard}>
-            <InfoRow label={isTr ? '�sim' : 'Name'} value={draft.name} onPress={() => { setNameDraft(draft.name); setPickerField('name'); }} />
-            <InfoRow label={isTr ? 'Hayvan T�r�' : 'Pet Type'} value={draft.petType} onPress={() => setPickerField('petType')} />
-            <InfoRow label={isTr ? 'Cinsiyet' : 'Gender'} value={draft.gender === 'female' ? (isTr ? 'Di�i' : 'Female') : (isTr ? 'Erkek' : 'Male')} onPress={() => setPickerField('gender')} />
+            <InfoRow label={isTr ? 'İsim' : 'Name'} value={draft.name} onPress={() => { setNameDraft(draft.name); setPickerField('name'); }} />
+            <InfoRow label={isTr ? 'Hayvan Türü' : 'Pet Type'} value={draft.petType} onPress={() => setPickerField('petType')} />
+            <InfoRow label={isTr ? 'Cinsiyet' : 'Gender'} value={draft.gender === 'female' ? (isTr ? 'Dişi' : 'Female') : (isTr ? 'Erkek' : 'Male')} onPress={() => setPickerField('gender')} />
             <InfoRow label={isTr ? 'Irk' : 'Breed'} value={draft.breed} onPress={() => setPickerField('breed')} />
-            <InfoRow label={isTr ? 'T�y Deseni' : 'Coat Pattern'} value={draft.coatPattern} onPress={() => setPickerField('coatPattern')} noBorder />
+            <InfoRow label={isTr ? 'Tüy Deseni' : 'Coat Pattern'} value={draft.coatPattern} onPress={() => setPickerField('coatPattern')} noBorder />
           </View>
 
-          <Text style={styles.editSectionTitle}>{isTr ? 'Kimlik Detaylar�' : 'Identity Details'}</Text>
+          <Text style={styles.editSectionTitle}>{isTr ? 'Kimlik Detayları' : 'Identity Details'}</Text>
           <View style={styles.editSectionCard}>
-            <InfoRow label={isTr ? 'Ya�' : 'Age'} value={formatAgeLabel(draft.birthDate)} onPress={() => { setBirthPicker(parseBirthDate(draft.birthDate)); setPickerField('birthDate'); }} />
-            <InfoRow label={isTr ? 'Mikro�ip' : 'Microchip'} value={draft.microchip || '-'} onPress={() => { setMicrochipDraft(draft.microchip || ''); setPickerField('microchip'); }} noBorder />
+            <InfoRow label={isTr ? 'Yaş' : 'Age'} value={formatAgeLabel(draft.birthDate)} onPress={() => { setBirthPicker(parseBirthDate(draft.birthDate)); setPickerField('birthDate'); }} />
+            <InfoRow label={isTr ? 'Mikroçip' : 'Microchip'} value={draft.microchip || '-'} onPress={() => { setMicrochipDraft(draft.microchip || ''); setPickerField('microchip'); }} noBorder />
           </View>
 
-          <Text style={styles.editSectionTitle}>{isTr ? 'Sa�l�k Se�imleri' : 'Health Selections'}</Text>
+          <Text style={styles.editSectionTitle}>{isTr ? 'Sağlık Seçimleri' : 'Health Selections'}</Text>
           <View style={styles.editSectionCard}>
-            <InfoRow label={isTr ? 'A��lar' : 'Vaccinations'} value={vaccineSummary} onPress={() => setPickerField('vaccines')} />
+            <InfoRow label={isTr ? 'Aşılar' : 'Vaccinations'} value={vaccineSummary} onPress={() => setPickerField('vaccines')} />
             <InfoRow label={isTr ? 'Ameliyatlar' : 'Surgeries'} value={surgerySummary} onPress={() => setPickerField('surgeries')} />
             <InfoRow label={isTr ? 'Alerjiler' : 'Allergies'} value={allergySummary} onPress={() => setPickerField('allergies')} />
-            <InfoRow label={isTr ? '�eker' : 'Diabetes'} value={diabetesSummary} onPress={() => setPickerField('diabetes')} />
+            <InfoRow label={isTr ? 'Şeker' : 'Diabetes'} value={diabetesSummary} onPress={() => setPickerField('diabetes')} />
 
             <View style={styles.toggleRow}>
-              <Text style={styles.label}>{isTr ? '�� parazit rutini' : 'Internal parasite routine'}</Text>
+              <Text style={styles.label}>{isTr ? 'İç parazit rutini' : 'Internal parasite routine'}</Text>
               <PawSwitch
                 value={draft.routineCare.internalParasite.enabled}
                 onValueChange={(v) =>
@@ -646,7 +668,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
             </View>
 
             <View style={[styles.toggleRow, styles.noBorder]}>
-              <Text style={styles.label}>{isTr ? 'D�� parazit rutini' : 'External parasite routine'}</Text>
+              <Text style={styles.label}>{isTr ? 'Dış parazit rutini' : 'External parasite routine'}</Text>
               <PawSwitch
                 value={draft.routineCare.externalParasite.enabled}
                 onValueChange={(v) =>
@@ -667,32 +689,32 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
             <Pressable style={styles.modalCard} onPress={() => {}}>
               <Text style={styles.modalTitle}>
                 {pickerField === 'name'
-                  ? (isTr ? '�sim D�zenle' : 'Edit Name')
+                  ? (isTr ? 'İsim Düzenle' : 'Edit Name')
                   : pickerField === 'microchip'
-                    ? (isTr ? 'Mikro�ip D�zenle' : 'Edit Microchip')
+                    ? (isTr ? 'Mikroçip Düzenle' : 'Edit Microchip')
                     : pickerField === 'birthDate'
-                      ? (isTr ? 'Do�um Tarihi' : 'Birth Date')
+                      ? (isTr ? 'Doğum Tarihi' : 'Birth Date')
                       : pickerField === 'photo'
-                        ? (isTr ? 'Foto�raf' : 'Photo')
+                        ? (isTr ? 'Fotoğraf' : 'Photo')
                         : pickerField === 'coatPattern'
-                          ? (isTr ? 'T�y Deseni' : 'Coat Pattern')
+                          ? (isTr ? 'Tüy Deseni' : 'Coat Pattern')
                           : pickerField === 'vaccines'
-                            ? (isTr ? 'A��lar' : 'Vaccinations')
+                            ? (isTr ? 'Aşılar' : 'Vaccinations')
                             : pickerField === 'surgeries'
                               ? (isTr ? 'Ameliyatlar' : 'Surgeries')
                               : pickerField === 'allergies'
                                 ? (isTr ? 'Alerjiler' : 'Allergies')
                                 : pickerField === 'diabetes'
                                   ? (isTr ? 'Diyabet' : 'Diabetes')
-                                  : (isTr ? 'Se�im' : 'Option')}
+                                  : (isTr ? 'Seçim' : 'Option')}
               </Text>
               {pickerField === 'name' ? (
                 <View style={styles.nameEditorWrap}>
-                  <Text style={styles.nameEditorHint}>{isTr ? 'Evcil dostunun ad�n� g�ncelle.' : "Update your pet's display name."}</Text>
+                  <Text style={styles.nameEditorHint}>{isTr ? 'Evcil dostunun adını güncelle.' : "Update your pet's display name."}</Text>
                   <TextInput
                     value={nameDraft}
                     onChangeText={setNameDraft}
-                    placeholder={isTr ? '�rn. Milo' : 'e.g. Milo'}
+                    placeholder={isTr ? 'Örn. Milo' : 'e.g. Milo'}
                     placeholderTextColor="rgba(45,45,45,0.35)"
                     autoFocus
                     maxLength={24}
@@ -701,16 +723,16 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
                     style={styles.nameEditorInput}
                   />
                   <Pressable style={styles.applyDateBtn} onPress={() => applySelection(nameDraft)}>
-                    <Text style={styles.applyDateBtnText}>{isTr ? '�smi Uygula' : 'Apply Name'}</Text>
+                    <Text style={styles.applyDateBtnText}>{isTr ? 'İsmi Uygula' : 'Apply Name'}</Text>
                   </Pressable>
                 </View>
               ) : pickerField === 'microchip' ? (
                 <View style={styles.nameEditorWrap}>
-                  <Text style={styles.nameEditorHint}>{isTr ? 'Mikro�ip numaras�n� g�ncelle.' : 'Update the microchip number.'}</Text>
+                  <Text style={styles.nameEditorHint}>{isTr ? 'Mikroçip numarasını güncelle.' : 'Update the microchip number.'}</Text>
                   <TextInput
                     value={microchipDraft}
                     onChangeText={setMicrochipDraft}
-                    placeholder={isTr ? '�rn. 985 112 004 883' : 'e.g. 985 112 004 883'}
+                    placeholder={isTr ? 'Örn. 985 112 004 883' : 'e.g. 985 112 004 883'}
                     placeholderTextColor="rgba(45,45,45,0.35)"
                     autoFocus
                     maxLength={32}
@@ -720,15 +742,15 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
                     style={styles.nameEditorInput}
                   />
                   <Pressable style={styles.applyDateBtn} onPress={() => applySelection(microchipDraft)}>
-                    <Text style={styles.applyDateBtnText}>{isTr ? 'Mikro�ipi Uygula' : 'Apply Microchip'}</Text>
+                    <Text style={styles.applyDateBtnText}>{isTr ? 'Mikroçipi Uygula' : 'Apply Microchip'}</Text>
                   </Pressable>
                 </View>
               ) : pickerField === 'birthDate' ? (
                 <View>
                   <View style={styles.dateHeadRow}>
-                    <Text style={styles.dateHeadLabel}>{isTr ? 'G�n' : 'Day'}</Text>
+                    <Text style={styles.dateHeadLabel}>{isTr ? 'Gün' : 'Day'}</Text>
                     <Text style={styles.dateHeadLabel}>{isTr ? 'Ay' : 'Month'}</Text>
-                    <Text style={styles.dateHeadLabel}>{isTr ? 'Y�l' : 'Year'}</Text>
+                    <Text style={styles.dateHeadLabel}>{isTr ? 'Yıl' : 'Year'}</Text>
                   </View>
 
                   <View style={styles.datePickerRow}>
@@ -770,7 +792,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
                   </View>
 
                   <Pressable style={styles.applyDateBtn} onPress={() => applySelection(toBirthDateIso(birthPicker))}>
-                    <Text style={styles.applyDateBtnText}>{isTr ? 'Do�um Tarihini Uygula' : 'Apply Birth Date'}</Text>
+                    <Text style={styles.applyDateBtnText}>{isTr ? 'Doğum Tarihini Uygula' : 'Apply Birth Date'}</Text>
                   </Pressable>
                 </View>
               ) : (
@@ -791,7 +813,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
                       <Pressable key={item} style={styles.optionRow} onPress={() => applySelection(item)}>
                         {pickerField === 'photo' ? <Image source={{ uri: item }} style={styles.optionThumb} /> : null}
                         <Text style={styles.optionText} numberOfLines={1}>{item}</Text>
-                        {selected ? <Check size={16} color="#6e8f66" strokeWidth={2.7} /> : null}
+                        {selected ? <Check size={16} color="#8b6a53" strokeWidth={2.7} /> : null}
                       </Pressable>
                     );
                   })}
@@ -828,7 +850,7 @@ function InfoRow({ label, value, onPress, infoMessage, noBorder }: { label: stri
         <Text style={styles.value} numberOfLines={1}>{value}</Text>
         {onPress ? (
           <View style={styles.rowChevronWrap}>
-            <ChevronRight size={16} color="#4e7f79" strokeWidth={2.5} />
+            <ChevronRight size={16} color="#8b6a53" strokeWidth={2.5} />
           </View>
         ) : null}
       </View>
@@ -841,7 +863,7 @@ function PawSwitch({ value, onValueChange }: { value: boolean; onValueChange: (v
     <View style={styles.pawSwitchWrap}>
       {value ? (
         <View style={styles.pawMark} pointerEvents="none">
-          <PawPrint size={9} color="#5f7f59" strokeWidth={3.1} />
+          <PawPrint size={9} color="#86634d" strokeWidth={3.1} />
         </View>
       ) : null}
       <View style={styles.pawSwitchScale}>
@@ -849,7 +871,7 @@ function PawSwitch({ value, onValueChange }: { value: boolean; onValueChange: (v
           value={value}
           onValueChange={onValueChange}
           thumbColor={value ? '#ffffff' : '#f4f4f4'}
-          trackColor={{ false: '#d8d8d8', true: '#6e8f66' }}
+          trackColor={{ false: '#d8d8d8', true: '#b89572' }}
           ios_backgroundColor="#d8d8d8"
         />
       </View>
@@ -860,12 +882,39 @@ function PawSwitch({ value, onValueChange }: { value: boolean; onValueChange: (v
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#f8f7f4',
+    backgroundColor: '#ead8c8',
   },
   content: {
     paddingHorizontal: 22,
     paddingTop: 60,
     paddingBottom: 44,
+  },
+  ribbonPrimary: {
+    position: 'absolute',
+    top: -40,
+    right: -40,
+    width: 240,
+    height: 1040,
+    opacity: 0.94,
+    transform: [{ rotate: '24deg' }],
+  },
+  ribbonSecondary: {
+    position: 'absolute',
+    top: 120,
+    left: 156,
+    width: 160,
+    height: 980,
+    opacity: 0.78,
+    transform: [{ rotate: '36deg' }],
+  },
+  ribbonAccent: {
+    position: 'absolute',
+    top: 280,
+    right: -20,
+    width: 110,
+    height: 680,
+    opacity: 0.52,
+    transform: [{ rotate: '17deg' }],
   },
   topRow: {
     flexDirection: 'row',
@@ -970,7 +1019,7 @@ const styles = StyleSheet.create({
   row: {
     minHeight: 56,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(56,92,88,0.08)',
+    borderBottomColor: 'rgba(96,67,44,0.09)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1005,7 +1054,7 @@ const styles = StyleSheet.create({
   toggleRow: {
     minHeight: 56,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(56,92,88,0.08)',
+    borderBottomColor: 'rgba(96,67,44,0.09)',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1045,7 +1094,7 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 15,
     lineHeight: 20,
-    color: '#365753',
+    color: '#5e4638',
     fontWeight: '600',
   },
   infoDot: {
@@ -1074,7 +1123,7 @@ const styles = StyleSheet.create({
   value: {
     fontSize: 15,
     lineHeight: 20,
-    color: '#5b7470',
+    color: '#866b5a',
     fontWeight: '600',
     textAlign: 'right',
     flexShrink: 1,
@@ -1085,9 +1134,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(236,245,241,0.9)',
+    backgroundColor: 'rgba(255,248,239,0.86)',
     borderWidth: 1,
-    borderColor: 'rgba(109,152,146,0.14)',
+    borderColor: 'rgba(179,152,126,0.18)',
   },
   advancedHint: {
     marginTop: 2,
@@ -1129,17 +1178,17 @@ const styles = StyleSheet.create({
     borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.72)',
+    backgroundColor: 'rgba(255,250,244,0.78)',
     borderWidth: 1,
-    borderColor: 'rgba(30,74,71,0.10)',
-    shadowColor: '#7fc4b8',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    borderColor: 'rgba(179,152,126,0.16)',
+    shadowColor: '#8d6a4f',
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 3,
   },
   editSaveAction: {
-    backgroundColor: 'rgba(255,255,255,0.82)',
+    backgroundColor: 'rgba(255,248,240,0.88)',
   },
   editHeaderBlock: {
     marginBottom: 18,
@@ -1148,14 +1197,14 @@ const styles = StyleSheet.create({
   editHeaderEyebrow: {
     fontSize: 14,
     lineHeight: 18,
-    color: 'rgba(49,97,93,0.78)',
+    color: 'rgba(111,80,60,0.82)',
     fontWeight: '700',
     letterSpacing: 1.8,
   },
   editHeaderTitle: {
     fontSize: 36,
     lineHeight: 40,
-    color: '#143c39',
+    color: '#2a1710',
     fontWeight: '800',
     letterSpacing: -1,
   },
@@ -1163,18 +1212,18 @@ const styles = StyleSheet.create({
     maxWidth: '88%',
     fontSize: 14,
     lineHeight: 21,
-    color: 'rgba(67,96,92,0.72)',
+    color: 'rgba(103,80,64,0.74)',
     fontWeight: '500',
   },
   editHeroCard: {
-    borderRadius: 30,
-    backgroundColor: 'rgba(250,252,251,0.88)',
+    borderRadius: 34,
+    backgroundColor: 'rgba(255,250,244,0.72)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.84)',
+    borderColor: 'rgba(255,255,255,0.68)',
     padding: 20,
-    shadowColor: '#82c8bb',
-    shadowOpacity: 0.09,
-    shadowRadius: 16,
+    shadowColor: '#7e5f47',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
     elevation: 5,
     marginBottom: 16,
@@ -1196,7 +1245,7 @@ const styles = StyleSheet.create({
   editHeroName: {
     fontSize: 30,
     lineHeight: 34,
-    color: '#163c39',
+    color: '#2a1710',
     fontWeight: '800',
     letterSpacing: -0.7,
   },
@@ -1210,26 +1259,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.72)',
+    backgroundColor: 'rgba(255,247,238,0.82)',
     borderWidth: 1,
-    borderColor: 'rgba(30,74,71,0.08)',
+    borderColor: 'rgba(179,152,126,0.16)',
   },
   editHeroChipText: {
     fontSize: 14,
     lineHeight: 18,
-    color: '#507470',
+    color: '#6c5241',
     fontWeight: '700',
   },
   editHeroBreed: {
     fontSize: 17,
     lineHeight: 22,
-    color: '#5d7672',
+    color: '#5f4939',
     fontWeight: '600',
   },
   editHeroAge: {
     fontSize: 15,
     lineHeight: 20,
-    color: '#728784',
+    color: '#866e5d',
     fontWeight: '600',
   },
   editInsightCard: {
@@ -1237,22 +1286,22 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     paddingHorizontal: 16,
     paddingVertical: 13,
-    backgroundColor: 'rgba(228,246,239,0.74)',
+    backgroundColor: 'rgba(255,246,235,0.74)',
     borderWidth: 1,
-    borderColor: 'rgba(117,183,171,0.16)',
+    borderColor: 'rgba(201,166,132,0.18)',
     gap: 8,
   },
   editInsightLabel: {
     fontSize: 12,
     lineHeight: 16,
-    color: '#3f7d73',
+    color: '#8b6a53',
     fontWeight: '800',
     letterSpacing: 1.4,
   },
   editInsightText: {
     fontSize: 15,
     lineHeight: 23,
-    color: '#3d5d59',
+    color: '#6b5444',
     fontWeight: '500',
   },
   editSectionTitle: {
@@ -1260,42 +1309,42 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontSize: 14,
     lineHeight: 18,
-    color: 'rgba(83,111,107,0.82)',
+    color: 'rgba(103,80,64,0.82)',
     fontWeight: '800',
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
   editSectionCard: {
     borderRadius: 24,
-    backgroundColor: 'rgba(250,252,251,0.90)',
+    backgroundColor: 'rgba(255,250,244,0.78)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.84)',
+    borderColor: 'rgba(255,255,255,0.68)',
     paddingHorizontal: 16,
     marginBottom: 16,
-    shadowColor: '#8bcfc2',
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
+    shadowColor: '#8d6a4f',
+    shadowOpacity: 0.06,
+    shadowRadius: 14,
     shadowOffset: { width: 0, height: 7 },
     elevation: 4,
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.26)',
+    backgroundColor: 'rgba(46,28,18,0.22)',
     justifyContent: 'center',
     paddingHorizontal: 22,
   },
   modalCard: {
     maxHeight: '72%',
     borderRadius: 24,
-    backgroundColor: '#fbfcfb',
+    backgroundColor: '#f9f2ea',
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.82)',
+    borderColor: 'rgba(255,255,255,0.78)',
   },
   modalTitle: {
     fontSize: 16,
     lineHeight: 22,
-    color: '#2d2d2d',
+    color: '#2a1710',
     fontWeight: '700',
     marginBottom: 8,
   },
@@ -1305,17 +1354,17 @@ const styles = StyleSheet.create({
   nameEditorHint: {
     fontSize: 13,
     lineHeight: 18,
-    color: '#8b8b88',
+    color: '#8a7261',
     fontWeight: '600',
   },
   nameEditorInput: {
     minHeight: 48,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
-    backgroundColor: '#fbfbfa',
+    borderColor: 'rgba(158,126,100,0.16)',
+    backgroundColor: 'rgba(255,250,245,0.96)',
     paddingHorizontal: 14,
-    color: '#2d2d2d',
+    color: '#2a1710',
     fontSize: 16,
     fontWeight: '600',
   },
@@ -1324,7 +1373,7 @@ const styles = StyleSheet.create({
   },
   optionRow: {
     minHeight: 44,
-    borderRadius: 10,
+    borderRadius: 14,
     paddingHorizontal: 10,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1334,7 +1383,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     lineHeight: 18,
-    color: '#2d2d2d',
+    color: '#3a2418',
   },
   optionThumb: {
     width: 34,
@@ -1351,17 +1400,17 @@ const styles = StyleSheet.create({
     minHeight: 42,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.08)',
-    backgroundColor: '#f7f7f7',
+    borderColor: 'rgba(158,126,100,0.14)',
+    backgroundColor: 'rgba(255,250,245,0.94)',
     paddingHorizontal: 10,
-    color: '#2d2d2d',
+    color: '#2a1710',
     fontSize: 14,
   },
   otherBtn: {
     minWidth: 62,
     minHeight: 42,
     borderRadius: 10,
-    backgroundColor: '#2d2d2d',
+    backgroundColor: '#8b6a53',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1382,7 +1431,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 12,
     lineHeight: 16,
-    color: '#8a8a8a',
+    color: '#8a7261',
     fontWeight: '700',
   },
   datePickerRow: {
@@ -1394,42 +1443,42 @@ const styles = StyleSheet.create({
     flex: 1,
     maxHeight: 190,
     borderRadius: 10,
-    backgroundColor: '#fafafa',
+    backgroundColor: 'rgba(255,249,243,0.92)',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: 'rgba(158,126,100,0.12)',
   },
   dateItem: {
     minHeight: 34,
     alignItems: 'center',
     justifyContent: 'center',
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.04)',
+    borderBottomColor: 'rgba(158,126,100,0.08)',
   },
   dateItemActive: {
-    backgroundColor: 'rgba(110,143,102,0.12)',
+    backgroundColor: 'rgba(201,166,132,0.16)',
   },
   dateItemText: {
     fontSize: 14,
     lineHeight: 18,
-    color: '#5f5f5f',
+    color: '#6f594a',
     fontWeight: '600',
   },
   dateItemTextActive: {
-    color: '#4f6d4b',
+    color: '#7b5d48',
     fontWeight: '700',
   },
   birthPreview: {
     textAlign: 'center',
     fontSize: 14,
     lineHeight: 18,
-    color: '#6b6b6b',
+    color: '#7b6556',
     fontWeight: '600',
     marginBottom: 10,
   },
   applyDateBtn: {
     height: 42,
     borderRadius: 12,
-    backgroundColor: '#2d2d2d',
+    backgroundColor: '#8b6a53',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1440,6 +1489,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 });
+
 
 
 

@@ -1,6 +1,8 @@
 ﻿import React from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
+  Animated,
+  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -8,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
@@ -124,6 +127,197 @@ function CheckPill() {
   );
 }
 
+function SceneTree({
+  x,
+  baseY,
+  scale = 1,
+  sway,
+  delay = 0,
+  depth = 'front',
+}: {
+  x: number;
+  baseY: number;
+  scale?: number;
+  sway: Animated.Value;
+  delay?: number;
+  depth?: 'front' | 'back';
+}) {
+  const translateX = sway.interpolate({
+    inputRange: [0, 1],
+    outputRange: [depth === 'front' ? -3 - delay * 0.2 : -1.5, depth === 'front' ? 3 + delay * 0.2 : 1.5],
+  });
+  const rotate = sway.interpolate({
+    inputRange: [0, 1],
+    outputRange: [depth === 'front' ? '-1.6deg' : '-0.9deg', depth === 'front' ? '1.6deg' : '0.9deg'],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.sceneTreeWrap,
+        {
+          left: x,
+          bottom: baseY,
+          transform: [{ translateX }, { rotate }, { scale }],
+          opacity: depth === 'front' ? 1 : 0.72,
+        },
+      ]}
+    >
+      <View style={[styles.sceneTreeTrunk, depth === 'back' && styles.sceneTreeTrunkBack]} />
+      <View style={[styles.sceneTreeCanopyLarge, depth === 'back' && styles.sceneTreeCanopyLargeBack]} />
+      <View style={[styles.sceneTreeCanopyMid, depth === 'back' && styles.sceneTreeCanopyMidBack]} />
+      <View style={[styles.sceneTreeCanopySmall, depth === 'back' && styles.sceneTreeCanopySmallBack]} />
+    </Animated.View>
+  );
+}
+
+function ScenePets({ drift }: { drift: Animated.Value }) {
+  const petShift = drift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-1.5, 1.5],
+  });
+  const petLift = drift.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -1.8],
+  });
+  const dogTail = drift.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['-8deg', '7deg'],
+  });
+
+  return (
+    <Animated.View style={[styles.scenePetsWrap, { transform: [{ translateX: petShift }, { translateY: petLift }] }]}>
+      <Svg width={138} height={92} viewBox="0 0 138 92" fill="none">
+        <Path d="M14 82C18 61 30 48 45 47C60 46 69 59 69 78V82H14Z" fill="#3d3227" />
+        <Circle cx="50" cy="34" r="13" fill="#3d3227" />
+        <Path d="M40 26L46 14L52 26" fill="#3d3227" />
+        <Path d="M48 25L56 16L58 28" fill="#3d3227" />
+        <Path d="M29 74C30 84 38 88 45 88C52 88 60 84 61 74" stroke="#6b5a48" strokeWidth={3} strokeLinecap="round" />
+
+        <Path d="M77 82C79 55 92 42 109 42C123 42 132 53 131 82H77Z" fill="#47392c" />
+        <Circle cx="108" cy="29" r="12" fill="#47392c" />
+        <Path d="M98 23L102 9L110 22" fill="#47392c" />
+        <Path d="M114 22L121 11L120 25" fill="#47392c" />
+        <Path d="M88 74C89 84 97 88 104 88C112 88 120 84 121 74" stroke="#74614d" strokeWidth={3} strokeLinecap="round" />
+      </Svg>
+      <Animated.View style={[styles.sceneDogTail, { transform: [{ rotate: dogTail }] }]} />
+    </Animated.View>
+  );
+}
+
+function PremiumHeroScene() {
+  const sway = React.useRef(new Animated.Value(0)).current;
+  const drift = React.useRef(new Animated.Value(0)).current;
+  const glow = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    const swayLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(sway, {
+          toValue: 1,
+          duration: 3600,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(sway, {
+          toValue: 0,
+          duration: 3600,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    const driftLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(drift, {
+          toValue: 1,
+          duration: 2900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(drift, {
+          toValue: 0,
+          duration: 2900,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    const glowLoop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, {
+          toValue: 1,
+          duration: 4200,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.timing(glow, {
+          toValue: 0,
+          duration: 4200,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    swayLoop.start();
+    driftLoop.start();
+    glowLoop.start();
+    return () => {
+      swayLoop.stop();
+      driftLoop.stop();
+      glowLoop.stop();
+    };
+  }, [drift, glow, sway]);
+
+  const sunScale = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.08],
+  });
+  const sunOpacity = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.52, 0.8],
+  });
+  const beamOpacity = glow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.18, 0.34],
+  });
+
+  return (
+    <View style={styles.heroImage}>
+      <ExpoLinearGradient
+        colors={['#6a8d52', '#6ea04f', '#87aa5d', '#d2a25d']}
+        locations={[0, 0.34, 0.7, 1]}
+        start={{ x: 0.05, y: 0.15 }}
+        end={{ x: 0.95, y: 0.85 }}
+        style={StyleSheet.absoluteFillObject}
+      />
+
+      <Animated.View style={[styles.sceneSunGlow, { opacity: sunOpacity, transform: [{ scale: sunScale }] }]} />
+      <Animated.View style={[styles.sceneSunBeamWide, { opacity: beamOpacity }]} />
+      <Animated.View style={[styles.sceneSunBeamNarrow, { opacity: beamOpacity }]} />
+
+      <View style={styles.sceneHillBack} />
+      <View style={styles.sceneHillMid} />
+      <View style={styles.sceneMeadow} />
+
+      <SceneTree x={-6} baseY={126} scale={1.28} sway={sway} depth="front" />
+      <SceneTree x={28} baseY={150} scale={0.94} sway={sway} delay={2} depth="back" />
+      <SceneTree x={250} baseY={130} scale={1.22} sway={sway} delay={1} depth="front" />
+      <SceneTree x={286} baseY={150} scale={0.9} sway={sway} delay={3} depth="back" />
+
+      <View style={styles.sceneRoadWrap}>
+        <View style={styles.sceneRoad} />
+        <View style={styles.sceneRoadLine} />
+      </View>
+
+      <ScenePets drift={drift} />
+
+      <View style={styles.sceneVignetteTop} />
+      <View style={styles.sceneVignetteBottom} />
+    </View>
+  );
+}
+
 export default function PremiumScreen({ onBack, onUpgrade }: PremiumScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).premium;
@@ -149,7 +343,7 @@ export default function PremiumScreen({ onBack, onUpgrade }: PremiumScreenProps)
       <StatusBar style="light" />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <View style={styles.heroImage} />
+        <PremiumHeroScene />
 
         <View style={styles.mainContent}>
           <View style={styles.badge}>
@@ -220,7 +414,180 @@ const styles = StyleSheet.create({
   heroImage: {
     height: 384,
     width: '100%',
-    backgroundColor: '#c9a96e',
+    overflow: 'hidden',
+    backgroundColor: '#7aa05e',
+  },
+  sceneSunGlow: {
+    position: 'absolute',
+    top: 58,
+    right: 56,
+    width: 208,
+    height: 208,
+    borderRadius: 104,
+    backgroundColor: 'rgba(255, 191, 101, 0.58)',
+    shadowColor: '#ffcb7d',
+    shadowOpacity: 0.42,
+    shadowRadius: 44,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  sceneSunBeamWide: {
+    position: 'absolute',
+    top: -24,
+    right: 56,
+    width: 188,
+    height: 430,
+    backgroundColor: 'rgba(255, 230, 164, 0.18)',
+    transform: [{ rotate: '16deg' }],
+  },
+  sceneSunBeamNarrow: {
+    position: 'absolute',
+    top: -10,
+    right: 118,
+    width: 90,
+    height: 420,
+    backgroundColor: 'rgba(255, 245, 214, 0.18)',
+    transform: [{ rotate: '11deg' }],
+  },
+  sceneHillBack: {
+    position: 'absolute',
+    left: -24,
+    right: -24,
+    bottom: 118,
+    height: 120,
+    borderTopLeftRadius: 120,
+    borderTopRightRadius: 140,
+    backgroundColor: 'rgba(87, 122, 57, 0.52)',
+  },
+  sceneHillMid: {
+    position: 'absolute',
+    left: -12,
+    right: -12,
+    bottom: 90,
+    height: 118,
+    borderTopLeftRadius: 110,
+    borderTopRightRadius: 132,
+    backgroundColor: 'rgba(96, 137, 63, 0.76)',
+  },
+  sceneMeadow: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 110,
+    backgroundColor: '#5f8c49',
+  },
+  sceneTreeWrap: {
+    position: 'absolute',
+    width: 84,
+    height: 170,
+    alignItems: 'center',
+  },
+  sceneTreeTrunk: {
+    position: 'absolute',
+    bottom: 0,
+    width: 14,
+    height: 62,
+    borderRadius: 8,
+    backgroundColor: '#675138',
+  },
+  sceneTreeTrunkBack: {
+    backgroundColor: '#70583c',
+  },
+  sceneTreeCanopyLarge: {
+    position: 'absolute',
+    bottom: 38,
+    width: 82,
+    height: 78,
+    borderRadius: 39,
+    backgroundColor: '#3f7035',
+  },
+  sceneTreeCanopyLargeBack: {
+    backgroundColor: '#5b8a48',
+  },
+  sceneTreeCanopyMid: {
+    position: 'absolute',
+    bottom: 72,
+    left: 10,
+    width: 62,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: '#467938',
+  },
+  sceneTreeCanopyMidBack: {
+    backgroundColor: '#689c54',
+  },
+  sceneTreeCanopySmall: {
+    position: 'absolute',
+    bottom: 96,
+    left: 24,
+    width: 36,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#6ca54d',
+  },
+  sceneTreeCanopySmallBack: {
+    backgroundColor: '#8aba66',
+  },
+  sceneRoadWrap: {
+    position: 'absolute',
+    left: '50%',
+    bottom: -2,
+    marginLeft: -90,
+    width: 180,
+    height: 150,
+    alignItems: 'center',
+  },
+  sceneRoad: {
+    width: 180,
+    height: 150,
+    borderTopLeftRadius: 120,
+    borderTopRightRadius: 120,
+    backgroundColor: '#826347',
+    transform: [{ perspective: 400 }, { rotateX: '66deg' }],
+  },
+  sceneRoadLine: {
+    position: 'absolute',
+    top: 44,
+    width: 8,
+    height: 76,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255, 231, 176, 0.34)',
+  },
+  scenePetsWrap: {
+    position: 'absolute',
+    left: '50%',
+    bottom: 62,
+    marginLeft: -69,
+    width: 138,
+    height: 92,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sceneDogTail: {
+    position: 'absolute',
+    right: 0,
+    top: 40,
+    width: 26,
+    height: 8,
+    borderRadius: 8,
+    backgroundColor: '#47392c',
+    transformOrigin: 'left center',
+  },
+  sceneVignetteTop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 92,
+    backgroundColor: 'rgba(24, 32, 15, 0.10)',
+  },
+  sceneVignetteBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 94,
+    backgroundColor: 'rgba(32, 40, 21, 0.10)',
   },
   mainContent: {
     marginTop: -80,
@@ -476,3 +843,4 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 });
+

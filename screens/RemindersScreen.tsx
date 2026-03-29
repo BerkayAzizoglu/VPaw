@@ -9,8 +9,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { BlurView } from 'expo-blur';
+import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
-import AppleTopBar, { TopBarCircleButton } from '../components/AppleTopBar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -41,6 +44,7 @@ type ReminderItem = {
 };
 
 type RemindersScreenProps = {
+  scrollToTopSignal?: number;
   title?: string;
   today: ReminderItem[];
   upcoming: ReminderItem[];
@@ -380,6 +384,7 @@ function ReminderSectionEmpty({
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function RemindersScreen({
+  scrollToTopSignal = 0,
   today,
   upcoming,
   overdue,
@@ -398,6 +403,21 @@ export default function RemindersScreen({
   onCreate,
 }: RemindersScreenProps) {
   const isTr = locale === 'tr';
+  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const topInset = Math.max(insets.top, 14);
+  const topBarHeight = topInset + 56;
+  const topChromeHeight = topInset + 58;
+  const topChromeOpacity = scrollY.interpolate({
+    inputRange: [0, 8, 84],
+    outputRange: [0, 0.55, 1],
+    extrapolate: 'clamp',
+  });
+  const headerTitleScale = scrollY.interpolate({
+    inputRange: [0, 84, 180],
+    outputRange: [1.05, 0.97, 0.9],
+    extrapolate: 'clamp',
+  });
 
   // ── state ──
   const [createOpen, setCreateOpen] = useState(false);
@@ -420,6 +440,7 @@ export default function RemindersScreen({
   const [editError, setEditError] = useState('');
   const [editFocused, setEditFocused] = useState<'title' | 'date' | null>(null);
   const saveScale = useMemo(() => new Animated.Value(1), []);
+  const mainScrollRef = useRef<ScrollView | null>(null);
 
   const subtypeOptions = useMemo(
     () => (activePetType === 'Cat' ? BASE_SUBTYPES.filter((s) => s !== 'walk') : BASE_SUBTYPES),
@@ -451,6 +472,10 @@ export default function RemindersScreen({
   const careOverdue = useMemo(() => overdue.filter((item) => !isMedicalSubtype(item.subtype)), [overdue]);
   const hasMedicalItems = medicalToday.length > 0 || medicalUpcoming.length > 0 || medicalOverdue.length > 0;
   const hasCareItems = careToday.length > 0 || careUpcoming.length > 0 || careOverdue.length > 0;
+
+  useEffect(() => {
+    mainScrollRef.current?.scrollTo?.({ y: 0, animated: true });
+  }, [scrollToTopSignal]);
 
   // ── daily care templates ──
   const dailyCareTemplates: DailyCareTemplate[] = activePetType === 'Cat'
@@ -535,63 +560,17 @@ export default function RemindersScreen({
 
   return (
     <View style={styles.screen}>
-      <AppleTopBar
-        title={isTr ? 'Hatirlatmalar' : 'Reminders'}
-        backgroundColor="rgba(246, 244, 240, 0.66)"
-        rightSlot={
-          <View style={styles.topBarActions}>
-            {onOpenNotifications ? (
-              <TopBarCircleButton onPress={onOpenNotifications}>
-                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-                  <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="#5d605a" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d="M13.73 21a2 2 0 01-3.46 0" stroke="#5d605a" strokeWidth={1.9} strokeLinecap="round" />
-                </Svg>
-                {overdue.length > 0 ? <View style={styles.topBarDot} /> : null}
-              </TopBarCircleButton>
-            ) : null}
-            <TopBarCircleButton onPress={() => openCreate()}>
-              <Icon kind="add" size={17} color="#4f655f" />
-            </TopBarCircleButton>
-          </View>
-        }
-      />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-
-        {/* ── Header ── */}
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerLabel}>{isTr ? 'PLANLAMA' : 'PLANNING'}</Text>
-            <Text style={styles.headerTitle}>{isTr ? 'Hatırlatmalar' : 'Reminders'}</Text>
-          </View>
-          <View style={styles.headerActions}>
-            {onOpenNotifications ? (
-              <Pressable style={styles.notifBtn} onPress={onOpenNotifications} hitSlop={8}>
-                <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
-                  <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="#5d605a" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
-                  <Path d="M13.73 21a2 2 0 01-3.46 0" stroke="#5d605a" strokeWidth={1.9} strokeLinecap="round" />
-                </Svg>
-                {overdue.length > 0 ? (
-                  <View style={styles.notifDot} />
-                ) : null}
-              </Pressable>
-            ) : null}
-            <Pressable style={styles.addPill} onPress={() => openCreate()}>
-              <Icon kind="add" size={16} color="#fff" />
-              <Text style={styles.addPillText}>{isTr ? 'Ekle' : 'Add'}</Text>
-            </Pressable>
-          </View>
-        </View>
+      <StatusBar style="dark" />
+      <Animated.ScrollView
+        ref={mainScrollRef}
+        contentContainerStyle={[styles.content, { paddingTop: topBarHeight + 18 }]}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
+        scrollEventThrottle={24}
+        directionalLockEnabled
+      >
 
         {/* ── Stats row (always visible when any data exists) ── */}
-        <View style={styles.heroIntro}>
-          <Text style={styles.heroLabel}>{isTr ? 'PLANLAMA' : 'PLANNING'}</Text>
-          <Text style={styles.heroTitle}>{isTr ? 'Hatirlatmalar' : 'Reminders'}</Text>
-          <Text style={styles.heroText}>
-            {isTr
-              ? 'Gunluk bakim ve tibbi takibi ayni sakin akis icinde yonet.'
-              : 'Manage daily care and medical follow-ups in one calm flow.'}
-          </Text>
-        </View>
 
         {(totalActive > 0 || completed.length > 0) && (
           <View style={styles.statsRow}>
@@ -741,7 +720,40 @@ export default function RemindersScreen({
           )}
 
         </View>
-      </ScrollView>
+      </Animated.ScrollView>
+
+      <View pointerEvents="box-none" style={styles.topChrome}>
+        <Animated.View pointerEvents="none" style={[styles.topChromeSurface, { height: topChromeHeight, opacity: topChromeOpacity }]}>
+          <BlurView intensity={32} tint="light" style={StyleSheet.absoluteFillObject} />
+          <ExpoLinearGradient
+            colors={['rgba(244,250,244,0.94)', 'rgba(236,246,236,0.72)', 'rgba(244,250,244,0.20)', 'rgba(244,250,244,0)']}
+            locations={[0, 0.45, 0.8, 1]}
+            start={{ x: 0.5, y: 0 }}
+            end={{ x: 0.5, y: 1 }}
+            style={StyleSheet.absoluteFillObject}
+          />
+        </Animated.View>
+
+        <View style={[styles.topBarRow, { height: topBarHeight + 2, paddingTop: topInset + 2 }]}>
+          <Animated.Text numberOfLines={1} style={[styles.topBarTitleText, { transform: [{ scale: headerTitleScale }] }]}>
+            {isTr ? 'Hatirlatmalar' : 'Reminders'}
+          </Animated.Text>
+          <View style={styles.topBarActions}>
+            {onOpenNotifications ? (
+              <Pressable style={styles.topBarCircleBtn} onPress={onOpenNotifications}>
+                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                  <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="#4f655f" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d="M13.73 21a2 2 0 01-3.46 0" stroke="#4f655f" strokeWidth={1.9} strokeLinecap="round" />
+                </Svg>
+                {overdue.length > 0 ? <View style={styles.topBarDot} /> : null}
+              </Pressable>
+            ) : null}
+            <Pressable style={styles.topBarCircleBtn} onPress={() => openCreate()}>
+              <Icon kind="add" size={17} color="#4f655f" />
+            </Pressable>
+          </View>
+        </View>
+      </View>
 
       {/* ── Create Modal ── */}
       <Modal
@@ -966,6 +978,37 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
     gap: 0,
   },
+  topChrome: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
+  },
+  topChromeSurface: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(89,118,93,0.20)',
+  },
+  topBarRow: {
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  topBarTitleText: {
+    flex: 1,
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '800',
+    color: '#30332e',
+    letterSpacing: -1,
+  },
 
   // ── Header ──
   header: {
@@ -1001,6 +1044,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  topBarCircleBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.80)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#345738',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   topBarDot: {
     position: 'absolute',

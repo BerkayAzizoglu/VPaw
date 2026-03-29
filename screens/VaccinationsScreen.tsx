@@ -137,6 +137,7 @@ function Icon({
 
 function FeaturedVaccineCard({ data, locale }: { data: VaccinationsNextUpData; locale: 'en' | 'tr' }) {
   const localized = localizeVaccine(data.name, data.subtitle, locale);
+  const isTr = locale === 'tr';
   // Parse a simple "Apr 18" or "18.04.2025" display date for the date box
   const parts = data.date.split(/[.\-\/\s]/);
   const dayStr = parts[0] ?? '—';
@@ -150,7 +151,7 @@ function FeaturedVaccineCard({ data, locale }: { data: VaccinationsNextUpData; l
         <View style={styles.featuredLeft}>
           {/* glass tag */}
           <View style={styles.glassTag}>
-            <Text style={styles.glassTagText}>UPCOMING</Text>
+            <Text style={styles.glassTagText}>{isTr ? 'YAKLAŞAN' : 'UPCOMING'}</Text>
           </View>
           <Text style={styles.featuredTitle}>{localized.name}</Text>
           <Text style={styles.featuredSub}>{localized.subtitle}</Text>
@@ -194,16 +195,16 @@ function VaccineCard({
   const isDueSoon = item.status === 'dueSoon';
   const isUpToDate = item.status === 'upToDate';
 
-  const iconBg = isOverdue ? '#fdf0f0' : isDueSoon ? '#fef6ea' : '#eef4eb';
-  const iconColor = isOverdue ? '#c96a6a' : isDueSoon ? '#c48d42' : '#718562';
+  const iconBg = isOverdue ? '#fdf0f0' : isDueSoon ? '#fef6ea' : '#eaf2f4';
+  const iconColor = isOverdue ? '#c96a6a' : isDueSoon ? '#c48d42' : '#56757c';
   const iconKind: 'warning' | 'clock' | 'shieldFill' = isOverdue
     ? 'warning'
     : isDueSoon
     ? 'clock'
     : 'shieldFill';
 
-  const pillBg = isOverdue ? '#fdf0f0' : isDueSoon ? '#fef6ea' : '#eef4eb';
-  const pillBorder = isOverdue ? '#f5dede' : isDueSoon ? '#f5e9d1' : '#d8ebcf';
+  const pillBg = isOverdue ? '#fdf0f0' : isDueSoon ? '#fef6ea' : '#eaf2f4';
+  const pillBorder = isOverdue ? '#f5dede' : isDueSoon ? '#f5e9d1' : '#c0d8de';
   const pillColor = iconColor;
   const pillLabel = isOverdue
     ? statusLabels.overdue
@@ -289,7 +290,7 @@ export default function VaccinationsScreen({
       : isTr ? 'Bağlantıyı kontrol edip tekrar deneyin.' : 'Please check your connection and try again.';
 
   // ── swipe ──
-  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: true, enterVariant: 'drift' });
+  const swipePanResponder = useEdgeSwipeBack({ onBack, fullScreenGestureEnabled: false, enterVariant: 'drift' });
 
   return (
     <View style={styles.screen}>
@@ -307,15 +308,15 @@ export default function VaccinationsScreen({
             {
               paddingTop: getStickyHeaderContentTop(topInset),
             },
-          ]}
-          showsVerticalScrollIndicator={false}
-          scrollEnabled={!swipePanResponder.isSwiping}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true },
-          )}
-          scrollEventThrottle={16}
-        >
+        ]}
+        showsVerticalScrollIndicator={false}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={24}
+        directionalLockEnabled
+      >
           {/* ── Header ── */}
           <View style={styles.header}>
             <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
@@ -376,7 +377,7 @@ export default function VaccinationsScreen({
                   </View>
                   <View style={styles.attentionRight}>
                     <Text style={styles.attentionCta}>{copy.resolve}</Text>
-                    <Icon kind="arrow" size={14} color="#47664a" />
+                    <Icon kind="arrow" size={14} color="#56757c" />
                   </View>
                 </Pressable>
               )}
@@ -405,7 +406,7 @@ export default function VaccinationsScreen({
                   <Text style={styles.statsLabel}>{isTr ? 'Güncel Aşılar' : 'Up to Date'}</Text>
                   <Text style={styles.statsValue}>{upToDateCount}</Text>
                   <View style={styles.statsSubRow}>
-                    <View style={[styles.statsDot, { backgroundColor: '#718562' }]} />
+                    <View style={[styles.statsDot, { backgroundColor: '#56757c' }]} />
                     <Text style={styles.statsSub}>{isTr ? 'KORUMA TAMAM' : 'PROTECTED'}</Text>
                   </View>
                 </View>
@@ -451,6 +452,8 @@ export default function VaccinationsScreen({
           topInset={topInset}
           scrollY={scrollY}
           titleColor="#30332e"
+          overlayColors={['rgba(86,117,124,0.56)', 'rgba(86,117,124,0.38)', 'rgba(86,117,124,0.18)', 'rgba(86,117,124,0)']}
+          borderColor="rgba(39,67,75,0.20)"
           leftSlot={(
             <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
               <Icon kind="back" size={20} color="#30332e" />
@@ -462,8 +465,8 @@ export default function VaccinationsScreen({
               onPress={() => {
                 if (onAddVaccination) { onAddVaccination(); return; }
                 Alert.alert(
-                  isTr ? 'YakÄ±nda' : 'Coming soon',
-                  isTr ? 'AÅŸÄ± ekleme akÄ±ÅŸÄ± bir sonraki adÄ±mda aktif edilecek.' : 'Add vaccination flow will be enabled in the next step.',
+                  isTr ? 'Yakında' : 'Coming soon',
+                  isTr ? 'Aşı ekleme akışı bir sonraki adımda aktif edilecek.' : 'Add vaccination flow will be enabled in the next step.',
                 );
               }}
             >
@@ -531,11 +534,11 @@ const styles = StyleSheet.create({
     height: 36,
     paddingHorizontal: 14,
     borderRadius: 999,
-    backgroundColor: '#47664a',
+    backgroundColor: '#56757c',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    shadowColor: '#47664a',
+    shadowColor: '#27434b',
     shadowOpacity: 0.3,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 4 },
@@ -599,7 +602,7 @@ const styles = StyleSheet.create({
   attentionCta: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#47664a',
+    color: '#56757c',
   },
 
   // ── Section label ──
@@ -616,9 +619,14 @@ const styles = StyleSheet.create({
   // ── Featured card ──
   featuredCard: {
     borderRadius: 28,
-    backgroundColor: '#2e4230',
+    backgroundColor: '#56757c',
     padding: 24,
     overflow: 'hidden',
+    shadowColor: '#27434b',
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
   },
   featuredBlob: {
     position: 'absolute',
@@ -788,7 +796,7 @@ const styles = StyleSheet.create({
   },
   statsCard: {
     flex: 1,
-    backgroundColor: '#eeeee8',
+    backgroundColor: '#ecf2f3',
     borderRadius: 24,
     padding: 20,
     gap: 2,

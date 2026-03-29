@@ -59,6 +59,7 @@ import { hap } from '../lib/haptics';
 import { buildAiInsights, type AiInsight } from '../lib/insightsEngine';
 import { buildUnifiedHealthEventsForPet, summarizeUnifiedHealthEvents } from '../lib/unifiedHealthEvents';
 import { buildPetHealthPassportData, generatePetPassportPDF, type PetPassportExportSelection } from '../lib/petHealthPassportPdf';
+import { supabase } from '../lib/supabase';
 import {
   EMPTY_MEDICAL_EVENTS_BY_PET,
   EMPTY_MEDICATION_COURSES_BY_PET,
@@ -178,12 +179,19 @@ type PerPetUpdatedAt = Record<string, string>;
 type HealthDomainClockByPet = Record<string, CloudHealthDomainUpdatedAt>;
 type HealthDomainKey = 'vetVisits' | 'medicalEvents' | 'reminders' | 'medicationCourses' | 'weights';
 type HealthDomainFingerprintsByPet = Record<string, Record<HealthDomainKey, string>>;
+type ProfileNameRow = { full_name: string | null };
 
 export default function AuthGate() {
   const { session, loading } = useAuth();
   const { locale } = useLocale();
   const [route, setRoute] = useState<AppRoute>('home');
   const [primaryTab, setPrimaryTab] = useState<PrimaryTab>('home');
+  const [tabScrollTopSignals, setTabScrollTopSignals] = useState<Record<PrimaryTab, number>>({
+    home: 0,
+    healthHub: 0,
+    reminders: 0,
+    insights: 0,
+  });
   const [reminderCreateNonce, setReminderCreateNonce] = useState(0);
   const [reminderCreateSubtypePreset, setReminderCreateSubtypePreset] = useState<ReminderSubtype | null>(null);
   const [healthHubInitialCategory, setHealthHubInitialCategory] = useState<HealthHubCategory>('all');
@@ -236,6 +244,7 @@ export default function AuthGate() {
   const [notificationReadById, setNotificationReadById] = useState<Record<string, boolean>>({});
   const [notificationInbox, setNotificationInbox] = useState<HealthNotification[]>([]);
   const [notificationLastTriggeredByKey, setNotificationLastTriggeredByKey] = useState<NotificationLastTriggeredByKey>({});
+  const [profileNameRow, setProfileNameRow] = useState<ProfileNameRow | null>(null);
   const [routeToastText, setRouteToastText] = useState<string | null>(null);
   const successOverlayRef = useRef<SuccessOverlayHandle>(null);
   const routeToastOpacity = useRef(new Animated.Value(0)).current;
@@ -258,6 +267,27 @@ export default function AuthGate() {
       setNotificationInbox([]);
       setNotificationLastTriggeredByKey({});
     }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadProfileName() {
+      if (!session?.user?.id) {
+        if (active) setProfileNameRow(null);
+        return;
+      }
+      const { data } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', session.user.id)
+        .maybeSingle();
+      if (!active) return;
+      setProfileNameRow(data ?? null);
+    }
+    loadProfileName();
+    return () => {
+      active = false;
+    };
   }, [session?.user?.id]);
 
   useEffect(() => {
@@ -348,6 +378,11 @@ export default function AuthGate() {
       void syncReminderNotificationsState(next, forceReschedule);
       return next;
     });
+  };
+
+  const isWeightGoalCheckReminder = (reminder: Reminder | null | undefined) => {
+    const title = reminder?.title?.toLocaleLowerCase('en-US') ?? '';
+    return title.includes('weight goal check') || title.includes('hedef kilo kontrolü');
   };
 
   const persistRuntimeState = (nextActivePetId: string, nextPetLockEnabled: boolean) => {
@@ -1633,9 +1668,20 @@ export default function AuthGate() {
   };
 
   const vaccinationsBridge = useMemo(
-    () => getVaccinesForUI(activePetId, medicalEventsByPet, healthEventsByPet, petProfiles[activePetId]),
-    [activePetId, medicalEventsByPet, healthEventsByPet, petProfiles],
+    () => getVaccinesForUI(activePetId, medicalEventsByPet, healthEventsByPet, petProfiles[activePetId], locale),
+    [activePetId, medicalEventsByPet, healthEventsByPet, petProfiles, locale],
   );
+
+  // Latest vaccine from MVP medical events — overrides legacy pet.vaccinations for profile display
+  const latestVaccineForProfile = useMemo((): { name: string; rawDate: string } | null => {
+    const mvpVaccines = (medicalEventsByPet[activePetId] ?? [])
+      .filter((e) => e.type === 'vaccine')
+      .sort((a, b) => new Date(b.eventDate).getTime() - new Date(a.eventDate).getTime());
+    if (mvpVaccines.length > 0) {
+      return { name: mvpVaccines[0].title, rawDate: mvpVaccines[0].eventDate };
+    }
+    return null;
+  }, [activePetId, medicalEventsByPet]);
   const vetVisitsBridge = useMemo(
     () => getVetVisitsForUI(activePetId, vetVisitsByPet, medicalEventsByPet, healthEventsByPet, petProfiles[activePetId]),
     [activePetId, vetVisitsByPet, medicalEventsByPet, healthEventsByPet, petProfiles],
@@ -1821,13 +1867,15 @@ export default function AuthGate() {
   }, [session?.user?.email, session?.user?.user_metadata]);
 
   const userDisplayName = useMemo(() => {
+    const profileFullName = typeof profileNameRow?.full_name === 'string' ? profileNameRow.full_name.trim() : '';
+    if (profileFullName.length > 0) return profileFullName;
     const meta = session?.user?.user_metadata as Record<string, unknown> | undefined;
     const fullName = typeof meta?.full_name === 'string' ? meta.full_name.trim() : '';
     if (fullName.length > 0) return fullName;
     const email = (session?.user?.email ?? '').trim();
     if (email.length > 0) return email.split('@')[0];
     return undefined;
-  }, [session?.user?.email, session?.user?.user_metadata]);
+  }, [profileNameRow?.full_name, session?.user?.email, session?.user?.user_metadata]);
 
   const isPremium = useMemo(() => {
     if (__DEV__) return true; // TODO: remove before production
@@ -2909,17 +2957,29 @@ export default function AuthGate() {
 
     if (overdueReminder) {
       const dateLabel = formatReminderDateLabel(overdueReminder.scheduledAt, locale);
+      const isWeightGoalCheck = isWeightGoalCheckReminder(overdueReminder);
       candidates.push({
         id: `reminder-overdue-${overdueReminder.id}`,
         kind: 'reminder',
-        title: overdueReminder.title,
-        subtitle: locale === 'tr' ? `${dateLabel} · gecikmiş` : `${dateLabel} · overdue`,
+        title: isWeightGoalCheck
+          ? (locale === 'tr' ? 'Kilo hedefini gözden geçir' : 'Review weight goal')
+          : overdueReminder.title,
+        subtitle: isWeightGoalCheck
+          ? (locale === 'tr' ? 'Yeni ölçüm ekleyip hedefi yeniden değerlendir.' : 'Add a fresh measurement and review the target.')
+          : (locale === 'tr' ? `${dateLabel} · gecikmiş` : `${dateLabel} · overdue`),
         date: dateLabel,
         urgent: true,
-        ctaLabel: locale === 'tr' ? 'Tamamla' : 'Mark Done',
-        onPress: () => markReminderDone(activePetId, overdueReminder.id),
-        secondaryCtaLabel: locale === 'tr' ? '1 Gün Ertele' : 'Snooze 1 Day',
-        onSecondaryPress: () => baseReminderSnooze(activePetId, overdueReminder.id, overdueReminder.scheduledAt),
+        ctaLabel: isWeightGoalCheck ? (locale === 'tr' ? 'Kilo Profilini Aç' : 'Open Weight Profile') : (locale === 'tr' ? 'Tamamla' : 'Mark Done'),
+        onPress: () => {
+          if (isWeightGoalCheck) {
+            setWeightBackRoute('home');
+            setRoute('weightTracking');
+            return;
+          }
+          markReminderDone(activePetId, overdueReminder.id);
+        },
+        secondaryCtaLabel: isWeightGoalCheck ? undefined : (locale === 'tr' ? '1 Gün Ertele' : 'Snooze 1 Day'),
+        onSecondaryPress: isWeightGoalCheck ? undefined : () => baseReminderSnooze(activePetId, overdueReminder.id, overdueReminder.scheduledAt),
         priority: 3,
         dateMs: parseUpdatedAtMs(overdueReminder.scheduledAt) ?? nowMs,
       });
@@ -2957,14 +3017,26 @@ export default function AuthGate() {
 
     if (upcomingReminder) {
       const dateLabel = formatReminderDateLabel(upcomingReminder.scheduledAt, locale);
+      const isWeightGoalCheck = isWeightGoalCheckReminder(upcomingReminder);
       candidates.push({
         id: `reminder-upcoming-${upcomingReminder.id}`,
         kind: 'reminder',
-        title: upcomingReminder.title,
-        subtitle: dateLabel,
+        title: isWeightGoalCheck
+          ? (locale === 'tr' ? 'Yaklaşan kilo hedef kontrolü' : 'Upcoming weight goal review')
+          : upcomingReminder.title,
+        subtitle: isWeightGoalCheck
+          ? (locale === 'tr' ? `${dateLabel} · ölçüm ekleyip hedefi karşılaştır` : `${dateLabel} · add a measurement and compare with the goal`)
+          : dateLabel,
         date: dateLabel,
-        ctaLabel: locale === 'tr' ? '1 Gün Ertele' : 'Snooze 1 Day',
-        onPress: () => baseReminderSnooze(activePetId, upcomingReminder.id, upcomingReminder.scheduledAt),
+        ctaLabel: isWeightGoalCheck ? (locale === 'tr' ? 'Kilo Profilini Aç' : 'Open Weight Profile') : (locale === 'tr' ? '1 Gün Ertele' : 'Snooze 1 Day'),
+        onPress: () => {
+          if (isWeightGoalCheck) {
+            setWeightBackRoute('home');
+            setRoute('weightTracking');
+            return;
+          }
+          baseReminderSnooze(activePetId, upcomingReminder.id, upcomingReminder.scheduledAt);
+        },
         secondaryCtaLabel: locale === 'tr' ? 'Hatırlatmaları Aç' : 'Open Reminders',
         onSecondaryPress: () => {
           setPrimaryTab('reminders');
@@ -2998,8 +3070,6 @@ export default function AuthGate() {
         subtitle: locale === 'tr' ? 'Trend analizi için yeni ölçüm ekleyin.' : 'Add a fresh entry for better trend analysis.',
         ctaLabel: locale === 'tr' ? 'Hızlı Ekle' : 'Quick Add',
         onPress: () => undefined,
-        secondaryCtaLabel: locale === 'tr' ? 'Grafiği Aç' : 'Open Weight',
-        onSecondaryPress: () => openWeightTracking(activePetId, 'home'),
         priority: 8,
         dateMs: nowMs,
       });
@@ -3315,6 +3385,7 @@ export default function AuthGate() {
           onOpenPetPassport={noop}
           userAvatarUri={userAvatarUri}
           userInitials={userInitials}
+          userName={userDisplayName}
           petProfiles={petProfiles}
           weightsByPet={weightsByPet}
           activePetId={activePetId}
@@ -3373,6 +3444,8 @@ export default function AuthGate() {
           pet={activePet}
           weightEntries={weightsByPet[activePetId]}
           weightGoal={weightGoalsByPet[activePetId]}
+          vaccineCountOverride={vaccinationsBridge?.historyItems?.length}
+          latestVaccineOverride={latestVaccineForProfile}
           locale={locale}
           onBack={noop}
         />
@@ -3447,8 +3520,12 @@ export default function AuthGate() {
         activeTab={primaryTab}
         locale={locale}
         onTabPress={(tab) => {
+          const isRetap = tab === primaryTab;
           if (tab === 'healthHub') {
             setHealthHubCreatePreset((prev) => (prev ? { ...prev, openCreate: false } : null));
+          }
+          if (isRetap) {
+            setTabScrollTopSignals((prev) => ({ ...prev, [tab]: prev[tab] + 1 }));
           }
           setPrimaryTab(tab);
           setRoute(tab);
@@ -3488,6 +3565,7 @@ export default function AuthGate() {
           onBack={() => setRoute(subBackRoute)}
           backPreview={resolveBackPreview(subBackRoute)}
           onAddVaccination={() => openHealthHubCreateWithContext('vaccinations', 'vaccine', 'vaccine', 'vaccinations')}
+          onResolve={() => openHealthHubCreateWithContext('vaccinations', 'vaccine', 'vaccine', 'vaccinations')}
           status={vaccinationsScreenStatus}
           historyItems={vaccinationsBridge?.historyItems}
           attentionCounts={vaccinationsBridge?.attentionCounts}
@@ -3604,6 +3682,7 @@ export default function AuthGate() {
         weightEntries={weightsByPet[activePetId]}
         weightGoal={weightGoalsByPet[activePetId]}
         vaccineCountOverride={vaccinationsBridge?.historyItems?.length}
+        latestVaccineOverride={latestVaccineForProfile}
         locale={locale}
         onBack={() => setRoute(petProfileBackRoute)}
         onEdit={() => {
@@ -3640,8 +3719,12 @@ export default function AuthGate() {
           setWeightGoalsByPet((prev) => ({ ...prev, [activePetId]: goal }));
           const dueDate = new Date();
           dueDate.setDate(dueDate.getDate() + 30);
-          setRemindersWithNotificationSync((prev) =>
-            createReminder(prev, {
+          setRemindersWithNotificationSync((prev) => {
+            const next = {
+              ...prev,
+              [activePetId]: (prev[activePetId] ?? []).filter((item) => !isWeightGoalCheckReminder(item)),
+            };
+            return createReminder(next, {
               petId: activePetId,
               type: 'care',
               subtype: 'custom',
@@ -3655,8 +3738,8 @@ export default function AuthGate() {
               status: 'pending',
               originType: 'manual',
               sourceType: 'manual',
-            }).next,
-          );
+            }).next;
+          });
           }}
         />
         {renderRouteToastOverlay()}
@@ -3859,6 +3942,7 @@ export default function AuthGate() {
   if (route === 'healthHub') {
     return renderPrimaryChrome(
       <HealthHubScreen
+        scrollToTopSignal={tabScrollTopSignals.healthHub}
         summary={healthHubSummary}
         timeline={healthHubTimeline}
         initialCategory={healthHubInitialCategory}
@@ -3921,6 +4005,7 @@ export default function AuthGate() {
   if (route === 'reminders') {
     return renderPrimaryChrome(
       <RemindersScreen
+        scrollToTopSignal={tabScrollTopSignals.reminders}
         today={remindersTabGroups.today}
         upcoming={remindersTabGroups.upcoming}
         overdue={remindersTabGroups.overdue}
@@ -3982,6 +4067,7 @@ export default function AuthGate() {
   if (route === 'insights') {
     return renderPrimaryChrome(
       <InsightsScreen
+        scrollToTopSignal={tabScrollTopSignals.insights}
         locale={locale}
         items={[
           {
@@ -4065,6 +4151,7 @@ export default function AuthGate() {
 
   return renderPrimaryChrome(
     <HomeScreen
+      scrollToTopSignal={tabScrollTopSignals.home}
       onOpenProfile={() => setRoute('profile')}
       onOpenReminders={() => {
         setPrimaryTab('reminders');
@@ -4082,6 +4169,7 @@ export default function AuthGate() {
       onInsightAction={handleInsightAction}
       userAvatarUri={userAvatarUri}
       userInitials={userInitials}
+      userName={userDisplayName}
       onOpenPetProfile={(petId) => openPetProfile(petId || activePetId, 'home')}
       onOpenVaccinations={(petId) => {
         if (petId) setActivePetWithPersist(petId);

@@ -804,7 +804,7 @@ export default function VetVisitsScreen({
   const swipePanResponder = useEdgeSwipeBack({
     onBack,
     enabled: !isCreateVisible,
-    fullScreenGestureEnabled: true,
+    fullScreenGestureEnabled: false,
     enterVariant: 'soft',
   });
 
@@ -825,12 +825,12 @@ export default function VetVisitsScreen({
           },
         ]}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={!swipePanResponder.isSwiping}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
           { useNativeDriver: true },
         )}
-        scrollEventThrottle={16}
+        scrollEventThrottle={24}
+        directionalLockEnabled
       >
 
         {showMainContent ? (
@@ -897,6 +897,8 @@ export default function VetVisitsScreen({
         topInset={topInset}
         scrollY={scrollY}
         titleColor="#2f352f"
+        overlayColors={['rgba(63,93,71,0.56)', 'rgba(63,93,71,0.38)', 'rgba(63,93,71,0.18)', 'rgba(63,93,71,0)']}
+        borderColor="rgba(49,73,56,0.24)"
         leftSlot={(
           <Pressable style={styles.backBtn} onPress={onBack}>
             <Icon kind="back" size={22} color="#5d605a" />

@@ -17,6 +17,8 @@ type StickyBlurTopBarProps = {
   leftSlot: React.ReactNode;
   rightSlot?: React.ReactNode;
   titleColor?: string;
+  overlayColors?: [string, string, string, string];
+  borderColor?: string;
 };
 
 export default function StickyBlurTopBar({
@@ -26,6 +28,8 @@ export default function StickyBlurTopBar({
   leftSlot,
   rightSlot,
   titleColor = '#1f3f3b',
+  overlayColors = ['rgba(246,244,240,0.95)', 'rgba(246,244,240,0.76)', 'rgba(246,244,240,0.3)', 'rgba(246,244,240,0)'],
+  borderColor = 'rgba(115,139,134,0.2)',
 }: StickyBlurTopBarProps) {
   const topBarHeight = topInset + STICKY_HEADER_CONTENT_HEIGHT;
   const topChromeHeight = topInset + STICKY_HEADER_BUTTON_SIZE + 12;
@@ -44,12 +48,13 @@ export default function StickyBlurTopBar({
           {
             height: topChromeHeight,
             opacity: topChromeOpacity,
+            borderBottomColor: borderColor,
           },
         ]}
       >
         <BlurView intensity={44} tint="light" style={StyleSheet.absoluteFillObject} />
         <LinearGradient
-          colors={['rgba(246,244,240,0.95)', 'rgba(246,244,240,0.76)', 'rgba(246,244,240,0.3)', 'rgba(246,244,240,0)']}
+          colors={overlayColors}
           locations={[0, 0.48, 0.78, 1]}
           start={{ x: 0.5, y: 0 }}
           end={{ x: 0.5, y: 1 }}
@@ -85,7 +90,6 @@ const styles = StyleSheet.create({
     right: 0,
     overflow: 'hidden',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(115,139,134,0.2)',
   },
   topBarRow: {
     paddingHorizontal: 20,

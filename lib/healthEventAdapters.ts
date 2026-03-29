@@ -77,6 +77,7 @@ export function getVaccinationsFromEvents(
   petId: string,
   healthEventsByPet: Record<string, HealthEvent[]>,
   legacyProfile?: PetProfile,
+  locale?: 'en' | 'tr',
 ): {
   historyItems: VaccinationsHistoryItem[];
   attentionCounts: VaccinationsAttentionCounts;
@@ -133,7 +134,11 @@ export function getVaccinationsFromEvents(
         name: nextUpCandidate.name,
         subtitle: nextUpCandidate.subtitle,
         date: nextUpCandidate.dueDate,
-        inWeeks: diffWeeks == null ? 'Soon' : diffWeeks <= 1 ? 'in 1 week' : `in ${diffWeeks} weeks`,
+        inWeeks: diffWeeks == null
+          ? (locale === 'tr' ? 'Yakında' : 'Soon')
+          : diffWeeks <= 1
+          ? (locale === 'tr' ? '1 hafta sonra' : 'in 1 week')
+          : (locale === 'tr' ? `${diffWeeks} hafta sonra` : `in ${diffWeeks} weeks`),
       }
     : undefined;
 
@@ -145,6 +150,7 @@ export function getVaccinesForUI(
   medicalEventsByPet: ByPet<MvpMedicalEvent>,
   legacyHealthEventsByPet: Record<string, HealthEvent[]>,
   legacyProfile?: PetProfile,
+  locale?: 'en' | 'tr',
 ): {
   historyItems: VaccinationsHistoryItem[];
   attentionCounts: VaccinationsAttentionCounts;
@@ -178,6 +184,7 @@ export function getVaccinesForUI(
       [petId]: [...syntheticHealthEvents, ...uniqueLegacyVaccines],
     },
     legacyProfile,
+    locale,
   );
 }
 
