@@ -82,8 +82,8 @@ export const wording = {
       addRecord: 'Add Record',
     },
     weightTracking: {
-      title: 'Weight Tracking',
-      subtitle: 'Weight tracking',
+      title: 'Weight Profile',
+      subtitle: 'Weight profile',
       currentWeight: 'CURRENT WEIGHT',
       healthyReferencePrefix: 'Healthy reference',
       last90Days: 'Last 90 Days',
@@ -247,8 +247,8 @@ export const wording = {
       addRecord: 'Kayıt Ekle',
     },
     weightTracking: {
-      title: 'Kilo Takibi',
-      subtitle: 'Kilo takibi',
+      title: 'Kilo Profili',
+      subtitle: 'Kilo profili',
       currentWeight: 'GÜNCEL KİLO',
       healthyReferencePrefix: 'Sağlıklı referans',
       last90Days: 'Son 90 Gün',

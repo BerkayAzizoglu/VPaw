@@ -10,11 +10,13 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 import { localizeVaccine } from '../lib/vaccineI18n';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
+import StickyBlurTopBar, { getStickyHeaderContentTop } from '../components/StickyBlurTopBar';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -250,6 +252,9 @@ export default function VaccinationsScreen({
   const { locale } = useLocale();
   const copy = getWording(locale).vaccinations;
   const isTr = locale === 'tr';
+  const insets = useSafeAreaInsets();
+  const scrollY = React.useRef(new Animated.Value(0)).current;
+  const topInset = Math.max(insets.top, 14);
 
   // ── data ──
   const fallbackHistory: VaccinationsHistoryItem[] = [
@@ -296,10 +301,20 @@ export default function VaccinationsScreen({
 
       <Animated.View style={[styles.frontLayer, swipePanResponder.frontLayerStyle]} {...swipePanResponder.panHandlers}>
         <StatusBar style="dark" />
-        <ScrollView
-          contentContainerStyle={styles.content}
+        <Animated.ScrollView
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: getStickyHeaderContentTop(topInset),
+            },
+          ]}
           showsVerticalScrollIndicator={false}
           scrollEnabled={!swipePanResponder.isSwiping}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true },
+          )}
+          scrollEventThrottle={16}
         >
           {/* ── Header ── */}
           <View style={styles.header}>
@@ -429,7 +444,33 @@ export default function VaccinationsScreen({
               }
             />
           )}
-        </ScrollView>
+        </Animated.ScrollView>
+
+        <StickyBlurTopBar
+          title={isTr ? 'ASILAR' : 'VACCINATIONS'}
+          topInset={topInset}
+          scrollY={scrollY}
+          titleColor="#30332e"
+          leftSlot={(
+            <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
+              <Icon kind="back" size={20} color="#30332e" />
+            </Pressable>
+          )}
+          rightSlot={showAddButton ? (
+            <Pressable
+              style={styles.backBtn}
+              onPress={() => {
+                if (onAddVaccination) { onAddVaccination(); return; }
+                Alert.alert(
+                  isTr ? 'YakÄ±nda' : 'Coming soon',
+                  isTr ? 'AÅŸÄ± ekleme akÄ±ÅŸÄ± bir sonraki adÄ±mda aktif edilecek.' : 'Add vaccination flow will be enabled in the next step.',
+                );
+              }}
+            >
+              <Icon kind="add" size={16} color="#30332e" />
+            </Pressable>
+          ) : undefined}
+        />
       </Animated.View>
     </View>
   );
@@ -451,13 +492,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#f6f4f0',
   },
   content: {
-    paddingTop: 56,
     paddingHorizontal: 20,
     paddingBottom: 120,
   },
 
   // ── Header ──
   header: {
+    display: 'none',
     height: 48,
     flexDirection: 'row',
     alignItems: 'center',
@@ -465,9 +506,9 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',

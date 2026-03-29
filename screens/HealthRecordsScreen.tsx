@@ -13,10 +13,12 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
+import StickyBlurTopBar, { getStickyHeaderContentTop } from '../components/StickyBlurTopBar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -303,6 +305,9 @@ export default function HealthRecordsScreen({
   const { locale } = useLocale();
   const baseCopy = getWording(locale).healthRecords;
   const isTr = locale === 'tr';
+  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const topInset = Math.max(insets.top, 14);
 
   const copy = isTr ? {
     ...baseCopy,
@@ -454,10 +459,20 @@ export default function HealthRecordsScreen({
       ) : null}
       <Animated.View style={[styles.frontLayer, swipePanResponder.frontLayerStyle]} {...swipePanResponder.panHandlers}>
         <StatusBar style="dark" />
-        <ScrollView
-          contentContainerStyle={styles.content}
+        <Animated.ScrollView
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: getStickyHeaderContentTop(topInset),
+            },
+          ]}
           showsVerticalScrollIndicator={false}
           scrollEnabled={!swipePanResponder.isSwiping}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true },
+          )}
+          scrollEventThrottle={16}
         >
           {/* ── Header ─────────────────────────────────────────────────────── */}
           <View style={styles.headerRow}>
@@ -578,7 +593,24 @@ export default function HealthRecordsScreen({
                 : undefined}
             />
           )}
-        </ScrollView>
+        </Animated.ScrollView>
+
+        <StickyBlurTopBar
+          title={isTr ? 'SAGLIK KAYITLARI' : 'HEALTH RECORDS'}
+          topInset={topInset}
+          scrollY={scrollY}
+          titleColor="#2f3634"
+          leftSlot={(
+            <Pressable style={styles.navCircle} onPress={onBack}>
+              <Icon kind="back" size={22} color="#5d605a" />
+            </Pressable>
+          )}
+          rightSlot={(
+            <Pressable style={[styles.navCircle, styles.navCircleLight]} onPress={handleAdd}>
+              <Icon kind="plus" size={18} color="#305855" />
+            </Pressable>
+          )}
+        />
       </Animated.View>
 
       {/* ── Detail sheet ─────────────────────────────────────────────────── */}
@@ -611,7 +643,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f6f4f0',
   },
   content: {
-    paddingTop: 56,
     paddingHorizontal: 20,
     paddingBottom: 48,
     gap: 14,
@@ -619,15 +650,16 @@ const styles = StyleSheet.create({
 
   // Header — inside ScrollView, consistent with VetVisits/Vaccinations
   headerRow: {
+    display: 'none',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 4,
   },
   navCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#fff',
     alignItems: 'center',
     justifyContent: 'center',

@@ -45,7 +45,7 @@ export function useEdgeSwipeBack({
           if (!enabled) return false;
           const startX = gesture.x0 ?? evt.nativeEvent.pageX ?? gesture.moveX;
           const startsFromLeftEdge = fullScreenGestureEnabled ? true : startX <= edgeWidth;
-          const enoughHorizontalIntent = gesture.dx > 10 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.25;
+          const enoughHorizontalIntent = gesture.dx > 14 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.6;
           const lowVerticalNoise = Math.abs(gesture.dy) < maxDy;
           return startsFromLeftEdge && enoughHorizontalIntent && lowVerticalNoise;
         },

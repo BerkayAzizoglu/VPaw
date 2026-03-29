@@ -29,6 +29,7 @@ import HealthRecordsScreen from '../screens/HealthRecordsScreen';
 import HealthHubScreen, {
   type AddHealthRecordPayload,
   type AddHealthRecordType,
+  type HealthHubAreaCard,
   type HealthHubCategory,
   type HealthHubDomainOverview,
 } from '../screens/HealthHubScreen';
@@ -37,6 +38,7 @@ import SuccessOverlay, { type SuccessOverlayHandle } from './SuccessOverlay';
 import { deletePetProfilesFromCloud, fetchPetProfilesFromCloud, savePetProfilesToCloud } from '../lib/petProfilesRepo';
 import { getHealthCardSummary, getHealthRecordsForUI, getVaccinesForUI, getVetVisitsForUI } from '../lib/healthEventAdapters';
 import { getAllDocumentsForPet } from '../lib/healthDocumentsVault';
+import { projectHealthHubData } from '../lib/healthHubModel';
 import {
   buildTriggeredNotifications,
   getNotificationDedupKey,
@@ -1659,9 +1661,64 @@ export default function AuthGate() {
     () => getAllDocumentsForPet(activePetId, { vetVisitsByPet, medicalEventsByPet, weightsByPet }),
     [activePetId, medicalEventsByPet, vetVisitsByPet, weightsByPet],
   );
+  const projectedHealthHubData = useMemo(
+    () => projectHealthHubData({
+      petId: activePetId,
+      vetVisits: vetVisitsByPet[activePetId] ?? [],
+      medicalEvents: medicalEventsByPet[activePetId] ?? [],
+      weights: weightsByPet[activePetId] ?? [],
+      documents: documentsVaultForActivePet,
+    }),
+    [activePetId, documentsVaultForActivePet, medicalEventsByPet, vetVisitsByPet, weightsByPet],
+  );
   const documentsVaultPreview = useMemo(
-    () => documentsVaultForActivePet.slice(0, 2).map((item) => ({ id: item.id, title: item.title, date: item.date, type: item.type })),
-    [documentsVaultForActivePet],
+    () => {
+      const visitById = new Map(projectedHealthHubData.vet_visits.map((visit) => [visit.id, visit]));
+      const vaccineById = new Map(projectedHealthHubData.vaccinations.map((item) => [item.id, item]));
+      const recordById = new Map(projectedHealthHubData.health_records.map((item) => [item.id, item]));
+      const formatShortDate = (raw?: string) => {
+        const ms = raw ? parseUpdatedAtMs(raw) : null;
+        if (ms == null) return null;
+        return new Intl.DateTimeFormat(locale === 'tr' ? 'tr-TR' : 'en-US', {
+          month: 'short',
+          day: 'numeric',
+        }).format(new Date(ms));
+      };
+      const visitLabel = (visitId?: string) => {
+        if (!visitId) return locale === 'tr' ? 'Veteriner ziyareti' : 'Vet Visit';
+        const visit = visitById.get(visitId);
+        if (!visit) return locale === 'tr' ? 'Veteriner ziyareti' : 'Vet Visit';
+        return visit.clinic_name?.trim()
+          ? `${locale === 'tr' ? 'Veteriner ziyareti' : 'Vet Visit'} · ${visit.clinic_name.trim()}`
+          : (locale === 'tr' ? 'Veteriner ziyareti' : 'Vet Visit');
+      };
+      return projectedHealthHubData.documents.slice(0, 3).map((document) => {
+        let relation = locale === 'tr' ? 'Saglik kaydina bagli' : 'Linked to health record';
+        if (document.related_vaccine_id) {
+          const vaccine = vaccineById.get(document.related_vaccine_id);
+          relation = locale === 'tr'
+            ? `Asi kaydina bagli${vaccine?.vaccine_name ? ` · ${vaccine.vaccine_name}` : ''}`
+            : `Linked to vaccine${vaccine?.vaccine_name ? ` · ${vaccine.vaccine_name}` : ''}`;
+        } else if (document.related_visit_id) {
+          relation = locale === 'tr'
+            ? `${visitLabel(document.related_visit_id)} ile bagli`
+            : `Linked to ${visitLabel(document.related_visit_id)}`;
+        } else if (document.related_record_id) {
+          const record = recordById.get(document.related_record_id);
+          relation = locale === 'tr'
+            ? `Saglik kaydina bagli${record?.title ? ` · ${record.title}` : ''}`
+            : `Linked to health record${record?.title ? ` · ${record.title}` : ''}`;
+        }
+        return {
+          id: document.id,
+          title: document.file_name,
+          date: document.uploaded_at ?? document.taken_at ?? '',
+          type: document.document_type,
+          contextLine: [formatShortDate(document.uploaded_at ?? document.taken_at), relation].filter(Boolean).join(' · '),
+        };
+      });
+    },
+    [locale, projectedHealthHubData],
   );
   const handleExportPetPassportPdf = async (selection: PetPassportExportSelection) => {
     const data = buildPetHealthPassportData(
@@ -2193,6 +2250,7 @@ export default function AuthGate() {
   };
 
   const healthHubTimeline = useMemo(() => {
+    const nowMs = Date.now();
     const base = buildUnifiedHealthEventsForPet(
       activePetId,
       medicalEventsByPet,
@@ -2201,12 +2259,67 @@ export default function AuthGate() {
       healthEventsByPet,
       petProfiles[activePetId],
     );
+    const formatRecordKind = (rawType?: unknown) => {
+      if (rawType === 'diagnosis') return locale === 'tr' ? 'Teshis' : 'Diagnosis';
+      if (rawType === 'procedure') return locale === 'tr' ? 'Procedure' : 'Procedure';
+      if (rawType === 'test') return locale === 'tr' ? 'Lab sonucu' : 'Lab result';
+      if (rawType === 'prescription') return locale === 'tr' ? 'Treatment' : 'Treatment';
+      if (rawType === 'note') return locale === 'tr' ? 'Klinik not' : 'Clinical note';
+      return locale === 'tr' ? 'Saglik kaydi' : 'Health record';
+    };
+    const formatShortDate = (raw?: unknown) => {
+      if (typeof raw !== 'string') return null;
+      const ms = parseUpdatedAtMs(raw);
+      if (ms == null) return null;
+      return new Intl.DateTimeFormat(locale === 'tr' ? 'tr-TR' : 'en-US', {
+        month: 'short',
+        day: 'numeric',
+      }).format(new Date(ms));
+    };
     return base.slice(0, 60).map((item) => ({
       id: item.id,
       type: item.type,
       date: formatReminderDateLabel(item.date, locale),
-      title: item.title || (locale === 'tr' ? 'Sağlık olayı' : 'Health event'),
+      title: item.title || (locale === 'tr' ? 'Saglik olayi' : 'Health event'),
       notes: item.notes,
+      metaLine:
+        item.type === 'vet'
+          ? [
+              typeof item.metadata?.clinicName === 'string' ? item.metadata.clinicName : null,
+              formatShortDate(item.metadata?.followUpDate),
+            ].filter(Boolean).join(' · ')
+          : item.type === 'vaccine'
+            ? (() => {
+                const dueDate = typeof item.metadata?.dueDate === 'string' ? item.metadata.dueDate : undefined;
+                return dueDate
+                  ? `${locale === 'tr' ? 'Sonraki doz' : 'Next due'} · ${formatShortDate(dueDate) ?? dueDate}`
+                  : (locale === 'tr' ? 'Asi takibi' : 'Vaccination log');
+              })()
+            : item.type === 'weight'
+              ? [
+                  typeof item.metadata?.value === 'number' ? `${(item.metadata.value as number).toFixed(1)} kg` : null,
+                  typeof item.metadata?.change === 'string' ? item.metadata.change : null,
+                ].filter(Boolean).join(' · ')
+              : formatRecordKind(item.metadata?.originalType),
+      statusLabel:
+        item.type === 'vaccine'
+          ? (() => {
+              const dueMs = typeof item.metadata?.dueDate === 'string' ? parseUpdatedAtMs(item.metadata.dueDate) : null;
+              if (dueMs != null && dueMs < nowMs) return locale === 'tr' ? 'Gecikmis' : 'Overdue';
+              if (dueMs != null && dueMs - nowMs <= 14 * 24 * 60 * 60 * 1000) return locale === 'tr' ? 'Yaklasiyor' : 'Due soon';
+              return locale === 'tr' ? 'Guncel' : 'Up to date';
+            })()
+          : item.type === 'vet'
+            ? (item.metadata?.status === 'planned'
+              ? (locale === 'tr' ? 'Planlandi' : 'Planned')
+              : (locale === 'tr' ? 'Logged' : 'Logged'))
+            : item.type === 'record'
+              ? (item.metadata?.status === 'resolved' || item.metadata?.status === 'completed'
+                ? (locale === 'tr' ? 'Resolved' : 'Resolved')
+                : item.metadata?.status === 'abnormal' || item.metadata?.status === 'active'
+                  ? (locale === 'tr' ? 'Monitoring' : 'Monitoring')
+                  : (locale === 'tr' ? 'Logged' : 'Logged'))
+              : (locale === 'tr' ? 'Logged' : 'Logged'),
     }));
   }, [activePetId, healthEventsByPet, locale, medicalEventsByPet, petProfiles, vetVisitsByPet, weightsByPet]);
 
@@ -2465,6 +2578,209 @@ export default function AuthGate() {
       },
     };
   }, [activePetId, documentsVaultForActivePet, locale, medicalEventsByPet, remindersByPet, vetVisitsByPet, weightsByPet]);
+
+  const healthHubAreaCards = useMemo<HealthHubAreaCard[]>(() => {
+    const nowMs = Date.now();
+    const visits = vetVisitsByPet[activePetId] ?? [];
+    const medical = medicalEventsByPet[activePetId] ?? [];
+    const records = medical.filter((event) => event.type !== 'vaccine');
+    const vaccines = medical.filter((event) => event.type === 'vaccine');
+    const weights = weightsByPet[activePetId] ?? [];
+    const latestDocument = documentsVaultForActivePet[0];
+
+    const formatMonth = (raw?: string | null) => {
+      const ms = raw ? parseUpdatedAtMs(raw) : null;
+      if (ms == null) return locale === 'tr' ? 'Tarih yok' : 'No date';
+      return new Intl.DateTimeFormat(locale === 'tr' ? 'tr-TR' : 'en-US', { month: 'long' }).format(new Date(ms));
+    };
+    const formatDay = (raw?: string | null) => {
+      const ms = raw ? parseUpdatedAtMs(raw) : null;
+      if (ms == null) return '--';
+      return new Intl.DateTimeFormat(locale === 'tr' ? 'tr-TR' : 'en-US', { day: 'numeric' }).format(new Date(ms));
+    };
+    const formatShortDate = (raw?: string | null) => {
+      const ms = raw ? parseUpdatedAtMs(raw) : null;
+      if (ms == null) return locale === 'tr' ? 'Tarih yok' : 'No date';
+      return new Intl.DateTimeFormat(locale === 'tr' ? 'tr-TR' : 'en-US', {
+        day: 'numeric',
+        month: 'short',
+      }).format(new Date(ms));
+    };
+    const countText = (count: number) => locale === 'tr'
+      ? `${count} kayıt`
+      : `${count} ${count === 1 ? 'record' : 'records'}`;
+    const visitReason = (visit?: VetVisit) => {
+      if (!visit) return locale === 'tr' ? 'Veteriner kaydı' : 'Vet record';
+      const labels: Record<VetVisitReasonCategory, string> = locale === 'tr'
+        ? {
+            checkup: 'Genel kontrol',
+            vaccine: 'Aşı randevusu',
+            illness: 'Hastalık muayenesi',
+            injury: 'Yaralanma kontrolü',
+            follow_up: 'Kontrol ziyareti',
+            other: 'Veteriner randevusu',
+          }
+        : {
+            checkup: 'General checkup',
+            vaccine: 'Vaccine appointment',
+            illness: 'Illness visit',
+            injury: 'Injury follow-up',
+            follow_up: 'Follow-up visit',
+            other: 'Vet appointment',
+          };
+      return labels[visit.reasonCategory] ?? (locale === 'tr' ? 'Veteriner randevusu' : 'Vet appointment');
+    };
+    const visitReasonShort = (visit?: VetVisit) => {
+      if (!visit) return locale === 'tr' ? 'Veteriner' : 'Vet';
+      const labels: Record<VetVisitReasonCategory, string> = locale === 'tr'
+        ? {
+            checkup: 'Kontrol',
+            vaccine: 'Aşı',
+            illness: 'Hastalık',
+            injury: 'Yaralanma',
+            follow_up: 'Takip',
+            other: 'Veteriner',
+          }
+        : {
+            checkup: 'Checkup',
+            vaccine: 'Vaccine',
+            illness: 'Illness',
+            injury: 'Injury',
+            follow_up: 'Follow-up',
+            other: 'Vet',
+          };
+      return labels[visit.reasonCategory] ?? (locale === 'tr' ? 'Veteriner' : 'Vet');
+    };
+    const recordTypeLabel = (event?: MvpMedicalEvent) => {
+      if (!event) return locale === 'tr' ? 'Sağlık kaydı' : 'Health record';
+      if (event.type === 'diagnosis') return locale === 'tr' ? 'Teşhis' : 'Diagnosis';
+      if (event.type === 'procedure') return locale === 'tr' ? 'Prosedür' : 'Procedure';
+      if (event.type === 'test') return locale === 'tr' ? 'Lab sonucu' : 'Lab result';
+      if (event.type === 'prescription') return locale === 'tr' ? 'Tedavi' : 'Treatment';
+      return locale === 'tr' ? 'Klinik not' : 'Clinical note';
+    };
+
+    const nextVisit = [...visits]
+      .filter((visit) => visit.status === 'planned' && (parseUpdatedAtMs(visit.visitDate) ?? Number.MAX_SAFE_INTEGER) >= nowMs)
+      .sort((a, b) => (parseUpdatedAtMs(a.visitDate) ?? Number.MAX_SAFE_INTEGER) - (parseUpdatedAtMs(b.visitDate) ?? Number.MAX_SAFE_INTEGER))[0];
+    const latestVisit = [...visits]
+      .filter((visit) => parseUpdatedAtMs(visit.visitDate) != null)
+      .sort((a, b) => (parseUpdatedAtMs(b.visitDate) ?? 0) - (parseUpdatedAtMs(a.visitDate) ?? 0))[0];
+    const nextVaccine = [...vaccines]
+      .filter((event) => {
+        const dueMs = parseUpdatedAtMs(event.dueDate);
+        return dueMs != null && dueMs >= nowMs;
+      })
+      .sort((a, b) => (parseUpdatedAtMs(a.dueDate) ?? Number.MAX_SAFE_INTEGER) - (parseUpdatedAtMs(b.dueDate) ?? Number.MAX_SAFE_INTEGER))[0];
+    const latestVaccine = [...vaccines]
+      .filter((event) => parseUpdatedAtMs(event.eventDate ?? event.dueDate) != null)
+      .sort((a, b) => (parseUpdatedAtMs(b.eventDate ?? b.dueDate) ?? 0) - (parseUpdatedAtMs(a.eventDate ?? a.dueDate) ?? 0))[0];
+    const latestWeight = weights[weights.length - 1];
+    const weightDays = daysSince(latestWeight?.date);
+    const latestRecord = [...records]
+      .sort((a, b) => (parseUpdatedAtMs(b.eventDate) ?? 0) - (parseUpdatedAtMs(a.eventDate) ?? 0))[0];
+
+    return [
+      {
+        key: 'vet',
+        title: locale === 'tr' ? 'Veteriner Ziyaretleri' : 'Vet Visits',
+        subtitle: '',
+        countText: countText(visits.length),
+        statusText: nextVisit ? (locale === 'tr' ? 'Yaklaşan' : 'Upcoming') : (visits.length > 0 ? (locale === 'tr' ? 'Kayıtlı' : 'Logged') : (locale === 'tr' ? 'Veri yok' : 'No data')),
+        highlight: nextVisit
+          ? {
+              kind: 'date',
+              primary: formatDay(nextVisit.visitDate),
+              secondary: formatMonth(nextVisit.visitDate),
+              detail: visitReasonShort(nextVisit),
+              attention: true,
+            }
+          : latestVisit
+            ? {
+                kind: 'date',
+                primary: formatDay(latestVisit.visitDate),
+                secondary: formatMonth(latestVisit.visitDate),
+                detail: visitReasonShort(latestVisit),
+              }
+            : {
+                kind: 'text',
+                primary: locale === 'tr' ? 'Kayıt yok' : 'No records',
+              },
+      },
+      {
+        key: 'vaccines',
+        title: locale === 'tr' ? 'Aşılar' : 'Vaccines',
+        subtitle: '',
+        countText: countText(vaccines.length),
+        statusText: nextVaccine ? (locale === 'tr' ? 'Yaklaşan' : 'Upcoming') : (vaccines.length > 0 ? (locale === 'tr' ? 'Güncel' : 'Up to date') : (locale === 'tr' ? 'Veri yok' : 'No data')),
+        highlight: nextVaccine
+          ? {
+              kind: 'date',
+              primary: formatDay(nextVaccine.dueDate),
+              secondary: formatMonth(nextVaccine.dueDate),
+              detail: nextVaccine.title,
+              attention: true,
+            }
+          : latestVaccine
+            ? {
+                kind: 'date',
+                primary: formatDay(latestVaccine.eventDate ?? latestVaccine.dueDate),
+                secondary: formatMonth(latestVaccine.eventDate ?? latestVaccine.dueDate),
+                detail: latestVaccine.title,
+              }
+            : {
+                kind: 'text',
+                primary: locale === 'tr' ? 'Kayıt yok' : 'No records',
+              },
+      },
+      {
+        key: 'weight',
+        title: locale === 'tr' ? 'Ağırlık Profili' : 'Weight Profile',
+        subtitle: '',
+        countText: countText(weights.length),
+        statusText: weightDays == null
+          ? (locale === 'tr' ? 'Veri yok' : 'No data')
+          : weightDays > 21
+            ? (locale === 'tr' ? 'Uyarı' : 'Attention')
+            : (locale === 'tr' ? 'Normal' : 'Normal'),
+        highlight: {
+          kind: 'metric',
+          primary: latestWeight ? `${latestWeight.value.toFixed(1)} kg` : (locale === 'tr' ? 'Kayıt yok' : 'No data'),
+          secondary: latestWeight ? formatShortDate(latestWeight.date) : undefined,
+          detail: weightDays != null && weightDays > 21
+            ? (locale === 'tr' ? `${weightDays} gündür yeni ağırlık girilmedi` : `No weight logged for ${weightDays} days`)
+            : undefined,
+          attention: weightDays != null && weightDays > 21,
+        },
+      },
+      {
+        key: 'records',
+        title: locale === 'tr' ? 'Sağlık Kayıtları' : 'Health Records',
+        subtitle: '',
+        countText: countText(records.length),
+        statusText: records.length > 0 ? (locale === 'tr' ? 'Kayıtlı' : 'Logged') : (locale === 'tr' ? 'Veri yok' : 'No data'),
+        highlight: {
+          kind: 'text',
+          primary: latestRecord?.title ?? (locale === 'tr' ? 'Kayıt yok' : 'No records'),
+          secondary: latestRecord ? formatShortDate(latestRecord.eventDate) : undefined,
+        },
+      },
+      {
+        key: 'documents',
+        title: locale === 'tr' ? 'Belgeler' : 'Documents',
+        subtitle: '',
+        countText: countText(documentsVaultForActivePet.length),
+        statusText: latestDocument ? (locale === 'tr' ? 'Kayıtlı' : 'Logged') : (locale === 'tr' ? 'Veri yok' : 'No data'),
+        highlight: {
+          kind: 'text',
+          label: locale === 'tr' ? 'Son belge' : 'Latest file',
+          primary: latestDocument?.title ?? (locale === 'tr' ? 'Belge yok' : 'No documents'),
+          secondary: latestDocument ? formatShortDate(latestDocument.date) : undefined,
+          detail: documentsVaultPreview[0]?.contextLine,
+        },
+      },
+    ];
+  }, [activePetId, documentsVaultForActivePet, documentsVaultPreview, locale, medicalEventsByPet, vetVisitsByPet, weightsByPet]);
 
   const homeNextImportantEvent = useMemo<NextImportantEventItem | null>(() => {
     if (!activePetId) return null;
@@ -3549,6 +3865,7 @@ export default function AuthGate() {
         categoryResetKey={healthHubCategoryResetKey}
         createPreset={healthHubCreatePreset}
         domainOverview={healthHubDomainOverview}
+        areaCards={healthHubAreaCards}
         locale={locale}
         onPrimaryCta={() => openVetVisitWithPreset('healthHub', { source: 'other', reason: 'checkup', actions: [] })}
         onAddRecord={handleAddHealthRecord}
@@ -3561,6 +3878,11 @@ export default function AuthGate() {
         onAddWeightEntry={() => { setWeightQuickAdd(true); openWeightTracking(activePetId, 'healthHub'); }}
         onOpenDocuments={() => openDocuments('healthHub')}
         documentsPreview={documentsVaultPreview}
+        topInsights={aiInsights.slice(0, 2)}
+        onOpenInsights={() => {
+          setPrimaryTab('insights');
+          setRoute('insights');
+        }}
         medicationCourses={medicationCoursesByPet[activePetId] ?? []}
         onCompleteMedication={handleCompleteMedication}
         onDeleteMedication={handleDeleteMedication}

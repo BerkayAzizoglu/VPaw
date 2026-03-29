@@ -4,8 +4,6 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import type { AiInsight } from '../lib/insightsEngine';
 
-// ─── Types ───────────────────────────────────────────────────────────────────
-
 type InsightItem = {
   label: string;
   value: string;
@@ -21,22 +19,22 @@ type InsightsScreenProps = {
   locale?: 'en' | 'tr';
 };
 
-// ─── Design tokens ───────────────────────────────────────────────────────────
-
 const C = {
   bg: '#f6f4f0',
   surface: '#ffffff',
-  surfaceContainer: '#eeeee8',
+  surfaceSoft: '#f4f2ec',
   primary: '#47664a',
+  accent: '#d9734d',
   onSurface: '#30332e',
-  onSurfaceVariant: '#5d605a',
-  outlineVariant: '#b1b3ab',
+  onSurfaceVariant: '#626863',
 };
 
-// ─── Icons ───────────────────────────────────────────────────────────────────
-
-function IconSvg({ kind, size = 18, color = '#5d605a' }: {
-  kind: 'stethoscope' | 'syringe' | 'pill' | 'alert' | 'trend' | 'suggestion' | 'spark' | 'check';
+function IconSvg({
+  kind,
+  size = 18,
+  color = '#5d605a',
+}: {
+  kind: 'stethoscope' | 'syringe' | 'pill' | 'alert' | 'trend' | 'suggestion' | 'spark';
   size?: number;
   color?: string;
 }) {
@@ -74,19 +72,6 @@ function IconSvg({ kind, size = 18, color = '#5d605a' }: {
       <Path d="M14.5 8H18V11.5" stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
-  if (kind === 'suggestion') return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Circle cx="12" cy="12" r="8" stroke={color} strokeWidth={1.9} />
-      <Path d="M9.8 9.6C10.1 8.7 10.9 8.1 12 8.1C13.3 8.1 14.2 8.9 14.2 10.1C14.2 11.1 13.7 11.6 12.8 12.1C12.1 12.5 11.8 12.9 11.8 13.6" stroke={color} strokeWidth={1.7} strokeLinecap="round" />
-      <Circle cx="11.8" cy="16.1" r="0.8" fill={color} />
-    </Svg>
-  );
-  if (kind === 'check') return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-      <Path d="M5 12L10 17L19 8" stroke={color} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-    </Svg>
-  );
-  // spark
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M12 4L13.3 8L17.5 9.3L13.3 10.6L12 14.6L10.7 10.6L6.5 9.3L10.7 8L12 4Z" stroke={color} strokeWidth={1.8} strokeLinejoin="round" />
@@ -94,43 +79,37 @@ function IconSvg({ kind, size = 18, color = '#5d605a' }: {
   );
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 function priorityColors(priority: AiInsight['priority']) {
-  if (priority === 'high') return { bar: '#c0392b', bg: '#fdf0ee', pill: '#fbe0dc', pillText: '#a33020' };
-  if (priority === 'medium') return { bar: '#c48d42', bg: '#fdf7ee', pill: '#faecd8', pillText: '#9a6a28' };
-  return { bar: '#47664a', bg: '#f0f5f0', pill: '#daeeda', pillText: '#356038' };
+  if (priority === 'high') return { bg: '#fdf0ee', fg: '#a93c2c', pill: '#fbe2dc' };
+  if (priority === 'medium') return { bg: '#fdf8ef', fg: '#a2712d', pill: '#f8ead1' };
+  return { bg: '#eef6ef', fg: '#47664a', pill: '#dfeedd' };
 }
 
 function typeColors(type: AiInsight['type']) {
-  if (type === 'alert') return { bg: '#fde8e3', fg: '#b94747' };
-  if (type === 'trend') return { bg: '#e3eef8', fg: '#3a4e7a' };
-  return { bg: '#e8f0e8', fg: '#47664a' };
+  if (type === 'alert') return { bg: '#fde8e3', fg: '#b94747', icon: 'alert' as const };
+  if (type === 'trend') return { bg: '#e7f0fb', fg: '#43688d', icon: 'trend' as const };
+  return { bg: '#ebf3ea', fg: '#47664a', icon: 'suggestion' as const };
 }
 
 function typeLabel(type: AiInsight['type'], isTr: boolean) {
-  if (type === 'alert') return isTr ? 'Uyarı' : 'Alert';
+  if (type === 'alert') return isTr ? 'Uyari' : 'Alert';
   if (type === 'trend') return isTr ? 'Trend' : 'Trend';
-  return isTr ? 'Öneri' : 'Suggestion';
+  return isTr ? 'Oneri' : 'Suggestion';
 }
 
 function priorityLabel(priority: AiInsight['priority'], isTr: boolean) {
-  if (priority === 'high') return isTr ? 'Yüksek' : 'High';
+  if (priority === 'high') return isTr ? 'Yuksek' : 'High';
   if (priority === 'medium') return isTr ? 'Orta' : 'Medium';
-  return isTr ? 'Düşük' : 'Low';
+  return isTr ? 'Dusuk' : 'Low';
 }
 
-// Determine which icon to use per stat label
-function iconForItem(label: string): { kind: 'stethoscope' | 'syringe' | 'pill' | 'alert' | 'trend' | 'suggestion' | 'spark' | 'check'; bg: string; fg: string } {
+function iconForItem(label: string): { kind: 'stethoscope' | 'syringe' | 'pill' | 'spark'; bg: string; fg: string } {
   const l = label.toLowerCase();
   if (l.includes('visit') || l.includes('ziyaret')) return { kind: 'stethoscope', bg: '#edffe3', fg: '#3a6e45' };
-  if (l.includes('vaccine') || l.includes('aşı')) return { kind: 'syringe', bg: '#ddeaf5', fg: '#3a6080' };
-  if (l.includes('med') || l.includes('ilaç')) return { kind: 'pill', bg: '#ede8f5', fg: '#5a4a7a' };
-  if (l.includes('alert') || l.includes('uyarı')) return { kind: 'alert', bg: '#fde8e3', fg: '#b94747' };
+  if (l.includes('vaccine') || l.includes('asi')) return { kind: 'syringe', bg: '#ddeaf5', fg: '#3a6080' };
+  if (l.includes('med') || l.includes('ilac')) return { kind: 'pill', bg: '#ede8f5', fg: '#5a4a7a' };
   return { kind: 'spark', bg: '#eeeee8', fg: '#5d605a' };
 }
-
-// ─── Main screen ─────────────────────────────────────────────────────────────
 
 export default function InsightsScreen({
   title,
@@ -141,76 +120,73 @@ export default function InsightsScreen({
   locale = 'en',
 }: InsightsScreenProps) {
   const isTr = locale === 'tr';
-  const screenTitle = title ?? (isTr ? 'Özet & İçgörüler' : 'Summary & Insights');
+  const screenTitle = title ?? (isTr ? 'Akilli Ozet' : 'Smart Overview');
+  const headline = insights[0];
 
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-
-        {/* ── Header ── */}
-        <View style={styles.headerRow}>
-          <Text style={styles.headerLabel}>{isTr ? 'SAĞLIK ANALİZİ' : 'HEALTH ANALYSIS'}</Text>
-          <Text style={styles.headerTitle}>{screenTitle}</Text>
+        <View style={styles.heroCard}>
+          <Text style={styles.heroEyebrow}>{isTr ? 'INSIGHTS' : 'INSIGHTS'}</Text>
+          <Text style={styles.heroTitle}>{screenTitle}</Text>
+          <Text style={styles.heroText}>
+            {headline?.message
+              ? headline.message
+              : isTr
+                ? 'Kayitlar arttikca daha net saglik baglami ve takip oncelikleri gosteririz.'
+                : 'As more records arrive, this view turns them into clearer health context and priorities.'}
+          </Text>
         </View>
 
-        {/* ── Stats grid ── */}
         {items.length > 0 ? (
-          <>
-            <Text style={styles.sectionLabel}>{isTr ? 'ÖZET' : 'OVERVIEW'}</Text>
-            <View style={styles.statsGrid}>
-              {items.map((item) => {
-                const icon = iconForItem(item.label);
-                return (
-                  <View key={item.label} style={styles.statCard}>
-                    <View style={[styles.statIconBox, { backgroundColor: icon.bg }]}>
-                      <IconSvg kind={icon.kind} size={18} color={icon.fg} />
-                    </View>
-                    <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>{item.value}</Text>
-                    <Text style={styles.statLabel}>{item.label.toUpperCase()}</Text>
-                    {item.sub ? (
-                      <Text style={styles.statSub} numberOfLines={2}>{item.sub}</Text>
-                    ) : null}
+          <View style={styles.metricsShell}>
+            {items.slice(0, 4).map((item, index) => {
+              const icon = iconForItem(item.label);
+              return (
+                <View key={item.label} style={[styles.metricCard, index % 2 === 0 && styles.metricCardLeft]}>
+                  <View style={[styles.metricIcon, { backgroundColor: icon.bg }]}>
+                    <IconSvg kind={icon.kind} size={18} color={icon.fg} />
                   </View>
-                );
-              })}
-            </View>
-          </>
+                  <Text style={styles.metricValue} numberOfLines={1} adjustsFontSizeToFit>
+                    {item.value}
+                  </Text>
+                  <Text style={styles.metricLabel}>{item.label}</Text>
+                  {item.sub ? <Text style={styles.metricSub} numberOfLines={2}>{item.sub}</Text> : null}
+                </View>
+              );
+            })}
+          </View>
         ) : null}
 
-        {/* ── AI Insights ── */}
-        <Text style={styles.sectionLabel}>{isTr ? 'AKILLI İÇGÖRÜLER' : 'SMART INSIGHTS'}</Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{isTr ? 'Bugun one cikanlar' : 'What stands out today'}</Text>
+          <Text style={styles.sectionSub}>{isTr ? 'Baglama uygun, hizli okunur notlar' : 'Quick notes with useful context'}</Text>
+        </View>
 
         {insights.length > 0 ? (
-          <View style={styles.insightsList}>
+          <View style={styles.insightList}>
             {insights.map((insight) => {
               const pc = priorityColors(insight.priority);
               const tc = typeColors(insight.type);
               return (
-                <View key={insight.id} style={[styles.insightCard, { borderLeftColor: pc.bar }]}>
-                  <View style={styles.insightTop}>
-                    <View style={[styles.insightIconBox, { backgroundColor: tc.bg }]}>
-                      <IconSvg
-                        kind={insight.type === 'alert' ? 'alert' : insight.type === 'trend' ? 'trend' : 'suggestion'}
-                        size={16}
-                        color={tc.fg}
-                      />
+                <View key={insight.id} style={styles.insightCard}>
+                  <View style={styles.insightTopRow}>
+                    <View style={[styles.insightIcon, { backgroundColor: tc.bg }]}>
+                      <IconSvg kind={tc.icon} size={16} color={tc.fg} />
                     </View>
                     <View style={styles.insightMeta}>
-                      <Text style={styles.insightTypeText}>{typeLabel(insight.type, isTr)}</Text>
+                      <Text style={styles.insightType}>{typeLabel(insight.type, isTr)}</Text>
                       <View style={[styles.priorityPill, { backgroundColor: pc.pill }]}>
-                        <Text style={[styles.priorityPillText, { color: pc.pillText }]}>
-                          {priorityLabel(insight.priority, isTr)}
-                        </Text>
+                        <Text style={[styles.priorityPillText, { color: pc.fg }]}>{priorityLabel(insight.priority, isTr)}</Text>
                       </View>
                     </View>
                   </View>
+
                   <Text style={styles.insightMessage}>{insight.message}</Text>
+
                   {insight.actionType && insight.actionLabel ? (
-                    <Pressable
-                      style={styles.insightActionBtn}
-                      onPress={() => onInsightAction?.(insight)}
-                    >
-                      <Text style={styles.insightActionText}>{insight.actionLabel}</Text>
+                    <Pressable style={styles.actionBtn} onPress={() => onInsightAction?.(insight)}>
+                      <Text style={styles.actionBtnText}>{insight.actionLabel}</Text>
                     </Pressable>
                   ) : null}
                 </View>
@@ -219,18 +195,16 @@ export default function InsightsScreen({
           </View>
         ) : (
           <View style={styles.emptyCard}>
-            <PawLottie size={90} />
-            <Text style={styles.emptyTitle}>
-              {isTr ? 'Henüz içgörü yok' : 'No insights yet'}
-            </Text>
+            <PawLottie size={92} />
+            <Text style={styles.emptyTitle}>{isTr ? 'Henuz icgoru yok' : 'No insights yet'}</Text>
             <Text style={styles.emptyBody}>
               {isTr
-                ? 'Veri ekledikçe hayvanının sağlık analizini göstermeye başlarız.'
-                : "Add some health data and we'll start analyzing your pet's trends."}
+                ? 'Asi, ziyaret, kilo veya saglik kaydi geldikce burada daha anlamli ozetler olusur.'
+                : 'As vaccines, visits, weight, and records arrive, this space becomes a more meaningful summary.'}
             </Text>
             {onEmptyCta ? (
               <Pressable style={styles.emptyCtaBtn} onPress={onEmptyCta}>
-                <Text style={styles.emptyCtaText}>{isTr ? 'Kilo Ekle →' : 'Log Weight →'}</Text>
+                <Text style={styles.emptyCtaText}>{isTr ? 'Kilo ekle' : 'Log weight'}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -240,116 +214,125 @@ export default function InsightsScreen({
   );
 }
 
-// ─── Styles ──────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
-  content: { paddingTop: 56, paddingHorizontal: 22, paddingBottom: 120, gap: 14 },
-
-  // Header
-  headerRow: { marginBottom: 4 },
-  headerLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.4,
-    color: C.onSurfaceVariant,
-    textTransform: 'uppercase',
-    marginBottom: 4,
+  content: { paddingTop: 58, paddingHorizontal: 20, paddingBottom: 124, gap: 18 },
+  heroCard: {
+    borderRadius: 30,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(110,120,116,0.08)',
+    shadowColor: '#6f7f79',
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
-  headerTitle: {
-    fontSize: 32,
+  heroEyebrow: {
+    fontSize: 10,
+    lineHeight: 14,
+    color: '#767d79',
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  heroTitle: {
+    marginTop: 6,
+    fontSize: 31,
+    lineHeight: 35,
     fontWeight: '800',
     color: C.onSurface,
-    letterSpacing: -0.7,
-    lineHeight: 36,
+    letterSpacing: -0.9,
   },
-
-  // Section label
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    color: C.outlineVariant,
-    textTransform: 'uppercase',
-    marginBottom: 2,
+  heroText: {
+    marginTop: 10,
+    fontSize: 15,
+    lineHeight: 22,
+    color: C.onSurfaceVariant,
+    fontWeight: '500',
   },
-
-  // Stats grid — 2 columns
-  statsGrid: {
+  metricsShell: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
   },
-  statCard: {
-    width: '47.5%',
-    backgroundColor: C.surface,
-    borderRadius: 20,
-    paddingTop: 16,
-    paddingBottom: 14,
-    paddingHorizontal: 14,
+  metricCard: {
+    width: '48.5%',
+    minHeight: 122,
+    borderRadius: 24,
+    padding: 16,
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.055)',
-    shadowColor: C.onSurface,
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    borderColor: 'rgba(110,120,116,0.07)',
+    gap: 8,
   },
-  statIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+  metricCardLeft: {
+    marginRight: 0,
+  },
+  metricIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 10,
   },
-  statValue: {
-    fontSize: 22,
+  metricValue: {
+    fontSize: 25,
+    lineHeight: 28,
+    color: '#26312f',
     fontWeight: '800',
-    color: C.onSurface,
-    letterSpacing: -0.3,
+    letterSpacing: -0.6,
   },
-  statLabel: {
-    marginTop: 3,
-    fontSize: 10,
+  metricLabel: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#707670',
     fontWeight: '700',
-    letterSpacing: 0.8,
-    color: C.outlineVariant,
-    textTransform: 'uppercase',
   },
-  statSub: {
-    marginTop: 5,
-    fontSize: 11,
-    lineHeight: 15,
-    color: C.onSurfaceVariant,
+  metricSub: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#838983',
     fontWeight: '500',
   },
-
-  // Insights list
-  insightsList: { gap: 10 },
-  insightCard: {
-    backgroundColor: C.surface,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.055)',
-    borderLeftWidth: 4,
-    padding: 14,
-    gap: 8,
-    shadowColor: C.onSurface,
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+  sectionHeader: {
+    gap: 2,
+    paddingHorizontal: 2,
   },
-  insightTop: {
+  sectionTitle: {
+    fontSize: 24,
+    lineHeight: 29,
+    color: '#25312f',
+    fontWeight: '800',
+    letterSpacing: -0.5,
+  },
+  sectionSub: {
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#7b817c',
+    fontWeight: '500',
+  },
+  insightList: {
+    gap: 12,
+  },
+  insightCard: {
+    borderRadius: 26,
+    padding: 18,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(110,120,116,0.07)',
+    gap: 12,
+  },
+  insightTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 12,
   },
-  insightIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
+  insightIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -357,89 +340,86 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    flex: 1,
+    flexWrap: 'wrap',
   },
-  insightTypeText: {
+  insightType: {
     fontSize: 13,
+    lineHeight: 17,
+    color: '#626863',
     fontWeight: '700',
-    color: C.onSurface,
   },
   priorityPill: {
-    height: 20,
-    borderRadius: 10,
-    paddingHorizontal: 8,
+    height: 24,
+    borderRadius: 12,
+    paddingHorizontal: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   priorityPillText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.3,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '800',
   },
   insightMessage: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: C.onSurfaceVariant,
+    fontSize: 16,
+    lineHeight: 24,
+    color: '#30332e',
     fontWeight: '500',
   },
-  insightActionBtn: {
+  actionBtn: {
     alignSelf: 'flex-start',
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#eaf2ea',
-    paddingHorizontal: 12,
+    height: 38,
+    borderRadius: 19,
+    paddingHorizontal: 16,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  insightActionText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: C.primary,
-  },
-
-  // Empty state
-  emptyCard: {
-    backgroundColor: C.surface,
-    borderRadius: 20,
+    backgroundColor: '#eef4ef',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.055)',
-    padding: 24,
-    alignItems: 'center',
+    borderColor: 'rgba(71,102,74,0.08)',
   },
-  emptyIconBox: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: C.surfaceContainer,
+  actionBtnText: {
+    fontSize: 13,
+    lineHeight: 16,
+    color: '#47664a',
+    fontWeight: '700',
+  },
+  emptyCard: {
+    borderRadius: 28,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(110,120,116,0.07)',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+    paddingHorizontal: 22,
+    paddingVertical: 28,
   },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: C.onSurface,
-    marginBottom: 6,
+    marginTop: 8,
+    fontSize: 22,
+    lineHeight: 27,
+    color: '#30332e',
+    fontWeight: '800',
+    letterSpacing: -0.5,
   },
   emptyBody: {
-    fontSize: 13,
-    lineHeight: 19,
-    color: C.onSurfaceVariant,
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 21,
+    color: '#6d726d',
     textAlign: 'center',
-    fontWeight: '500',
   },
   emptyCtaBtn: {
     marginTop: 16,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: C.primary,
+    height: 42,
+    borderRadius: 21,
     paddingHorizontal: 18,
     alignItems: 'center',
     justifyContent: 'center',
+    backgroundColor: '#eef4ef',
   },
   emptyCtaText: {
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 17,
+    color: '#47664a',
     fontWeight: '700',
-    color: '#e9ffe6',
   },
 });

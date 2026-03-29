@@ -134,6 +134,10 @@ export function buildUnifiedHealthEventsForPet(
       originalType: event.type,
       status: event.status,
       subcategory: event.subcategory,
+      dueDate: event.dueDate,
+      vetVisitId: event.vetVisitId,
+      valueNumber: event.valueNumber,
+      valueUnit: event.valueUnit,
     },
   } satisfies UnifiedHealthEvent));
 
@@ -150,6 +154,7 @@ export function buildUnifiedHealthEventsForPet(
       status: visit.status,
       clinicName: visit.clinicName,
       vetName: visit.vetName,
+      followUpDate: visit.followUpDate,
     },
   }));
 

@@ -1,16 +1,18 @@
 import React from 'react';
 import {
+  Animated,
   Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { ChevronLeft, ChevronRight, Edit2, Mars, Venus } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PetProfile, RoutineCareRecord } from '../lib/petProfileTypes';
 import type { WeightPoint } from '../lib/healthMvpModel';
-import BackgroundBlobs from '../components/pets/BackgroundBlobs';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 
 type PetDetailScreenProps = {
@@ -27,6 +29,9 @@ type PetDetailScreenProps = {
   onOpenVetVisits?: () => void;
   onOpenVaccinations?: () => void;
 };
+
+const HEADER_BUTTON_SIZE = 42;
+const HEADER_BAR_HEIGHT = 56;
 
 function formatAge(birthDate: string, isTr: boolean): string {
   const now = new Date();
@@ -122,9 +127,8 @@ export default function PetDetailScreen({
   onOpenVaccinations,
 }: PetDetailScreenProps) {
   const isTr = locale === 'tr';
-  const profileTitle = isTr
-    ? `${pet.name} Profili`
-    : `${pet.name}${pet.name.trim().toLowerCase().endsWith('s') ? "'" : "'s"} Profile`;
+  const insets = useSafeAreaInsets();
+  const scrollY = React.useRef(new Animated.Value(0)).current;
   const swipePanResponder = useEdgeSwipeBack({
     onBack,
     fullScreenGestureEnabled: false,
@@ -147,34 +151,59 @@ export default function PetDetailScreen({
   const hasAllergies = pet.chronicConditions?.allergies || (pet.allergiesLog ?? []).length > 0;
   const hasDiabetes = pet.chronicConditions?.diabetes || (pet.diabetesLog ?? []).length > 0;
   const surgeryCount = (pet.surgeriesLog ?? []).length;
+  const topInset = Math.max(insets.top, 14);
+  const topBarHeight = topInset + HEADER_BAR_HEIGHT;
+  const topChromeHeight = topInset + HEADER_BUTTON_SIZE + 12;
+  const topChromeOpacity = scrollY.interpolate({
+    inputRange: [0, 8, 72],
+    outputRange: [0, 0.52, 1],
+    extrapolate: 'clamp',
+  });
+  const heroScale = scrollY.interpolate({
+    inputRange: [-120, 0, 180],
+    outputRange: [1.02, 1, 0.988],
+    extrapolate: 'clamp',
+  });
+  const heroTranslateY = scrollY.interpolate({
+    inputRange: [0, 180],
+    outputRange: [0, -6],
+    extrapolate: 'clamp',
+  });
 
   return (
     <View style={styles.root}>
-      <BackgroundBlobs />
+      <LinearGradient
+        colors={['#35AE9D', '#8ED5CA', '#F6F4F0', '#F6F4F0']}
+        locations={[0, 0.22, 0.48, 1]}
+        start={{ x: 0.2, y: 0 }}
+        end={{ x: 0.7, y: 1 }}
+        style={StyleSheet.absoluteFillObject}
+      />
       <View style={styles.screen} {...swipePanResponder.panHandlers}>
-        <ScrollView
-          contentContainerStyle={styles.content}
+        <Animated.ScrollView
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: topBarHeight + 12,
+              paddingBottom: 332 + insets.bottom,
+            },
+          ]}
           showsVerticalScrollIndicator={false}
           scrollEnabled={!swipePanResponder.isSwiping}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true },
+          )}
+          scrollEventThrottle={16}
         >
-          <View style={styles.headerBlock}>
-            <View style={styles.topRow}>
-              <Pressable style={styles.iconBtn} onPress={onBack}>
-                <ChevronLeft size={20} color="#305855" strokeWidth={2.4} />
-              </Pressable>
-              {onEdit ? (
-                <Pressable style={styles.iconBtn} onPress={onEdit}>
-                  <Edit2 size={17} color="#305855" strokeWidth={2.2} />
-                </Pressable>
-              ) : (
-                <View style={styles.iconGhost} />
-              )}
-            </View>
-            <Text style={styles.headerEyebrow}>{isTr ? 'PET PROFILI' : 'PET PROFILE'}</Text>
-            <Text style={styles.screenTitle}>{profileTitle}</Text>
-          </View>
-
-          <View style={styles.heroCard}>
+          <Animated.View
+            style={[
+              styles.heroCard,
+              {
+                transform: [{ translateY: heroTranslateY }, { scale: heroScale }],
+              },
+            ]}
+          >
             <Image source={{ uri: pet.image }} style={styles.heroImage} />
             <View style={styles.heroBody}>
               <View style={styles.heroNameRow}>
@@ -196,7 +225,7 @@ export default function PetDetailScreen({
                 </View>
               ) : null}
             </View>
-          </View>
+          </Animated.View>
 
           <View style={styles.section}>
             <Text style={styles.sectionLabel}>{isTr ? 'KILO' : 'WEIGHT'}</Text>
@@ -323,9 +352,53 @@ export default function PetDetailScreen({
             <View style={styles.navDivider} />
             <NavRow label={isTr ? 'Sağlık Kayıtları' : 'Health Records'} onPress={onOpenHealthRecords} />
             <View style={styles.navDivider} />
-            <NavRow label={isTr ? 'Kilo Takibi' : 'Weight Tracking'} onPress={onOpenWeightTracking} />
+            <NavRow label={isTr ? 'Kilo Profili' : 'Weight Profile'} onPress={onOpenWeightTracking} />
           </Section>
-        </ScrollView>
+        </Animated.ScrollView>
+
+        <View pointerEvents="box-none" style={styles.topChrome}>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.topChromeSurface,
+              {
+                height: topChromeHeight,
+                opacity: topChromeOpacity,
+              },
+            ]}
+          >
+            <BlurView intensity={44} tint="light" style={StyleSheet.absoluteFillObject} />
+            <LinearGradient
+              colors={['rgba(246,244,240,0.95)', 'rgba(246,244,240,0.76)', 'rgba(246,244,240,0.3)', 'rgba(246,244,240,0)']}
+              locations={[0, 0.48, 0.78, 1]}
+              start={{ x: 0.5, y: 0 }}
+              end={{ x: 0.5, y: 1 }}
+              style={StyleSheet.absoluteFillObject}
+            />
+          </Animated.View>
+
+          <View style={[styles.topBarRow, { height: topBarHeight + 2, paddingTop: topInset + 3 }]}>
+            <View style={styles.topBarSide}>
+              <Pressable style={styles.iconBtn} onPress={onBack}>
+                <ChevronLeft size={20} color="#305855" strokeWidth={2.4} />
+              </Pressable>
+            </View>
+
+            <Text numberOfLines={1} style={styles.topBarTitle}>
+              {isTr ? 'PET PROFILI' : 'PET PROFILE'}
+            </Text>
+
+            <View style={[styles.topBarSide, styles.topBarSideRight]}>
+              {onEdit ? (
+                <Pressable style={styles.iconBtn} onPress={onEdit}>
+                  <Edit2 size={17} color="#305855" strokeWidth={2.2} />
+                </Pressable>
+              ) : (
+                <View style={styles.iconGhost} />
+              )}
+            </View>
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -342,51 +415,66 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 22,
-    paddingTop: 52,
-    paddingBottom: 332,
     gap: 16,
   },
-  headerBlock: {
-    marginBottom: 6,
-  },
-  topRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 18,
-  },
   iconBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
+    width: HEADER_BUTTON_SIZE,
+    height: HEADER_BUTTON_SIZE,
+    borderRadius: HEADER_BUTTON_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.52)',
+    backgroundColor: 'rgba(255,255,255,0.48)',
     borderWidth: 1,
-    borderColor: 'rgba(74,108,103,0.14)',
+    borderColor: 'rgba(74,108,103,0.12)',
     shadowColor: '#6f8f89',
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.04,
     shadowRadius: 8,
     shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
   iconGhost: {
-    width: 42,
-    height: 42,
+    width: HEADER_BUTTON_SIZE,
+    height: HEADER_BUTTON_SIZE,
   },
-  headerEyebrow: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: 'rgba(39,86,81,0.82)',
-    letterSpacing: 1.4,
-    marginBottom: 6,
+  topChrome: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 20,
   },
-  screenTitle: {
-    fontSize: 33,
-    lineHeight: 37,
-    fontWeight: '700',
-    color: '#163c39',
-    letterSpacing: -0.7,
+  topChromeSurface: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    overflow: 'hidden',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(115,139,134,0.2)',
+  },
+  topBarRow: {
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  topBarSide: {
+    width: 48,
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  topBarSideRight: {
+    alignItems: 'flex-end',
+  },
+  topBarTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '800',
+    color: '#183f3b',
+    letterSpacing: 1.35,
+    paddingHorizontal: 8,
   },
   heroCard: {
     backgroundColor: 'rgba(248,251,250,0.76)',

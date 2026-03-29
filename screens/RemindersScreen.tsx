@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import AppleTopBar, { TopBarCircleButton } from '../components/AppleTopBar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -534,6 +535,26 @@ export default function RemindersScreen({
 
   return (
     <View style={styles.screen}>
+      <AppleTopBar
+        title={isTr ? 'Hatirlatmalar' : 'Reminders'}
+        backgroundColor="rgba(246, 244, 240, 0.66)"
+        rightSlot={
+          <View style={styles.topBarActions}>
+            {onOpenNotifications ? (
+              <TopBarCircleButton onPress={onOpenNotifications}>
+                <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
+                  <Path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="#5d605a" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
+                  <Path d="M13.73 21a2 2 0 01-3.46 0" stroke="#5d605a" strokeWidth={1.9} strokeLinecap="round" />
+                </Svg>
+                {overdue.length > 0 ? <View style={styles.topBarDot} /> : null}
+              </TopBarCircleButton>
+            ) : null}
+            <TopBarCircleButton onPress={() => openCreate()}>
+              <Icon kind="add" size={17} color="#4f655f" />
+            </TopBarCircleButton>
+          </View>
+        }
+      />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
 
         {/* ── Header ── */}
@@ -562,6 +583,16 @@ export default function RemindersScreen({
         </View>
 
         {/* ── Stats row (always visible when any data exists) ── */}
+        <View style={styles.heroIntro}>
+          <Text style={styles.heroLabel}>{isTr ? 'PLANLAMA' : 'PLANNING'}</Text>
+          <Text style={styles.heroTitle}>{isTr ? 'Hatirlatmalar' : 'Reminders'}</Text>
+          <Text style={styles.heroText}>
+            {isTr
+              ? 'Gunluk bakim ve tibbi takibi ayni sakin akis icinde yonet.'
+              : 'Manage daily care and medical follow-ups in one calm flow.'}
+          </Text>
+        </View>
+
         {(totalActive > 0 || completed.length > 0) && (
           <View style={styles.statsRow}>
             <View style={styles.statItem}>
@@ -930,7 +961,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f6f4f0',
   },
   content: {
-    paddingTop: 56,
+    paddingTop: 110,
     paddingHorizontal: 20,
     paddingBottom: 120,
     gap: 0,
@@ -938,10 +969,47 @@ const styles = StyleSheet.create({
 
   // ── Header ──
   header: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
+    display: 'none',
+  },
+  heroIntro: {
     marginBottom: 20,
+  },
+  heroLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.5,
+    color: '#5d605a',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  heroTitle: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: '#30332e',
+    letterSpacing: -0.8,
+    lineHeight: 34,
+  },
+  heroText: {
+    marginTop: 6,
+    maxWidth: 320,
+    fontSize: 15,
+    lineHeight: 21,
+    color: '#6d726d',
+    fontWeight: '500',
+  },
+  topBarActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topBarDot: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: '#c05050',
   },
   headerLabel: {
     fontSize: 10,

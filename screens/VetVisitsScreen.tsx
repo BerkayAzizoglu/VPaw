@@ -16,11 +16,13 @@ import {
   View,
 } from 'react-native';
 import Svg, { Circle, Line, Path } from 'react-native-svg';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 import type { VetVisitReasonCategory } from '../lib/healthMvpModel';
+import StickyBlurTopBar, { getStickyHeaderContentTop } from '../components/StickyBlurTopBar';
 
 export type VisitActionType = 'vaccine' | 'diagnosis' | 'procedure' | 'test' | 'prescription';
 type ReminderPreset = 'same_day' | 'one_day_before' | 'custom';
@@ -311,6 +313,9 @@ export default function VetVisitsScreen({
   const { locale } = useLocale();
   const copy = getWording(locale).vetVisits;
   const isTr = locale === 'tr';
+  const insets = useSafeAreaInsets();
+  const scrollY = useRef(new Animated.Value(0)).current;
+  const topInset = Math.max(insets.top, 14);
 
   const [isCreateVisible, setIsCreateVisible] = useState(false);
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
@@ -812,21 +817,21 @@ export default function VetVisitsScreen({
       ) : null}
       <Animated.View style={[styles.frontLayer, swipePanResponder.frontLayerStyle]} {...swipePanResponder.panHandlers}>
       <StatusBar style="dark" />
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} scrollEnabled={!swipePanResponder.isSwiping}>
-        {/* ── Header ── */}
-        <View style={styles.headerRow}>
-          <Pressable style={styles.backBtn} onPress={onBack}>
-            <Icon kind="back" size={22} color="#5d605a" />
-          </Pressable>
-          <Text style={styles.headerTitle}>{copy.title}</Text>
-          {showAddButton ? (
-            <Pressable style={styles.addPill} onPress={() => setIsCreateVisible(true)}>
-              <Text style={styles.addPillText}>{isTr ? '+ Ekle' : '+ Add'}</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.headerPlaceholder} />
-          )}
-        </View>
+      <Animated.ScrollView
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: getStickyHeaderContentTop(topInset),
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+        scrollEnabled={!swipePanResponder.isSwiping}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+          { useNativeDriver: true },
+        )}
+        scrollEventThrottle={16}
+      >
 
         {showMainContent ? (
           <>
@@ -885,7 +890,24 @@ export default function VetVisitsScreen({
             onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lütfen kısa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
           />
         )}
-      </ScrollView>
+      </Animated.ScrollView>
+
+      <StickyBlurTopBar
+        title={isTr ? 'VETERINER ZIYARETLERI' : 'VET VISITS'}
+        topInset={topInset}
+        scrollY={scrollY}
+        titleColor="#2f352f"
+        leftSlot={(
+          <Pressable style={styles.backBtn} onPress={onBack}>
+            <Icon kind="back" size={22} color="#5d605a" />
+          </Pressable>
+        )}
+        rightSlot={showAddButton ? (
+          <Pressable style={styles.backBtn} onPress={() => setIsCreateVisible(true)}>
+            <Icon kind="plus" size={18} color="#5d605a" />
+          </Pressable>
+        ) : undefined}
+      />
 
       <Modal
         visible={isCreateVisible}
@@ -1158,7 +1180,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f6f4f0',
   },
   content: {
-    paddingTop: 56,
     paddingHorizontal: 22,
     paddingBottom: 60,
     gap: 16,
@@ -1172,9 +1193,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',

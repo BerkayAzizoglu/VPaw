@@ -13,7 +13,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Path, Stop, SvgUri } from 'react-native-svg';
 import LottieView from 'lottie-react-native';
 import { hap } from '../lib/haptics';
 import type { PetProfile } from '../lib/petProfileTypes';
@@ -22,7 +22,7 @@ import { useLocale } from '../hooks/useLocale';
 import { useAppSettings } from '../hooks/useAppSettings';
 import type { AiInsight } from '../lib/insightsEngine';
 
-const logoSource = require('../assets/vpaw-figma-logo.png');
+const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
 
 export type JourneyEventItem = {
   id: string;
@@ -561,9 +561,11 @@ export default function HomeScreen({
       >
         <View style={styles.topRow}>
           <View style={styles.brandWrap}>
-            <Image source={logoSource} style={styles.brandLogo} />
+            <View style={styles.brandLogoWrap}>
+              <SvgUri uri={logoUri} width={28} height={28} />
+            </View>
             <View>
-              <Text style={styles.brandTitle}>V-Paw</Text>
+              <Text style={styles.brandTitle}>VPaw</Text>
               <Text style={styles.brandSub}>BY VIRNELO</Text>
             </View>
           </View>
@@ -1001,12 +1003,13 @@ const styles = StyleSheet.create({
   brandWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
-  brandLogo: {
-    width: 24,
-    height: 24,
-    resizeMode: 'contain',
+  brandLogoWrap: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   brandTitle: {
     fontSize: 22,

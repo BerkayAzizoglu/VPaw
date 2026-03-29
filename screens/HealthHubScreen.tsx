@@ -9,11 +9,13 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { getBreedHealthEntry, type BreedHealthEntry, type DailyCareCategory } from '../lib/breedHealthData';
 import { generateBreedInsight } from '../lib/breedInsightsEngine';
+import type { AiInsight } from '../lib/insightsEngine';
 import AddRecordSheet, { type AddRecordMode } from '../components/AddRecordSheet';
 import {
   CheckCircle,
@@ -106,11 +108,45 @@ export type HealthHubTimelineItem = {
   date: string;
   title: string;
   notes?: string;
+  metaLine?: string;
+  statusLabel?: string;
 };
 type HealthHubDomainKey = 'vet' | 'records' | 'vaccines' | 'reminders' | 'weight' | 'documents';
 export type HealthHubDomainOverview = Partial<
   Record<HealthHubDomainKey, { countText: string; statusText: string; infoText: string }>
 >;
+export type HealthHubAreaCard = {
+  key: AreaRowKey;
+  title: string;
+  subtitle: string;
+  countText?: string;
+  statusText?: string;
+  highlight:
+    | {
+        kind: 'date';
+        label?: string;
+        primary: string;
+        secondary: string;
+        detail?: string;
+        attention?: boolean;
+      }
+    | {
+        kind: 'metric';
+        label?: string;
+        primary: string;
+        secondary?: string;
+        detail?: string;
+        attention?: boolean;
+      }
+    | {
+        kind: 'text';
+        label?: string;
+        primary: string;
+        secondary?: string;
+        detail?: string;
+        attention?: boolean;
+      };
+};
 type HealthHubScreenProps = {
   summary: HealthHubSummary;
   timeline: HealthHubTimelineItem[];
@@ -134,7 +170,10 @@ type HealthHubScreenProps = {
   onAddWeightEntry?: () => void;
   onOpenDocuments?: () => void;
   domainOverview?: HealthHubDomainOverview;
-  documentsPreview?: Array<{ id: string; title: string; date: string; type: string }>;
+  areaCards?: HealthHubAreaCard[];
+  documentsPreview?: Array<{ id: string; title: string; date: string; type: string; contextLine?: string }>;
+  topInsights?: AiInsight[];
+  onOpenInsights?: () => void;
   medicationCourses?: Array<{ id: string; name: string; startDate: string; status: string; dose?: number; doseUnit?: string; frequency?: string; endDate?: string }>;
   onCompleteMedication?: (id: string) => void;
   onDeleteMedication?: (id: string) => void;
@@ -231,6 +270,62 @@ const AREA_ROW_THEMES: Record<AreaRowKey, AreaRowTheme> = {
   },
 };
 
+const HEALTH_MODULE_CARD_THEMES: Record<AreaRowKey, {
+  background: string;
+  iconBg: string;
+  iconColor: string;
+  badgeBg: string;
+  badgeText: string;
+  watermark: string;
+  shadow: string;
+}> = {
+  vet: {
+    background: '#2e4230',
+    iconBg: 'rgba(255,255,255,0.15)',
+    iconColor: '#f2fbf2',
+    badgeBg: 'rgba(255,255,255,0.10)',
+    badgeText: '#f2fbf2',
+    watermark: 'rgba(255,255,255,0.06)',
+    shadow: '#1a2a1c',
+  },
+  vaccines: {
+    background: '#56757c',
+    iconBg: 'rgba(255,255,255,0.10)',
+    iconColor: '#f2fbff',
+    badgeBg: 'rgba(255,255,255,0.12)',
+    badgeText: '#f1f7f9',
+    watermark: 'rgba(255,255,255,0.06)',
+    shadow: '#27434b',
+  },
+  records: {
+    background: '#d8c3a5',
+    iconBg: 'rgba(255,255,255,0.24)',
+    iconColor: '#6e573c',
+    badgeBg: 'rgba(255,255,255,0.22)',
+    badgeText: '#6e573c',
+    watermark: 'rgba(110,87,60,0.08)',
+    shadow: '#a78f72',
+  },
+  weight: {
+    background: '#c99272',
+    iconBg: 'rgba(255,255,255,0.14)',
+    iconColor: '#fff7f2',
+    badgeBg: 'rgba(255,255,255,0.16)',
+    badgeText: '#fff8f3',
+    watermark: 'rgba(255,255,255,0.08)',
+    shadow: '#8f5d42',
+  },
+  documents: {
+    background: '#e9ece8',
+    iconBg: 'rgba(255,255,255,0.58)',
+    iconColor: '#6e746f',
+    badgeBg: 'rgba(255,255,255,0.38)',
+    badgeText: '#6e746f',
+    watermark: 'rgba(110,116,111,0.07)',
+    shadow: '#c8cdc7',
+  },
+};
+
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 function categoryLabel(c: HealthHubCategory, isTr: boolean) {
   if (c === 'all') return isTr ? 'Tümü' : 'All';
@@ -266,6 +361,43 @@ function timelineTypeAccent(type: Exclude<HealthHubCategory, 'all'>) {
   if (type === 'vet') return C.accentVet;
   if (type === 'weight') return C.accentWeight;
   return C.accentRecord;
+}
+
+function categoryToAreaKey(category: HealthHubCategory): AreaRowKey | null {
+  if (category === 'vet') return 'vet';
+  if (category === 'vaccine') return 'vaccines';
+  if (category === 'record') return 'records';
+  if (category === 'weight') return 'weight';
+  return null;
+}
+
+function statusTone(status: string | undefined) {
+  const value = status?.toLowerCase() ?? '';
+  if (value.includes('overdue') || value.includes('gecik')) {
+    return { bg: '#fde8e3', text: '#a73b21', border: 'rgba(167,59,33,0.14)' };
+  }
+  if (value.includes('due soon') || value.includes('yaklas')) {
+    return { bg: '#fdf2dd', text: '#9b6400', border: 'rgba(155,100,0,0.14)' };
+  }
+  if (value.includes('up to date') || value.includes('guncel')) {
+    return { bg: '#eaf4ec', text: '#416d49', border: 'rgba(65,109,73,0.14)' };
+  }
+  if (value.includes('monitor')) {
+    return { bg: '#eef1fb', text: '#4e5f96', border: 'rgba(78,95,150,0.14)' };
+  }
+  if (value.includes('planned') || value.includes('plan')) {
+    return { bg: '#edf4fa', text: '#41688c', border: 'rgba(65,104,140,0.14)' };
+  }
+  if (value.includes('resolved')) {
+    return { bg: '#f0f2ee', text: '#5d605a', border: 'rgba(93,96,90,0.14)' };
+  }
+  return { bg: '#f1f3ef', text: '#5d605a', border: 'rgba(93,96,90,0.12)' };
+}
+
+function insightPriorityTone(priority: AiInsight['priority']) {
+  if (priority === 'high') return { bg: '#fde8e3', text: '#a73b21' };
+  if (priority === 'medium') return { bg: '#fdf2dd', text: '#9b6400' };
+  return { bg: '#eaf4ec', text: '#416d49' };
 }
 
 function FolderHeartIcon({ size = 21, color = '#7aa2b8' }: { size?: number; color?: string }) {
@@ -925,7 +1057,10 @@ export default function HealthHubScreen({
   onAddWeightEntry,
   onOpenDocuments,
   domainOverview,
+  areaCards,
   documentsPreview,
+  topInsights,
+  onOpenInsights,
   medicationCourses,
   onCompleteMedication,
   onDeleteMedication,
@@ -1017,6 +1152,7 @@ export default function HealthHubScreen({
   const cardScaleByKeyRef = useRef<Record<string, Animated.Value>>({});
   const createSavedPayloadRef = useRef<AddHealthRecordPayload | null>(null);
   const headerBtnScale = useRef(new Animated.Value(1)).current;
+  const { width } = useWindowDimensions();
   const qaScales = useRef([
     new Animated.Value(1),
     new Animated.Value(1),
@@ -1067,7 +1203,7 @@ export default function HealthHubScreen({
       },
       {
         key: 'weight',
-        title: isTr ? 'Kilo Takibi' : 'Weight Tracking',
+        title: isTr ? 'Ağırlık Profili' : 'Weight Profile',
         subtitle: isTr ? 'Trend ve değişim analizi' : 'Trends & body condition',
         icon: <HealthHubCategoryIcon kind="weight" colorOverride={AREA_ROW_THEMES.weight.iconTint} />,
         iconBg: AREA_ROW_THEMES.weight.iconBg,
@@ -1086,6 +1222,21 @@ export default function HealthHubScreen({
     ],
     [domainOverview, isTr, onOpenHealthRecords, onOpenVaccines, onOpenVetVisits, onOpenWeightTracking],
   );
+  const moduleCards = useMemo(
+    () => areaCards?.filter((item) => item.key !== 'documents') ?? [],
+    [areaCards],
+  );
+  const documentCard = useMemo(
+    () => areaCards?.find((item) => item.key === 'documents'),
+    [areaCards],
+  );
+  const focusedAreaKey = categoryToAreaKey(category);
+  const primaryInsight = topInsights?.[0] ?? null;
+  const secondaryInsight = topInsights?.[1] ?? null;
+  const moduleCardWidth = Math.max(148, Math.floor((width - 22 * 2 - 14) / 2));
+  const moduleCardHeight = Math.max(194, Math.min(226, Math.round(moduleCardWidth * 1.12)));
+  const documentsCardHeight = Math.max(174, Math.min(212, Math.round(moduleCardHeight * 0.9)));
+  const compactDateLayout = moduleCardWidth < 170;
 
   // ── form helpers ──
   const openCreate = (presetType: AddHealthRecordType = 'diagnosis', presetTitle = '') => {
@@ -1182,17 +1333,278 @@ export default function HealthHubScreen({
       <View pointerEvents="none" style={s.pageBgLayer}>
         <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
           <Defs>
-            <LinearGradient id="healthHubPageBg" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0%" stopColor="#0a1e26" />
-              <Stop offset="42%" stopColor="#10313b" />
-              <Stop offset="100%" stopColor="#18454e" />
+            <LinearGradient id="healthHubPageBg" x1="0.5" y1="0" x2="0.5" y2="1">
+              <Stop offset="0%" stopColor="#A4C3B2" />
+              <Stop offset="100%" stopColor="#CCE3DE" />
             </LinearGradient>
           </Defs>
           <Rect x="0" y="0" width="100" height="100" fill="url(#healthHubPageBg)" />
-          <Rect x="0" y="0" width="100" height="100" fill="rgba(217,245,240,0.03)" />
         </Svg>
       </View>
       <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
+        <View style={s.heroBlock}>
+          <View style={s.heroTopRow}>
+            <View style={s.heroTextWrap}>
+              <Text style={s.heroTitle}>Health Hub</Text>
+              <Text style={s.heroDescription}>
+                {isTr
+                  ? 'Ziyaretler, asilar, saglik kayitlari ve kilo takibini tek bir net saglik merkezinde gorun.'
+                  : 'See visits, vaccines, records, and weight tracking in one clear health center.'}
+              </Text>
+            </View>
+            <Animated.View style={{ transform: [{ scale: headerBtnScale }] }}>
+              <Pressable
+                style={s.heroActionButton}
+                onPressIn={springDown(headerBtnScale, 0.9)}
+                onPressOut={springUp(headerBtnScale)}
+                onPress={openQuickAdd}
+                android_ripple={{ color: 'rgba(71,102,74,0.10)', borderless: false }}
+              >
+                <Plus size={18} color={C.primary} strokeWidth={2.4} />
+              </Pressable>
+            </Animated.View>
+          </View>
+
+          {category !== 'all' ? (
+            <Pressable style={s.focusChip} onPress={() => setCategory('all')}>
+              <Text style={s.focusChipText}>
+                {isTr ? `${categoryLabel(category, isTr)} odagi` : `${categoryLabel(category, isTr)} focus`}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+
+        <View style={s.moduleCardsGrid}>
+          {moduleCards.map((card) => {
+            const entry = hubEntries.find((item) => item.key === card.key);
+            if (!entry) return null;
+            const active = focusedAreaKey === entry.key;
+            const theme = HEALTH_MODULE_CARD_THEMES[entry.key as Exclude<AreaRowKey, 'documents'>];
+            const isLightCard = entry.key === 'records';
+            const showAttention = !!card.highlight.attention;
+            const dateCategoryLabel =
+              entry.key === 'vet'
+                ? (isTr ? 'Ziyaret' : 'Visit')
+                : entry.key === 'vaccines'
+                  ? (isTr ? 'Aşı' : 'Vaccine')
+                  : '';
+            return (
+              <Animated.View key={entry.key} style={[s.moduleCardGridItem, { width: moduleCardWidth, transform: [{ scale: getCardScale(entry.key) }] }]}>
+                <Pressable
+                  style={[s.moduleCard, { backgroundColor: theme.background, shadowColor: theme.shadow, height: moduleCardHeight }, active && s.moduleCardActive]}
+                  onPressIn={springDown(getCardScale(entry.key), 0.985)}
+                  onPressOut={springUp(getCardScale(entry.key))}
+                  onPress={() => entry.onPress?.()}
+                >
+                  <View style={s.moduleCardWatermark}>
+                    <HealthHubCategoryIcon kind={entry.key as Exclude<AreaRowKey, 'documents'>} size={84} colorOverride={theme.watermark} />
+                  </View>
+
+                  <View style={s.moduleCardContent}>
+                    <View style={s.moduleCardHeaderRow}>
+                      <View style={[s.moduleCardIcon, { backgroundColor: theme.iconBg }]}>
+                        <HealthHubCategoryIcon kind={entry.key as Exclude<AreaRowKey, 'documents'>} size={18} colorOverride={theme.iconColor} />
+                      </View>
+                      <View style={s.moduleCardHeaderText}>
+                        <Text style={[s.moduleCardTitle, isLightCard && s.moduleCardTitleDark]} numberOfLines={2}>{card.title}</Text>
+                      </View>
+                    </View>
+
+                    {card.highlight.kind === 'date' ? (
+                      <View style={[s.moduleDateBlock, showAttention && s.moduleHighlightAttentionPanel]}>
+                        <View style={[s.moduleDateRow, compactDateLayout && s.moduleDateRowCompact]}>
+                          <View style={[s.moduleDateBadge, isLightCard && s.moduleDateBadgeLight]}>
+                            <Text style={[s.moduleDatePrimary, s.moduleDatePrimaryCompact, isLightCard && s.moduleDatePrimaryDark, showAttention && s.moduleDatePrimaryAttention]}>
+                              {card.highlight.primary}
+                            </Text>
+                            <Text style={[s.moduleDateSecondary, s.moduleDateSecondaryCompact, isLightCard && s.moduleDateSecondaryDark]}>
+                              {card.highlight.secondary}
+                            </Text>
+                          </View>
+                          <View style={[s.moduleDateTextCol, compactDateLayout && s.moduleDateTextColCompact]}>
+                            {card.highlight.detail ? (
+                              <Text
+                                style={[s.moduleMetricPrimary, s.moduleMetricPrimaryCompact, s.moduleDateDetailText, isLightCard && s.moduleMetricPrimaryDark, showAttention && s.moduleMetricPrimaryAttention]}
+                                numberOfLines={compactDateLayout ? 1 : 2}
+                              >
+                                {card.highlight.detail}
+                              </Text>
+                            ) : null}
+                          </View>
+                        </View>
+                      </View>
+                    ) : (
+                      <View style={[s.moduleMetricBlock, showAttention && s.moduleHighlightAttentionPanel]}>
+                        <Text style={[s.moduleMetricPrimary, isLightCard && s.moduleMetricPrimaryDark, showAttention && s.moduleMetricPrimaryAttention]} numberOfLines={2}>
+                          {card.highlight.primary}
+                        </Text>
+                        {card.highlight.secondary ? (
+                          <Text style={[s.moduleMetricSecondary, isLightCard && s.moduleMetricSecondaryDark]} numberOfLines={2}>
+                            {card.highlight.secondary}
+                          </Text>
+                        ) : null}
+                        {card.highlight.detail ? (
+                          <Text style={[s.moduleHighlightDetail, isLightCard && s.moduleHighlightDetailDark]} numberOfLines={2}>
+                            {card.highlight.detail}
+                          </Text>
+                        ) : null}
+                      </View>
+                    )}
+
+                    <View style={s.moduleCardFooterAbsolute}>
+                      {card.countText ? (
+                        <View style={[s.moduleCardCountPill, isLightCard && s.moduleCardCountPillDark]}>
+                          <View style={[s.moduleCardCountDot, isLightCard && s.moduleCardCountDotDark]} />
+                          <Text style={[s.moduleCardCountText, isLightCard && s.moduleCardCountTextDark]}>{card.countText}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                </Pressable>
+              </Animated.View>
+            );
+          })}
+
+          <Animated.View style={[s.documentsFullWidthWrap, { transform: [{ scale: getCardScale('documents') }] }]}>
+            <Pressable
+              style={[s.moduleCard, s.documentCard, s.documentCardLight, { backgroundColor: HEALTH_MODULE_CARD_THEMES.documents.background, shadowColor: HEALTH_MODULE_CARD_THEMES.documents.shadow, minHeight: documentsCardHeight }]}
+              onPressIn={springDown(getCardScale('documents'), 0.985)}
+              onPressOut={springUp(getCardScale('documents'))}
+              onPress={() => onOpenDocuments?.()}
+            >
+              <View style={s.moduleCardWatermark}>
+                <HealthHubCategoryIcon kind="documents" size={84} colorOverride={HEALTH_MODULE_CARD_THEMES.documents.watermark} />
+              </View>
+
+              <View style={s.moduleCardContent}>
+                <View style={s.moduleCardHeaderRow}>
+                  <View style={[s.moduleCardIcon, { backgroundColor: HEALTH_MODULE_CARD_THEMES.documents.iconBg }]}>
+                    <HealthHubCategoryIcon kind="documents" size={18} colorOverride={HEALTH_MODULE_CARD_THEMES.documents.iconColor} />
+                  </View>
+                  <View style={s.moduleCardHeaderText}>
+                    <Text style={[s.moduleCardTitle, s.moduleCardTitleDark, s.documentCardTitle]}>
+                      {documentCard?.title ?? (isTr ? 'Belgeler' : 'Documents')}
+                    </Text>
+                  </View>
+                </View>
+
+                {documentCard?.highlight.primary ? (
+                  <View style={s.moduleMetricBlock}>
+                    {documentCard.highlight.label ? (
+                      <Text style={[s.moduleHighlightLabel, s.moduleHighlightLabelDark]}>{documentCard.highlight.label}</Text>
+                    ) : null}
+                    <Text style={[s.moduleMetricPrimary, s.moduleMetricPrimaryDark]} numberOfLines={2}>
+                      {documentCard.highlight.primary}
+                    </Text>
+                    {documentCard.highlight.secondary ? (
+                      <Text style={[s.moduleMetricSecondary, s.moduleMetricSecondaryDark]} numberOfLines={2}>
+                        {documentCard.highlight.secondary}
+                      </Text>
+                    ) : null}
+                    {documentCard.highlight.detail ? (
+                      <Text style={[s.moduleHighlightDetail, s.moduleHighlightDetailDark]} numberOfLines={2}>
+                        {documentCard.highlight.detail}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : documentsPreview?.[0]?.title ? (
+                  <Text style={[s.documentCardPreview, s.documentCardPreviewDark]} numberOfLines={1}>
+                    {documentsPreview[0].title}
+                  </Text>
+                ) : null}
+
+                <View style={s.moduleCardFooterAbsolute}>
+                  {documentCard?.countText ? (
+                    <View style={[s.moduleCardCountPill, s.moduleCardCountPillDark]}>
+                      <View style={[s.moduleCardCountDot, s.moduleCardCountDotDark]} />
+                      <Text style={[s.moduleCardCountText, s.moduleCardCountTextDark]}>{documentCard.countText}</Text>
+                    </View>
+                  ) : null}
+                </View>
+              </View>
+            </Pressable>
+          </Animated.View>
+        </View>
+
+        {breedEntry ? (
+          <View style={s.sectionBlock}>
+            <View style={s.sectionHeaderCompact}>
+              <View style={s.sectionTextWrap}>
+                <Text style={s.sectionTitle}>{isTr ? 'Irk İçgörüleri' : 'Breed Insights'}</Text>
+                <Text style={s.sectionSubtitle}>
+                  {isTr ? 'Tıbbi kayıtların yanında bağlamsal sağlık farkındalığı.' : 'Contextual breed awareness beside clinical records.'}
+                </Text>
+              </View>
+            </View>
+            <BreedTeaserRow
+              entry={breedEntry}
+              isPremium={isPremium}
+              onPress={openBreedSheet}
+              isTr={isTr}
+              avatarUri={petAvatarUri}
+              insightText={breedInsight?.text}
+              petName={petName}
+            />
+          </View>
+        ) : null}
+
+        <View style={s.sectionBlockLast}>
+          <View style={s.sectionHeaderCompact}>
+            <View style={s.sectionTextWrap}>
+              <Text style={s.sectionTitle}>{isTr ? 'AI Önizleme' : 'AI Insight Preview'}</Text>
+              <Text style={s.sectionSubtitle}>
+                {isTr ? 'Derin analiz Insights ekranında kalır.' : 'Full analysis stays in the Insights screen.'}
+              </Text>
+            </View>
+            {onOpenInsights ? (
+              <Pressable style={s.sectionActionGhost} onPress={onOpenInsights}>
+                <Text style={s.sectionActionGhostText}>Insights</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          <Pressable style={s.aiPreviewCard} onPress={onOpenInsights}>
+            <View style={s.aiPreviewTopRow}>
+              <View style={s.aiPreviewIconWrap}>
+                <TrendingUp size={18} color="#47664a" strokeWidth={2.1} />
+              </View>
+              {primaryInsight ? (
+                <View style={[s.aiPriorityPill, { backgroundColor: insightPriorityTone(primaryInsight.priority).bg }]}>
+                  <Text style={[s.aiPriorityText, { color: insightPriorityTone(primaryInsight.priority).text }]}>
+                    {primaryInsight.priority === 'high'
+                      ? (isTr ? 'Yüksek öncelik' : 'High priority')
+                      : primaryInsight.priority === 'medium'
+                        ? (isTr ? 'İzlemeye değer' : 'Worth watching')
+                        : (isTr ? 'Kısa içgörü' : 'Light insight')}
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+
+            <Text style={s.aiPreviewMessage}>
+              {primaryInsight?.message ?? (
+                isTr
+                  ? 'Health Hub yalnızca kısa bir özet gösterir. Daha derin AI analizi için Insights ekranına geçin.'
+                  : 'Health Hub only shows a short preview. Open Insights for deeper AI analysis.'
+              )}
+            </Text>
+
+            <Text style={s.aiPreviewSecondary}>
+              {secondaryInsight?.message ?? (
+                isTr
+                  ? 'Buradaki amaç tam rapor değil, bir sonraki mantıklı sağlık aksiyonuna hızlıca yönlendirmektir.'
+                  : 'The goal here is not a full report, but a quick lead toward the next sensible health action.'
+              )}
+            </Text>
+
+            <View style={s.aiPreviewFooter}>
+              <Text style={s.aiPreviewFooterText}>{isTr ? 'Tüm analizleri aç' : 'Open full Insights'}</Text>
+              <ChevronRight size={16} color="#47664a" />
+            </View>
+          </Pressable>
+        </View>
+
+        {false && (<>
 
         {/* ── HEADER ── */}
         <View style={s.headerRow}>
@@ -1354,16 +1766,16 @@ export default function HealthHubScreen({
               <Text style={[s.categoryCardSub, { color: AREA_ROW_THEMES.documents.subColor }]} numberOfLines={1}>
                 {domainOverview?.documents?.infoText ?? (isTr ? 'Tüm kayıt ekleri tek yerde' : 'All record attachments in one place')}
               </Text>
-              {documentsPreview && documentsPreview.length > 0 ? (
+              {(documentsPreview?.length ?? 0) > 0 ? (
                 <Text style={[s.vaultPreviewText, { color: AREA_ROW_THEMES.documents.subColor }]} numberOfLines={2}>
-                  {documentsPreview.map((item) => item.title).slice(0, 2).join(' • ')}
+                  {(documentsPreview ?? []).map((item) => item.title).slice(0, 2).join(' • ')}
                 </Text>
               ) : null}
             </View>
             <View style={s.categoryCardRight}>
               {domainOverview?.documents?.countText ? (
                 <View style={[s.countBadge, { backgroundColor: AREA_ROW_THEMES.documents.badgeBg, borderColor: `${AREA_ROW_THEMES.documents.chevron}4D` }]}>
-                  <Text style={[s.countBadgeText, { color: AREA_ROW_THEMES.documents.badgeText }]}>{domainOverview.documents.countText}</Text>
+                  <Text style={[s.countBadgeText, { color: AREA_ROW_THEMES.documents.badgeText }]}>{domainOverview?.documents?.countText}</Text>
                 </View>
               ) : null}
               <Text style={[s.vaultCtaText, { color: AREA_ROW_THEMES.documents.statusText }]}>{isTr ? 'Tüm Belgeler' : 'View All'}</Text>
@@ -1375,14 +1787,14 @@ export default function HealthHubScreen({
         </View>
 
         {/* ── ACTIVE MEDICATIONS ── */}
-        {medicationCourses && medicationCourses.filter((m) => m.status === 'active' || m.status === 'paused').length > 0 ? (
+        {medicationCourses && (medicationCourses ?? []).filter((m) => m.status === 'active' || m.status === 'paused').length > 0 ? (
           <>
             <View style={[s.sectionHeaderRow, s.sectionHeaderRowSpaced]}>
               <Text style={[s.sectionLabel, s.sectionLabelMeds]}>{isTr ? 'AKTİF İLAÇLAR' : 'ACTIVE MEDICATIONS'}</Text>
               <View style={[s.sectionHeaderLine, s.sectionHeaderLineMeds]} />
             </View>
             <View style={s.categoryList}>
-              {medicationCourses
+              {(medicationCourses ?? [])
                 .filter((m) => m.status === 'active' || m.status === 'paused')
                 .map((med) => {
                   const doseLabel = med.dose ? `${med.dose}${med.doseUnit ?? ''} ${med.frequency ?? ''}`.trim() : (isTr ? 'Doz belirtilmedi' : 'No dose specified');
@@ -1430,7 +1842,7 @@ export default function HealthHubScreen({
             </View>
             <View style={{ marginBottom: 8 }}>
               <BreedTeaserRow
-                entry={breedEntry}
+                entry={breedEntry!}
                 isPremium={isPremium}
                 onPress={openBreedSheet}
                 isTr={isTr}
@@ -1505,6 +1917,7 @@ export default function HealthHubScreen({
             </View>
           )}
         </View> : null}
+        </>)}
 
       </ScrollView>
 
@@ -1850,15 +2263,792 @@ export default function HealthHubScreen({
 const s = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#0b1c25',
+    backgroundColor: '#CCE3DE',
   },
   pageBgLayer: {
     ...StyleSheet.absoluteFillObject,
+    borderRadius: 40,
+    overflow: 'hidden',
   },
   content: {
     paddingTop: 56,
     paddingHorizontal: 22,
     paddingBottom: 132,
+  },
+  heroBlock: {
+    marginBottom: 18,
+    gap: 12,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 14,
+  },
+  heroTextWrap: {
+    flex: 1,
+  },
+  heroTitle: {
+    fontSize: 34,
+    lineHeight: 38,
+    fontWeight: '800',
+    color: '#24342d',
+    letterSpacing: -1,
+  },
+  heroDescription: {
+    marginTop: 8,
+    fontSize: 14,
+    lineHeight: 21,
+    fontWeight: '500',
+    color: 'rgba(48,51,46,0.72)',
+  },
+  heroActionButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#2c4530',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  focusChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.12)',
+  },
+  focusChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#47664a',
+  },
+  overviewStripModern: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: 'rgba(255,255,255,0.80)',
+    borderRadius: 24,
+    paddingVertical: 16,
+    paddingHorizontal: 8,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+    shadowColor: '#203127',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  overviewItem: {
+    flex: 1,
+    paddingHorizontal: 12,
+    gap: 6,
+  },
+  overviewLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: 'rgba(48,51,46,0.48)',
+  },
+  overviewValue: {
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '700',
+    color: '#24342d',
+  },
+  overviewDivider: {
+    width: 1,
+    marginVertical: 6,
+    backgroundColor: 'rgba(93,96,90,0.10)',
+  },
+  sectionBlock: {
+    marginBottom: 24,
+  },
+  moduleCardsSection: {
+    marginBottom: 24,
+    gap: 14,
+  },
+  moduleCardsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: 14,
+  },
+  moduleCardGridItem: {
+    marginBottom: 0,
+  },
+  documentsFullWidthWrap: {
+    width: '100%',
+    marginTop: 2,
+    marginBottom: 26,
+  },
+  moduleCard: {
+    minHeight: 206,
+    borderRadius: 31,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 18,
+    overflow: 'hidden',
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 4,
+  },
+  moduleCardActive: {
+    transform: [{ scale: 1.01 }],
+  },
+  moduleCardIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moduleCardBadge: {
+    position: 'absolute',
+    top: 18,
+    right: 18,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  moduleCardBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  moduleCardWatermark: {
+    position: 'absolute',
+    top: 10,
+    right: -6,
+    transform: [{ rotate: '9deg' }],
+  },
+  moduleCardContent: {
+    flex: 1,
+    marginTop: 10,
+    paddingBottom: 34,
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  moduleCardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  moduleCardHeaderText: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+  },
+  moduleCardTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#f7fbfb',
+    letterSpacing: -0.35,
+  },
+  moduleCardTitleDark: {
+    color: '#2e4230',
+  },
+  moduleCardFooter: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  moduleCardFooterAbsolute: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  moduleDateBlock: {
+    marginTop: 6,
+    gap: 0,
+  },
+  moduleDateRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  moduleDateRowCompact: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  moduleDateBadge: {
+    width: 72,
+    minHeight: 72,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    flexShrink: 0,
+  },
+  moduleDateBadgeLight: {
+    backgroundColor: 'rgba(255,255,255,0.46)',
+    borderColor: 'rgba(87,96,89,0.10)',
+  },
+  moduleCalendarBadge: {
+    width: 60,
+    minHeight: 72,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.17)',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingTop: 10,
+    paddingBottom: 10,
+    flexShrink: 0,
+  },
+  moduleCalendarBadgeLight: {
+    backgroundColor: 'rgba(255,255,255,0.38)',
+  },
+  moduleCalendarHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 10,
+    backgroundColor: 'rgba(255,255,255,0.32)',
+  },
+  moduleCalendarHeaderLight: {
+    backgroundColor: 'rgba(255,255,255,0.72)',
+  },
+  moduleDateTextCol: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
+    gap: 2,
+  },
+  moduleDateTextColCompact: {
+    width: '100%',
+  },
+  moduleDateEyebrow: {
+    fontSize: 10.5,
+    lineHeight: 13,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
+    color: 'rgba(244,250,251,0.7)',
+  },
+  moduleDateEyebrowDark: {
+    color: 'rgba(78,89,82,0.68)',
+  },
+  moduleDateMeta: {
+    fontSize: 11.5,
+    lineHeight: 15,
+    fontWeight: '700',
+    color: 'rgba(244,250,251,0.72)',
+  },
+  moduleDateMetaDark: {
+    color: 'rgba(78,89,82,0.74)',
+  },
+  moduleMetricBlock: {
+    marginTop: 6,
+    gap: 4,
+  },
+  moduleHighlightAttentionPanel: {
+    borderRadius: 22,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  moduleHighlightLabel: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: 'rgba(244,250,251,0.64)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+    marginBottom: 4,
+  },
+  moduleHighlightLabelDark: {
+    color: 'rgba(101,109,104,0.86)',
+  },
+  moduleHighlightLabelAttention: {
+    color: '#fff1e6',
+  },
+  moduleDatePrimary: {
+    fontSize: 40,
+    lineHeight: 41,
+    fontWeight: '800',
+    color: '#f8fbfb',
+    letterSpacing: -1.6,
+  },
+  moduleDatePrimaryDark: {
+    color: '#2e4230',
+  },
+  moduleDatePrimaryAttention: {
+    color: '#fff8f2',
+  },
+  moduleDatePrimaryCompact: {
+    fontSize: 24,
+    lineHeight: 26,
+    letterSpacing: -0.9,
+    textAlign: 'center',
+  },
+  moduleDateSecondary: {
+    fontSize: 15,
+    lineHeight: 19,
+    fontWeight: '700',
+    color: 'rgba(244,250,251,0.86)',
+    marginTop: -2,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  moduleDateSecondaryDark: {
+    color: '#5e694d',
+  },
+  moduleDateSecondaryCompact: {
+    fontSize: 9.5,
+    lineHeight: 12,
+    marginTop: 2,
+    textAlign: 'center',
+    letterSpacing: 0.8,
+  },
+  moduleMetricPrimary: {
+    fontSize: 23,
+    lineHeight: 27,
+    fontWeight: '800',
+    color: '#f8fbfb',
+    letterSpacing: -0.6,
+    maxWidth: '92%',
+  },
+  moduleMetricPrimaryDark: {
+    color: '#2e4230',
+  },
+  moduleMetricPrimaryAttention: {
+    color: '#fff8f2',
+  },
+  moduleMetricPrimaryCompact: {
+    fontSize: 16,
+    lineHeight: 20,
+    letterSpacing: -0.35,
+    maxWidth: '100%',
+  },
+  moduleDateDetailText: {
+    marginTop: 1,
+    letterSpacing: -0.2,
+  },
+  moduleMetricSecondary: {
+    fontSize: 12.5,
+    lineHeight: 17,
+    fontWeight: '700',
+    color: 'rgba(244,250,251,0.84)',
+  },
+  moduleMetricSecondaryDark: {
+    color: '#5e694d',
+  },
+  moduleHighlightDetail: {
+    marginTop: 4,
+    fontSize: 12.5,
+    lineHeight: 17,
+    fontWeight: '600',
+    color: 'rgba(239,247,248,0.74)',
+    maxWidth: '100%',
+  },
+  moduleHighlightDetailDark: {
+    color: 'rgba(94,105,77,0.84)',
+  },
+  documentCard: {
+    minHeight: 160,
+  },
+  documentCardLight: {
+    borderWidth: 1,
+    borderColor: 'rgba(101,109,104,0.08)',
+  },
+  documentCardPreview: {
+    marginTop: 2,
+    maxWidth: '84%',
+    fontSize: 12.5,
+    lineHeight: 17,
+    fontWeight: '600',
+    color: '#f6fbfc',
+  },
+  documentCardPreviewDark: {
+    color: '#656d68',
+  },
+  documentCardTitle: {
+    color: '#47504b',
+  },
+  moduleCardCountPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    backgroundColor: 'rgba(255,255,255,0.10)',
+  },
+  moduleCardCountPillDark: {
+    backgroundColor: 'rgba(255,255,255,0.8)',
+  },
+  moduleCardCountDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#ffffff',
+    opacity: 0.82,
+  },
+  moduleCardCountDotDark: {
+    backgroundColor: '#3a6040',
+    opacity: 1,
+  },
+  moduleCardCountText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#f2f8f9',
+  },
+  moduleCardCountTextDark: {
+    color: '#5a625d',
+  },
+  sectionBlockLast: {
+    marginBottom: 8,
+  },
+  sectionHeaderCompact: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 12,
+  },
+  sectionTextWrap: {
+    flex: 1,
+    gap: 4,
+  },
+  sectionTitle: {
+    fontSize: 21,
+    fontWeight: '800',
+    color: '#24342d',
+    letterSpacing: -0.5,
+  },
+  sectionSubtitle: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
+    color: 'rgba(48,51,46,0.60)',
+  },
+  sectionMetaText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(71,102,74,0.76)',
+    paddingTop: 4,
+  },
+  sectionActionGhost: {
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.70)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+  },
+  sectionActionGhostText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#47664a',
+  },
+  moduleShell: {
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderRadius: 26,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+    shadowColor: '#203127',
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
+  },
+  moduleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  moduleRowFocused: {
+    backgroundColor: 'rgba(71,102,74,0.045)',
+  },
+  moduleRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(93,96,90,0.12)',
+  },
+  moduleIconWrap: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f4f4ee',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.06)',
+  },
+  moduleIconWrapActive: {
+    backgroundColor: '#eef5ef',
+    borderColor: 'rgba(71,102,74,0.12)',
+  },
+  moduleBody: {
+    flex: 1,
+    gap: 6,
+  },
+  moduleTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  moduleTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#24342d',
+    letterSpacing: -0.25,
+  },
+  moduleCount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: 'rgba(48,51,46,0.52)',
+  },
+  moduleInfo: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+    color: 'rgba(48,51,46,0.68)',
+  },
+  moduleAside: {
+    alignItems: 'flex-end',
+    gap: 10,
+    minWidth: 92,
+  },
+  statusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderWidth: 1,
+  },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  documentsShell: {
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderRadius: 26,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+  },
+  documentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+  },
+  documentRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(93,96,90,0.12)',
+  },
+  documentIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: '#f0ebf8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(93,89,129,0.08)',
+  },
+  documentBody: {
+    flex: 1,
+    gap: 4,
+  },
+  documentTitle: {
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '700',
+    color: '#24342d',
+  },
+  documentContext: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontWeight: '500',
+    color: 'rgba(48,51,46,0.58)',
+  },
+  emptyPanel: {
+    flexDirection: 'row',
+    gap: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    backgroundColor: 'rgba(255,255,255,0.76)',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+    alignItems: 'center',
+  },
+  emptyPanelStatic: {
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    backgroundColor: 'rgba(255,255,255,0.76)',
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+    gap: 6,
+  },
+  emptyPanelIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: '#f1f3ef',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyPanelBody: {
+    flex: 1,
+    gap: 4,
+  },
+  emptyPanelTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#24342d',
+  },
+  emptyPanelText: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
+    color: 'rgba(48,51,46,0.58)',
+  },
+  activityShell: {
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderRadius: 26,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+  },
+  activityRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+  },
+  activityRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(93,96,90,0.12)',
+  },
+  activityIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.06)',
+  },
+  activityBody: {
+    flex: 1,
+    gap: 4,
+  },
+  activityTitleRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  activityTitle: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#24342d',
+    lineHeight: 19,
+  },
+  activityDate: {
+    fontSize: 11.5,
+    fontWeight: '700',
+    color: 'rgba(48,51,46,0.48)',
+  },
+  activityMeta: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontWeight: '600',
+    color: 'rgba(48,51,46,0.60)',
+  },
+  activityNote: {
+    fontSize: 12.5,
+    lineHeight: 18,
+    fontWeight: '500',
+    color: 'rgba(48,51,46,0.52)',
+  },
+  inlineStatusPill: {
+    marginTop: 2,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderWidth: 1,
+  },
+  inlineStatusPillText: {
+    fontSize: 10.5,
+    fontWeight: '800',
+  },
+  aiPreviewCard: {
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderRadius: 26,
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+    gap: 12,
+  },
+  aiPreviewTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  aiPreviewIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: '#eaf4ec',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiPriorityPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  aiPriorityText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  aiPreviewMessage: {
+    fontSize: 16,
+    lineHeight: 23,
+    fontWeight: '700',
+    color: '#24342d',
+  },
+  aiPreviewSecondary: {
+    fontSize: 13,
+    lineHeight: 20,
+    fontWeight: '500',
+    color: 'rgba(48,51,46,0.60)',
+  },
+  aiPreviewFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  aiPreviewFooterText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#47664a',
   },
 
   // Header

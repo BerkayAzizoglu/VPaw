@@ -19,7 +19,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { HeartPulse } from 'lucide-react-native';
+import { Bell, ChartColumnBig, HeartPulse, House } from 'lucide-react-native';
 import Svg, { Path } from 'react-native-svg';
 import { hap } from '../lib/haptics';
 
@@ -44,20 +44,23 @@ type TabDef = { key: TabKey; labelTr: string; labelEn: string; Icon: IconCompone
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const TABS: TabDef[] = [
-  { key: 'home',      labelTr: 'Ana Sayfa', labelEn: 'Home',      Icon: HeartPulse  },
-  { key: 'healthHub', labelTr: 'Sağlık',    labelEn: 'Health',    Icon: HeartPulse  },
-  { key: 'reminders', labelTr: 'Takip',     labelEn: 'Reminders', Icon: HeartPulse  },
-  { key: 'insights',  labelTr: 'Analiz',    labelEn: 'Insights',  Icon: HeartPulse  },
+  { key: 'home',      labelTr: 'Ana Sayfa', labelEn: 'Home',      Icon: House  },
+  { key: 'healthHub', labelTr: 'Saglik',    labelEn: 'Health',    Icon: HeartPulse  },
+  { key: 'reminders', labelTr: 'Takip',     labelEn: 'Reminders', Icon: Bell  },
+  { key: 'insights',  labelTr: 'Analiz',    labelEn: 'Insights',  Icon: ChartColumnBig  },
 ];
 
 const COLOR_ACTIVE   = '#446a63';
 const COLOR_INACTIVE = '#96a09c';
+const TAB_ACCENTS: Record<TabKey, { active: string; pillBg: string; pillBorder: string }> = {
+  home: { active: '#446a63', pillBg: 'rgba(255,255,255,0.84)', pillBorder: 'rgba(98,120,113,0.08)' },
+  healthHub: { active: '#255f60', pillBg: 'rgba(232,246,246,0.92)', pillBorder: 'rgba(72,120,120,0.12)' },
+  reminders: { active: '#9d7b36', pillBg: 'rgba(253,246,222,0.94)', pillBorder: 'rgba(176,148,84,0.14)' },
+  insights: { active: '#b86e43', pillBg: 'rgba(253,239,231,0.94)', pillBorder: 'rgba(190,122,88,0.14)' },
+};
 
 // Glass lens appearance
-const BAR_BG         = 'rgba(248, 245, 238, 0.78)';
 const BAR_BORDER     = 'rgba(96, 112, 105, 0.10)';
-const PILL_BG        = 'rgba(255, 255, 255, 0.72)';
-const PILL_BORDER    = 'rgba(86, 104, 97, 0.08)';
 
 const BAR_HEIGHT  = 82;
 const BAR_MARGIN  = 18;
@@ -105,8 +108,8 @@ function mixHexColor(fromHex: string, toHex: string, t: number) {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-function HomeStackIcon({ strength }: { strength: number }) {
-  const fill = mixHexColor(COLOR_INACTIVE, COLOR_ACTIVE, strength);
+function HomeStackIcon({ strength, activeColor }: { strength: number; activeColor: string }) {
+  const fill = mixHexColor(COLOR_INACTIVE, activeColor, strength);
   return (
     <View style={styles.homeIconWrap}>
       <Svg width={25} height={25} viewBox="0 0 24 24" fill="none">
@@ -119,8 +122,8 @@ function HomeStackIcon({ strength }: { strength: number }) {
   );
 }
 
-function BellSolidIcon({ strength }: { strength: number }) {
-  const fill = mixHexColor(COLOR_INACTIVE, COLOR_ACTIVE, strength);
+function BellSolidIcon({ strength, activeColor }: { strength: number; activeColor: string }) {
+  const fill = mixHexColor(COLOR_INACTIVE, activeColor, strength);
   return (
     <View style={styles.homeIconWrap}>
       <Svg width={25} height={25} viewBox="0 0 24 24" fill="none">
@@ -133,8 +136,8 @@ function BellSolidIcon({ strength }: { strength: number }) {
   );
 }
 
-function InsightSolidIcon({ strength }: { strength: number }) {
-  const fill = mixHexColor(COLOR_INACTIVE, COLOR_ACTIVE, strength);
+function InsightSolidIcon({ strength, activeColor }: { strength: number; activeColor: string }) {
+  const fill = mixHexColor(COLOR_INACTIVE, activeColor, strength);
   return (
     <View style={styles.homeIconWrap}>
       <Svg width={25} height={25} viewBox="0 0 24 24" fill="none">
@@ -150,8 +153,8 @@ function InsightSolidIcon({ strength }: { strength: number }) {
   );
 }
 
-function HealthSolidIcon({ strength }: { strength: number }) {
-  const fill = mixHexColor(COLOR_INACTIVE, COLOR_ACTIVE, strength);
+function HealthSolidIcon({ strength, activeColor }: { strength: number; activeColor: string }) {
+  const fill = mixHexColor(COLOR_INACTIVE, activeColor, strength);
   return (
     <View style={styles.homeIconWrap}>
       <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
@@ -357,6 +360,7 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
   // ─── Render ──────────────────────────────────────────────────────────────────
 
   const pillW = tabSlot - PILL_INSET * 2;
+  const accent = TAB_ACCENTS[displayTab];
   const currentPillX = dragFingerX == null
     ? getPillX(getTabIndex(displayTab), tabSlot)
     : clampPillXFromFingerX(dragFingerX, tabSlot, barWidth);
@@ -387,6 +391,8 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
         style={[
           styles.pill,
           {
+            backgroundColor: accent.pillBg,
+            borderColor: accent.pillBorder,
             width: pillW,
             transform: [{ translateX: pillXAnim }, { translateX: pillShiftXAnim }, { scaleX: pillScaleXAnim }, { scaleY: pillScaleYAnim }],
           },
@@ -403,8 +409,8 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
         const labelNearEdge = Math.max(0, 1 - edgeDistance / labelOverlapRange);
         const highlightStrength = dragFingerX == null ? (isActive ? 1 : 0) : Math.max(insidePill, nearEdge * 0.9);
         const labelHighlightStrength = dragFingerX == null ? (isActive ? 1 : 0) : Math.max(insidePill, labelNearEdge * 0.96);
-        const iconColor = mixHexColor(COLOR_INACTIVE, COLOR_ACTIVE, highlightStrength);
-        const textColor = mixHexColor(COLOR_INACTIVE, COLOR_ACTIVE, labelHighlightStrength);
+        const iconColor = mixHexColor(COLOR_INACTIVE, accent.active, highlightStrength);
+        const textColor = mixHexColor(COLOR_INACTIVE, accent.active, labelHighlightStrength);
         const isStrong = labelHighlightStrength >= 0.58;
         const Icon     = tab.Icon;
 
@@ -429,13 +435,13 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
             >
               <View style={isActive ? styles.activeTabIcon : styles.inactiveTabIcon}>
                 {tab.key === 'home' ? (
-                  <HomeStackIcon strength={highlightStrength} />
+                  <HomeStackIcon strength={highlightStrength} activeColor={accent.active} />
                 ) : tab.key === 'healthHub' ? (
-                  <HealthSolidIcon strength={highlightStrength} />
+                  <HealthSolidIcon strength={highlightStrength} activeColor={accent.active} />
                 ) : tab.key === 'reminders' ? (
-                  <BellSolidIcon strength={highlightStrength} />
+                  <BellSolidIcon strength={highlightStrength} activeColor={accent.active} />
                 ) : tab.key === 'insights' ? (
-                  <InsightSolidIcon strength={highlightStrength} />
+                  <InsightSolidIcon strength={highlightStrength} activeColor={accent.active} />
                 ) : (
                   <Icon
                     size={25}
@@ -466,14 +472,14 @@ const styles = StyleSheet.create({
     bottom: 16,
     height: BAR_HEIGHT,
     borderRadius: 32,
-    backgroundColor: BAR_BG,
+    backgroundColor: 'rgba(248, 245, 238, 0.82)',
     borderWidth: 1,
     borderColor: BAR_BORDER,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
     shadowColor: '#5f736d',
-    shadowOpacity: 0.055,
+    shadowOpacity: 0.05,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
@@ -485,7 +491,7 @@ const styles = StyleSheet.create({
     left: 0,
     height: PILL_HEIGHT,
     borderRadius: PILL_RADIUS,
-    backgroundColor: 'rgba(255, 255, 255, 0.78)',
+    backgroundColor: 'rgba(255, 255, 255, 0.82)',
     borderWidth: 1,
     borderColor: 'rgba(123, 144, 136, 0.10)',
     shadowColor: '#6d837d',

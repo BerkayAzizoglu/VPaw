@@ -146,7 +146,7 @@ export default function PetHealthPassportScreen({
     vaccines: { key: 'vaccines', icon: 'vaccine', title: isTr ? 'Aşılar' : 'Vaccinations', helper: isTr ? 'Aşı geçmişi ve durum bilgileri.' : 'Vaccine history and status.' },
     visits: { key: 'visits', icon: 'pulse', title: isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits', helper: isTr ? 'Veteriner ziyaretleri zaman çizelgesi.' : 'Chronology of clinic visits.' },
     health: { key: 'health', icon: 'health', title: isTr ? 'Sağlık Kayıtları' : 'Medical Records', helper: isTr ? 'Tanı, test ve klinik notlar.' : 'Diagnoses, tests, and clinical notes.' },
-    weight: { key: 'weight', icon: 'weight', title: isTr ? 'Kilo Takibi' : 'Weight Tracking', helper: isTr ? 'Trend grafiği ve kilo özetleri.' : 'Trend chart and weight snapshots.' },
+    weight: { key: 'weight', icon: 'weight', title: isTr ? 'Kilo Profili' : 'Weight Profile', helper: isTr ? 'Trend grafiği ve kilo özetleri.' : 'Trend chart and weight snapshots.' },
     documents: { key: 'documents', icon: 'download', title: isTr ? 'Belgeleri dahil et' : 'Include documents', helper: isTr ? 'Belgeleri eklemek dosya boyutunu artırabilir.' : 'Including documents may increase file size.' },
   };
 
@@ -422,5 +422,4 @@ const styles = StyleSheet.create({
   exportBtnDisabled: { opacity: 0.72 },
   exportBtnText: { fontSize: 16, lineHeight: 22, color: '#faf8f5', fontWeight: '700' },
 });
-
 
