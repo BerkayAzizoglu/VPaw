@@ -12,19 +12,16 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   Activity,
-  Bug,
   ChevronLeft,
   ChevronRight,
   Edit2,
-  FileText,
+  HeartPulse,
   Mars,
-  PawPrint,
-  Scale,
   Syringe,
   Venus,
 } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import type { PetProfile, RoutineCareRecord } from '../lib/petProfileTypes';
+import type { PetProfile } from '../lib/petProfileTypes';
 import type { WeightPoint } from '../lib/healthMvpModel';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 
@@ -41,6 +38,7 @@ type PetDetailScreenProps = {
   onOpenHealthRecords?: () => void;
   onOpenVetVisits?: () => void;
   onOpenVaccinations?: () => void;
+  onOpenHealthHub?: () => void;
 };
 
 const HEADER_BUTTON_SIZE = 46;
@@ -74,82 +72,12 @@ function fmtDate(value: string, isTr: boolean): string {
   return `${d.getDate()} ${isTr ? monthsTr[d.getMonth()] : monthsEn[d.getMonth()]} ${d.getFullYear()}`;
 }
 
-function nextRoutineDue(record: RoutineCareRecord, isTr: boolean): string {
-  if (!record.enabled || !record.lastDate) return isTr ? 'Kayıt yok' : 'No record';
-  const ms = new Date(record.lastDate).getTime();
-  if (!Number.isFinite(ms)) return isTr ? 'Kayıt yok' : 'No record';
-  const dueMs = ms + record.intervalDays * 86400000;
-  const diffDays = Math.round((dueMs - Date.now()) / 86400000);
-  if (diffDays < 0) return isTr ? 'Gecikti' : 'Overdue';
-  if (diffDays === 0) return isTr ? 'Bugün' : 'Today';
-  if (diffDays === 1) return isTr ? 'Yarın' : 'Tomorrow';
-  return isTr ? `${diffDays} gün sonra` : `In ${diffDays} days`;
-}
-
-function routineDueColor(record: RoutineCareRecord): string {
-  if (!record.enabled || !record.lastDate) return '#8d8176';
-  const ms = new Date(record.lastDate).getTime();
-  if (!Number.isFinite(ms)) return '#8d8176';
-  const dueMs = ms + record.intervalDays * 86400000;
-  const diffDays = Math.round((dueMs - Date.now()) / 86400000);
-  if (diffDays < 0) return '#b26c5e';
-  if (diffDays <= 7) return '#b18457';
-  return '#7b8f72';
-}
-
 function SectionHeader({ title }: { title: string }) {
   return (
     <View style={styles.sectionHeaderRow}>
       <Text style={styles.sectionLabel}>{title}</Text>
       <View style={styles.sectionHeaderLine} />
     </View>
-  );
-}
-
-function RoutineRow({
-  label,
-  subtitle,
-  status,
-  statusColor,
-}: {
-  label: string;
-  subtitle?: string | null;
-  status: string;
-  statusColor?: string;
-}) {
-  return (
-    <View style={styles.routineRow}>
-      <View style={styles.routineLead}>
-        <View style={styles.rowIconShell}>
-          <Bug size={18} color="#37261b" strokeWidth={1.9} />
-        </View>
-        <View style={styles.routineTextGroup}>
-          <Text style={styles.routineTitle}>{label}</Text>
-          {subtitle ? <Text style={styles.routineSub}>{subtitle}</Text> : null}
-        </View>
-      </View>
-      <Text style={[styles.routineValue, statusColor ? { color: statusColor } : null]}>{status}</Text>
-    </View>
-  );
-}
-
-function QuickAccessRow({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  onPress?: () => void;
-}) {
-  return (
-    <Pressable style={styles.quickRow} onPress={onPress}>
-      <View style={styles.quickLead}>
-        <View style={styles.quickIconWrap}>{icon}</View>
-        <Text style={styles.quickLabel}>{label}</Text>
-      </View>
-      <ChevronRight size={18} color="#2a1a12" strokeWidth={2.2} />
-    </Pressable>
   );
 }
 
@@ -163,9 +91,8 @@ export default function PetDetailScreen({
   onBack,
   onEdit,
   onOpenWeightTracking,
-  onOpenHealthRecords,
-  onOpenVetVisits,
   onOpenVaccinations,
+  onOpenHealthHub,
 }: PetDetailScreenProps) {
   const isTr = locale === 'tr';
   const insets = useSafeAreaInsets();
@@ -206,16 +133,6 @@ export default function PetDetailScreen({
   const compactProfileOpacity = scrollY.interpolate({
     inputRange: [16, 58, 120],
     outputRange: [0, 0.55, 1],
-    extrapolate: 'clamp',
-  });
-  const heroTranslateY = scrollY.interpolate({
-    inputRange: [0, 150],
-    outputRange: [0, -4],
-    extrapolate: 'clamp',
-  });
-  const heroScale = scrollY.interpolate({
-    inputRange: [-140, 0, 1],
-    outputRange: [1.02, 1, 1],
     extrapolate: 'clamp',
   });
 
@@ -278,14 +195,7 @@ export default function PetDetailScreen({
           )}
           scrollEventThrottle={24}
         >
-          <Animated.View
-            style={[
-              styles.heroCard,
-              {
-                transform: [{ translateY: heroTranslateY }, { scale: heroScale }],
-              },
-            ]}
-          >
+          <View style={styles.heroCard}>
             <Image source={{ uri: pet.image }} style={styles.heroImage} />
             <View style={styles.heroBody}>
               <View style={styles.heroNameRow}>
@@ -311,7 +221,7 @@ export default function PetDetailScreen({
                 </View>
               ) : null}
             </View>
-          </Animated.View>
+          </View>
 
           <View style={styles.section}>
             <SectionHeader title={isTr ? 'KİLO' : 'WEIGHT'} />
@@ -359,45 +269,20 @@ export default function PetDetailScreen({
           </View>
 
           <View style={styles.section}>
-            <SectionHeader title={isTr ? 'RUTİN BAKIM' : 'ROUTINE CARE'} />
-            <View style={styles.blockCard}>
-              <RoutineRow
-                label={isTr ? 'İç Parazit' : 'Internal Parasite'}
-                subtitle={pet.routineCare.internalParasite.lastDate ? fmtDate(pet.routineCare.internalParasite.lastDate, isTr) : null}
-                status={nextRoutineDue(pet.routineCare.internalParasite, isTr)}
-                statusColor={routineDueColor(pet.routineCare.internalParasite)}
-              />
-              <View style={styles.blockDivider} />
-              <RoutineRow
-                label={isTr ? 'Dış Parazit' : 'External Parasite'}
-                subtitle={pet.routineCare.externalParasite.lastDate ? fmtDate(pet.routineCare.externalParasite.lastDate, isTr) : null}
-                status={nextRoutineDue(pet.routineCare.externalParasite, isTr)}
-                statusColor={routineDueColor(pet.routineCare.externalParasite)}
-              />
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <SectionHeader title={isTr ? 'HIZLI ERİŞİM' : 'QUICK ACCESS'} />
-            <View style={styles.blockCard}>
-              <QuickAccessRow
-                icon={<PawPrint size={19} color="#2c1a12" strokeWidth={2} />}
-                label={isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits'}
-                onPress={onOpenVetVisits}
-              />
-              <View style={styles.blockDivider} />
-              <QuickAccessRow
-                icon={<FileText size={19} color="#2c1a12" strokeWidth={2} />}
-                label={isTr ? 'Sağlık Kayıtları' : 'Health Records'}
-                onPress={onOpenHealthRecords}
-              />
-              <View style={styles.blockDivider} />
-              <QuickAccessRow
-                icon={<Scale size={19} color="#2c1a12" strokeWidth={2} />}
-                label={isTr ? 'Kilo Profili' : 'Weight Profile'}
-                onPress={onOpenWeightTracking}
-              />
-            </View>
+            <Pressable
+              style={({ pressed }) => [styles.healthHubEntryRow, pressed && styles.cardPressed]}
+              onPress={onOpenHealthHub}
+            >
+              <View style={styles.healthHubEntryLead}>
+                <View style={styles.rowIconShell}>
+                  <HeartPulse size={18} color="#3c261a" strokeWidth={1.9} />
+                </View>
+                <Text style={styles.healthHubEntryLabel}>
+                  {isTr ? 'Sağlık Merkezi' : 'Health Hub'}
+                </Text>
+              </View>
+              <ChevronRight size={18} color="#2a1a12" strokeWidth={2.2} />
+            </Pressable>
           </View>
 
           {displayLastVaccine ? (
@@ -802,83 +687,35 @@ const styles = StyleSheet.create({
     color: '#fffaf5',
     fontWeight: '800',
   },
-  blockCard: {
-    backgroundColor: 'rgba(255,249,243,0.76)',
+  healthHubEntryRow: {
+    minHeight: 72,
     borderRadius: 30,
+    backgroundColor: 'rgba(255,249,243,0.78)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.7)',
-    overflow: 'hidden',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
     shadowColor: '#7e5f47',
     shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
     elevation: 3,
   },
-  blockDivider: {
-    height: 1,
-    backgroundColor: 'rgba(93,68,49,0.09)',
-    marginHorizontal: 18,
-  },
-  routineRow: {
-    minHeight: 82,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-  routineLead: {
+  healthHubEntryLead: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     flex: 1,
   },
-  routineTextGroup: {
+  healthHubEntryLabel: {
     flex: 1,
-    gap: 3,
-  },
-  routineTitle: {
-    fontSize: 16,
-    color: '#2c1912',
-    fontWeight: '500',
-  },
-  routineSub: {
-    fontSize: 12,
-    color: '#907d70',
-    fontWeight: '500',
-  },
-  routineValue: {
-    maxWidth: 120,
-    textAlign: 'right',
-    fontSize: 14,
-    color: '#7e6759',
-    fontWeight: '500',
-  },
-  quickRow: {
-    minHeight: 78,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-    paddingHorizontal: 18,
-    paddingVertical: 14,
-  },
-  quickLead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    flex: 1,
-  },
-  quickIconWrap: {
-    width: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickLabel: {
-    fontSize: 18,
-    color: '#2a1710',
-    fontWeight: '500',
+    fontSize: 17,
+    color: '#2d1a12',
+    fontWeight: '600',
   },
   vaccineHintRow: {
     paddingHorizontal: 10,

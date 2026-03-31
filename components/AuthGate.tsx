@@ -3577,6 +3577,7 @@ export default function AuthGate() {
           latestVaccineOverride={latestVaccineForProfile}
           locale={locale}
           onBack={noop}
+          onOpenHealthHub={noop}
         />
       );
     }
@@ -3804,9 +3805,8 @@ export default function AuthGate() {
           setRoute('petEdit');
         }}
         onOpenWeightTracking={() => openWeightTracking(activePetId, 'petProfile')}
-        onOpenHealthRecords={() => openHealthHubWithCategory('record')}
-        onOpenVetVisits={() => openSubRoute('vetVisits', 'petProfile')}
         onOpenVaccinations={() => openHealthHubWithCategory('vaccine')}
+        onOpenHealthHub={() => openHealthHubWithCategory('all')}
       />,
     );
   }

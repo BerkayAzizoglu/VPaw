@@ -4,7 +4,6 @@ import {
   Animated,
   Alert,
   KeyboardAvoidingView,
-  Linking,
   Modal,
   Platform,
   Pressable,
@@ -151,88 +150,17 @@ function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethosc
 const MONTHS_EN = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
 const MONTHS_TR = ['OCA','ŞUB','MAR','NİS','MAY','HAZ','TEM','AĞU','EYL','EKİ','KAS','ARA'];
 
-function UpcomingMiniCard({ item, isTr, onEdit }: { item: VisitItem; isTr: boolean; onEdit?: () => void }) {
-  const parts = item.date.split('-');
-  const monthIdx = parseInt(parts[1] ?? '1', 10) - 1;
-  const day = parts[2] ?? '—';
-  const mon = (isTr ? MONTHS_TR : MONTHS_EN)[monthIdx] ?? '—';
-  return (
-    <View style={styles.miniCard}>
-      <View style={styles.miniDateBox}>
-        <Text style={styles.miniDateMon}>{mon}</Text>
-        <Text style={styles.miniDateDay}>{day}</Text>
-      </View>
-      <View style={styles.miniBody}>
-        <Text style={styles.miniClinic} numberOfLines={1}>{item.clinic || (isTr ? 'Veteriner Kliniği' : 'Vet Clinic')}</Text>
-        {item.title ? <Text style={styles.miniTitle} numberOfLines={1}>{item.title}</Text> : null}
-      </View>
-      <View style={styles.miniPill}>
-        <Text style={styles.miniPillText}>{isTr ? 'Planlandı' : 'Planned'}</Text>
-      </View>
-      {onEdit ? (
-        <Pressable style={styles.miniEditBtn} onPress={onEdit} hitSlop={8}>
-          <Icon kind="edit" size={14} color="#4a6e4e" />
-        </Pressable>
-      ) : null}
-    </View>
-  );
-}
-
-function FeaturedCard({ item, isTr, clinicName, onEdit }: { item: VisitItem; isTr: boolean; clinicName?: string; onEdit?: () => void }) {
-  const parts = item.date.split('-');
-  const monthIdx = parseInt(parts[1] ?? '1', 10) - 1;
-  const day = parts[2] ?? '—';
-  const mon = (isTr ? MONTHS_TR : MONTHS_EN)[monthIdx] ?? '—';
-  const handleDirections = () => {
-    const query = clinicName ?? item.clinic ?? item.title ?? 'veterinary clinic';
-    Linking.openURL('https://maps.google.com/?q=' + encodeURIComponent(query));
-  };
-  return (
-    <View style={styles.featuredCard}>
-      <View style={styles.featuredInner}>
-        <View style={styles.featuredLeft}>
-          <View style={styles.featuredTopRow}>
-            <View style={styles.featuredGlassTag}>
-              <Text style={styles.featuredGlassText}>{isTr ? 'PLANLI' : 'PLANNED'}</Text>
-            </View>
-            {onEdit ? (
-              <Pressable style={styles.featuredEditBtn} onPress={onEdit} hitSlop={8}>
-                <Icon kind="edit" size={14} color="rgba(255,255,255,0.85)" />
-              </Pressable>
-            ) : null}
-          </View>
-          <Text style={styles.featuredClinic}>{item.clinic || (isTr ? 'Veteriner Kliniği' : 'Vet Clinic')}</Text>
-          {item.doctor ? <Text style={styles.featuredDoctor}>{item.doctor}</Text> : null}
-        </View>
-        <View style={styles.featuredDateBox}>
-          <Text style={styles.featuredDateMon}>{mon}</Text>
-          <Text style={styles.featuredDateDay}>{day}</Text>
-        </View>
-      </View>
-      <View style={styles.featuredDivider} />
-      <View style={styles.featuredBottomRow}>
-        <View style={styles.featuredMeta}>
-          <Icon kind="stethoscope" size={14} color="rgba(255,255,255,0.6)" />
-          <Text style={styles.featuredMetaText}>{item.title}</Text>
-        </View>
-        <Pressable style={styles.featuredDirectionsBtn} onPress={handleDirections}>
-          <Svg width={14} height={14} viewBox="0 0 24 24" fill="white">
-            <Path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" fill="white" />
-          </Svg>
-          <Text style={styles.featuredDirectionsBtnText}>{isTr ? 'Yol Tarifi' : 'Directions'}</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-function CompletedVisitCard({
+function VisitCard({
   item,
   isTr,
+  isUpcoming,
+  onEdit,
   onOpenDocuments,
 }: {
   item: VisitItem;
   isTr: boolean;
+  isUpcoming: boolean;
+  onEdit?: () => void;
   onOpenDocuments?: () => void;
 }) {
   const parts = item.date.split('-');
@@ -242,48 +170,62 @@ function CompletedVisitCard({
   const year = parts[0]?.slice(2) ?? '—';
 
   return (
-    <View style={styles.completedCard}>
+    <View style={styles.visitCardNew}>
       {/* Date column */}
-      <View style={styles.completedDateCol}>
-        <Text style={styles.completedDateMon}>{mon}</Text>
-        <Text style={styles.completedDateDay}>{day}</Text>
-        <Text style={styles.completedDateYear}>{`'${year}`}</Text>
+      <View style={styles.visitCardDateCol}>
+        <Text style={styles.visitCardMon}>{mon}</Text>
+        <Text style={styles.visitCardDay}>{day}</Text>
+        {!isUpcoming && <Text style={styles.visitCardYear}>{`'${year}`}</Text>}
       </View>
 
       {/* Divider */}
-      <View style={styles.completedDivider} />
+      <View style={styles.visitCardDivider} />
 
       {/* Body */}
-      <View style={styles.completedBody}>
-        <View style={styles.completedTopRow}>
-          <Text style={styles.completedClinic} numberOfLines={1}>
-            {item.clinic || (isTr ? 'Veteriner Kliniği' : 'Vet Clinic')}
-          </Text>
-          <View style={styles.completedCheckBadge}>
-            <Icon kind="check" size={12} color="#47664a" />
-          </View>
-        </View>
+      <View style={styles.visitCardBody}>
+        <Text style={styles.visitCardClinic} numberOfLines={1}>
+          {item.clinic || (isTr ? 'Veteriner Kliniği' : 'Vet Clinic')}
+        </Text>
         {item.title ? (
-          <Text style={styles.completedTitle} numberOfLines={1}>{item.title}</Text>
+          <Text style={styles.visitCardTitle} numberOfLines={1}>{item.title}</Text>
         ) : null}
-        <View style={styles.completedMeta}>
-          {item.amount != null ? (
-            <View style={styles.completedAmountPill}>
-              <Text style={styles.completedAmountText}>{item.amount.toLocaleString('tr-TR')} {item.currency ?? 'TL'}</Text>
+        <View style={styles.visitCardMeta}>
+          {isUpcoming ? (
+            <View style={styles.visitCardPlannedBadge}>
+              <Text style={styles.visitCardPlannedText}>{isTr ? 'Planlandı' : 'Planned'}</Text>
             </View>
-          ) : null}
-          {item.attachments.length > 0 ? (
-            <Pressable
-              style={styles.completedDocPill}
-              onPress={onOpenDocuments}
-              disabled={!onOpenDocuments}
-            >
-              <Icon kind="file" size={11} color="#5d605a" />
-              <Text style={styles.completedDocText}>{item.attachments.length} {isTr ? 'belge' : 'doc'}</Text>
-            </Pressable>
-          ) : null}
+          ) : (
+            <>
+              {item.amount != null ? (
+                <View style={styles.visitCardAmountPill}>
+                  <Text style={styles.visitCardAmountText}>
+                    {item.amount.toLocaleString('tr-TR')} {item.currency ?? 'TL'}
+                  </Text>
+                </View>
+              ) : null}
+              {item.attachments.length > 0 ? (
+                <Pressable
+                  style={styles.visitCardDocPill}
+                  onPress={onOpenDocuments}
+                  disabled={!onOpenDocuments}
+                >
+                  <Icon kind="file" size={11} color="#5d605a" />
+                  <Text style={styles.visitCardDocText}>
+                    {item.attachments.length} {isTr ? 'belge' : 'doc'}
+                  </Text>
+                </Pressable>
+              ) : null}
+            </>
+          )}
         </View>
       </View>
+
+      {/* Edit button */}
+      {onEdit ? (
+        <Pressable style={styles.visitCardEditBtn} onPress={onEdit} hitSlop={8}>
+          <Icon kind="edit" size={14} color={isUpcoming ? '#4a6e4e' : '#5d605a'} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -786,14 +728,14 @@ export default function VetVisitsScreen({
             {plannedVisits.length > 0 ? (
               <>
                 <Text style={styles.sectionLabel}>{isTr ? 'YAKLAŞAN ZİYARETLER' : 'UPCOMING VISITS'}</Text>
-                <FeaturedCard
-                  item={plannedVisits[0]!}
-                  isTr={isTr}
-                  clinicName={plannedVisits[0]!.clinic || plannedVisits[0]!.title}
-                  onEdit={() => openEditModal(plannedVisits[0]!)}
-                />
-                {plannedVisits.slice(1).map((item) => (
-                  <UpcomingMiniCard key={item.id} item={item} isTr={isTr} onEdit={() => openEditModal(item)} />
+                {plannedVisits.map((item) => (
+                  <VisitCard
+                    key={item.id}
+                    item={item}
+                    isTr={isTr}
+                    isUpcoming={true}
+                    onEdit={() => openEditModal(item)}
+                  />
                 ))}
               </>
             ) : null}
@@ -806,7 +748,14 @@ export default function VetVisitsScreen({
                 </View>
                 <View style={styles.completedList}>
                   {pastVisits.map((item) => (
-                    <CompletedVisitCard key={item.id} item={item} isTr={isTr} onOpenDocuments={onOpenDocuments} />
+                    <VisitCard
+                      key={item.id}
+                      item={item}
+                      isTr={isTr}
+                      isUpcoming={false}
+                      onOpenDocuments={onOpenDocuments}
+                      onEdit={onEditVisit ? () => openEditModal(item) : undefined}
+                    />
                   ))}
                 </View>
               </>
@@ -1196,301 +1145,105 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  // ── featured card (dark gradient) ─────────────────────────────────────────
-  featuredCard: {
-    borderRadius: 24,
-    backgroundColor: '#2e4230',
-    paddingHorizontal: 22,
-    paddingTop: 22,
-    paddingBottom: 18,
-    shadowColor: '#1a2a1c',
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 6,
-  },
-  featuredInner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
-  },
-  featuredLeft: {
-    flex: 1,
-    gap: 6,
-  },
-  featuredTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  // ── completed visits list wrapper ────────────────────────────────────────
+  completedList: {
     gap: 8,
-  },
-  featuredEditBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  featuredGlassTag: {
-    alignSelf: 'flex-start',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  featuredGlassText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.85)',
-    letterSpacing: 0.8,
-  },
-  featuredClinic: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#ffffff',
-    letterSpacing: -0.3,
-    lineHeight: 26,
-  },
-  featuredDoctor: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.7)',
-  },
-  featuredDateBox: {
-    width: 64,
-    height: 64,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 14,
-  },
-  featuredDateMon: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.65)',
-    letterSpacing: 0.6,
-  },
-  featuredDateDay: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: '#ffffff',
-    lineHeight: 30,
-    letterSpacing: -1,
-  },
-  featuredDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    marginBottom: 14,
-  },
-  featuredBottomRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  featuredMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    flex: 1,
-  },
-  featuredMetaText: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: 'rgba(255,255,255,0.65)',
-  },
-  featuredDirectionsBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  featuredDirectionsBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#ffffff',
   },
 
-  // ── upcoming mini card ────────────────────────────────────────────────────
-  miniCard: {
+  // ── unified visit card ────────────────────────────────────────────────────
+  visitCardNew: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#f0f4f0',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginTop: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#30332e',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
-  miniDateBox: {
+  visitCardDateCol: {
+    width: 52,
     alignItems: 'center',
-    width: 40,
+    paddingVertical: 14,
+    backgroundColor: '#f4f6f2',
     flexShrink: 0,
   },
-  miniDateMon: {
+  visitCardMon: {
     fontSize: 9,
     fontWeight: '700',
     color: '#4a6e4e',
     letterSpacing: 0.8,
+    textTransform: 'uppercase',
   },
-  miniDateDay: {
+  visitCardDay: {
     fontSize: 20,
     fontWeight: '800',
     color: '#2e4230',
     lineHeight: 24,
     letterSpacing: -0.5,
   },
-  miniBody: {
-    flex: 1,
-    gap: 2,
-  },
-  miniClinic: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#30332e',
-    letterSpacing: -0.1,
-  },
-  miniTitle: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#5d605a',
-  },
-  miniPill: {
-    backgroundColor: '#d6e8d6',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    flexShrink: 0,
-  },
-  miniPillText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#3a6040',
-    letterSpacing: 0.2,
-  },
-  miniEditBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: '#e4ede4',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-
-  // ── completed visits ──────────────────────────────────────────────────────
-  completedList: {
-    gap: 8,
-  },
-  completedCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 0,
-    backgroundColor: '#ffffff',
-    borderRadius: 18,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
-  },
-  completedDateCol: {
-    width: 52,
-    alignItems: 'center',
-    paddingVertical: 14,
-    backgroundColor: '#f4f6f2',
-    gap: 0,
-  },
-  completedDateMon: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#718562',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  completedDateDay: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: '#30332e',
-    lineHeight: 24,
-    letterSpacing: -0.5,
-  },
-  completedDateYear: {
+  visitCardYear: {
     fontSize: 10,
     fontWeight: '600',
     color: '#9a9d93',
     letterSpacing: 0.2,
   },
-  completedDivider: {
+  visitCardDivider: {
     width: 1,
     alignSelf: 'stretch',
     backgroundColor: '#edeee9',
+    flexShrink: 0,
   },
-  completedBody: {
+  visitCardBody: {
     flex: 1,
     paddingHorizontal: 12,
     paddingVertical: 12,
     gap: 3,
   },
-  completedTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  completedClinic: {
-    flex: 1,
+  visitCardClinic: {
     fontSize: 14,
     fontWeight: '700',
     color: '#30332e',
     letterSpacing: -0.1,
   },
-  completedCheckBadge: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: '#eef4eb',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  completedTitle: {
+  visitCardTitle: {
     fontSize: 12,
     fontWeight: '500',
     color: '#5d605a',
   },
-  completedMeta: {
+  visitCardMeta: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     marginTop: 4,
+    flexWrap: 'wrap',
   },
-  completedAmountPill: {
+  visitCardPlannedBadge: {
+    backgroundColor: '#d6e8d6',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  visitCardPlannedText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#3a6040',
+    letterSpacing: 0.2,
+  },
+  visitCardAmountPill: {
     backgroundColor: '#f0f4f0',
     borderRadius: 999,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  completedAmountText: {
+  visitCardAmountText: {
     fontSize: 11,
     fontWeight: '700',
     color: '#47664a',
   },
-  completedDocPill: {
+  visitCardDocPill: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -1499,166 +1252,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  completedDocText: {
+  visitCardDocText: {
     fontSize: 11,
     fontWeight: '600',
     color: '#5d605a',
   },
-
-  // ── visit card (history item) ──────────────────────────────────────────────
-  cardsColumn: {
-    gap: 12,
-  },
-  visitCard: {
-    borderRadius: 20,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 14,
-    shadowColor: '#30332e',
-    shadowOpacity: 0.05,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  visitCardTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 10,
-  },
-  visitIconBox: {
-    width: 50,
-    height: 50,
-    borderRadius: 14,
+  visitCardEditBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 999,
+    backgroundColor: '#e8ede8',
     alignItems: 'center',
     justifyContent: 'center',
+    marginRight: 10,
     flexShrink: 0,
   },
-  visitCardBody: {
-    flex: 1,
-    gap: 3,
-  },
-  visitCardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#30332e',
-    letterSpacing: -0.2,
-  },
-  visitCardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  visitMetaText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#5d605a',
-  },
-  visitMetaDot: {
-    fontSize: 12,
-    color: '#b1b3ab',
-  },
-  visitCardDate: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#5d605a',
-    flexShrink: 0,
-  },
-  visitCardRight: {
-    alignItems: 'flex-end',
-    gap: 4,
-    flexShrink: 0,
-  },
-  visitCardAmount: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: '#30332e',
-  },
-  visitCardCategory: {
-    fontSize: 9,
-    fontWeight: '700',
-    color: '#9a9c95',
-    letterSpacing: 0.8,
-    textAlign: 'right',
-  },
-  visitStatusRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 0,
-  },
-  visitStatusPill: {
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  visitStatusDone: {
-    backgroundColor: '#cbebc8',
-  },
-  visitStatusPlanned: {
-    backgroundColor: '#e3eef8',
-  },
-  visitStatusText: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  visitStatusTextDone: {
-    color: '#3a6e45',
-  },
-  visitStatusTextPlanned: {
-    color: '#3a4e7a',
-  },
-  visitAutoReminderPill: {
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    backgroundColor: '#eeeee8',
-  },
-  visitAutoReminderText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#5d605a',
-  },
-  visitAmount: {
-    marginLeft: 'auto',
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#47664a',
-  },
-  visitRecords: {
-    marginTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: '#eeeee8',
-    paddingTop: 10,
-    gap: 5,
-  },
-  visitRecordsLabel: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    color: '#797c75',
-    textTransform: 'uppercase',
-    marginBottom: 4,
-  },
-  visitRecordRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  visitRecordDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: '#cbebc8',
-    flexShrink: 0,
-  },
-  visitRecordText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#30332e',
-  },
+
   viewDocumentsBtn: {
     alignSelf: 'flex-start',
     marginTop: 8,

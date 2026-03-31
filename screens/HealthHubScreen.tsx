@@ -1504,6 +1504,57 @@ export default function HealthHubScreen({
           ) : null}
         </View>
 
+        {/* ── Health Status Banner ─────────────────────────────────────── */}
+        {category === 'all' && (
+          <View style={s.statusBannerRow}>
+            {(vaccineAttentionCounts?.overdueCount ?? 0) > 0 && (
+              <View style={[s.statusPillItem, s.statusPillRed]}>
+                <Text style={[s.statusPillItemText, s.statusPillRedText]}>
+                  {vaccineAttentionCounts!.overdueCount} {isTr ? 'Gecikmiş' : 'Overdue'}
+                </Text>
+              </View>
+            )}
+            {(vaccineAttentionCounts?.dueSoonCount ?? 0) > 0 && (
+              <View style={[s.statusPillItem, s.statusPillAmber]}>
+                <Text style={[s.statusPillItemText, s.statusPillAmberText]}>
+                  {vaccineAttentionCounts!.dueSoonCount} {isTr ? 'Yaklaşan' : 'Due Soon'}
+                </Text>
+              </View>
+            )}
+            {(vaccineAttentionCounts?.overdueCount ?? 0) === 0 && (vaccineAttentionCounts?.dueSoonCount ?? 0) === 0 && (
+              <View style={[s.statusPillItem, s.statusPillGreen]}>
+                <Text style={[s.statusPillItemText, s.statusPillGreenText]}>
+                  {isTr ? 'Tümü güncel' : 'All up to date'}
+                </Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* ── Quick Actions ─────────────────────────────────────────────── */}
+        {category === 'all' && (
+          <View style={s.quickActionsRow}>
+            <Pressable style={s.quickActionChip} onPress={openTypeSelect}>
+              <Plus size={14} color={C.primary} strokeWidth={2.4} />
+              <Text style={s.quickActionChipText}>{isTr ? 'Kayıt Ekle' : 'Add Record'}</Text>
+            </Pressable>
+            {(vaccineAttentionCounts?.overdueCount ?? 0) > 0 ? (
+              <Pressable
+                style={[s.quickActionChip, s.quickActionChipUrgent]}
+                onPress={() => { setAddSheetMode('vaccine'); setAddSheetOpen(true); }}
+              >
+                <Syringe size={14} color="#a73b21" strokeWidth={2.1} />
+                <Text style={[s.quickActionChipText, s.quickActionChipUrgentText]}>{isTr ? 'Aşı Ekle' : 'Log Vaccine'}</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={s.quickActionChip} onPress={onAddWeightEntry}>
+                <TrendingUp size={14} color={C.primary} strokeWidth={2.1} />
+                <Text style={s.quickActionChipText}>{isTr ? 'Kilo Ekle' : 'Log Weight'}</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
+
         <View style={[s.moduleCardsGrid, { minHeight: Math.max(moduleCardHeight, 206) * 2 + 14 }]}>
           {moduleCards.map((card) => {
             const entry = hubEntries.find((item) => item.key === card.key);
@@ -1809,6 +1860,31 @@ export default function HealthHubScreen({
           </Pressable>
         </Animated.View>
 
+        {/* ── Timeline Preview (last 5, all category) ──────────────────── */}
+        {category === 'all' && timeline.length > 0 && (
+          <View style={s.timelinePreviewBlock}>
+            <View style={s.sectionHeaderCompact}>
+              <View style={s.sectionTextWrap}>
+                <Text style={s.sectionTitle}>{isTr ? 'Son Aktivite' : 'Recent Activity'}</Text>
+              </View>
+            </View>
+            <View style={s.timelinePreviewList}>
+              {timeline.slice(0, 5).map((item, idx) => (
+                <View
+                  key={item.id}
+                  style={[s.timelinePreviewRow, idx < Math.min(timeline.length, 5) - 1 && s.timelinePreviewRowDivider]}
+                >
+                  <View style={[s.timelinePreviewDot, { backgroundColor: timelineTypeAccent(item.type) }]} />
+                  <View style={s.timelinePreviewBody}>
+                    <Text style={s.timelinePreviewTitle} numberOfLines={1}>{item.title}</Text>
+                    <Text style={s.timelinePreviewMeta}>{item.date} · {typeTag(item.type, isTr)}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
         {breedEntry ? (
           <View style={[s.sectionBlock, s.breedSectionBlock]}>
             <View style={s.sectionHeaderCompact}>
@@ -1828,53 +1904,21 @@ export default function HealthHubScreen({
           </View>
         ) : null}
 
-        <View style={s.sectionBlockLast}>
-          <View style={s.sectionHeaderCompact}>
-            <View style={s.sectionTextWrap}>
-              <Text style={s.sectionTitle}>{isTr ? 'AI Önizleme' : 'AI Insight Preview'}</Text>
-            </View>
-            {onOpenInsights ? (
-              <Pressable style={s.sectionActionGhost} onPress={onOpenInsights}>
-                <Text style={s.sectionActionGhostText}>Insights</Text>
-              </Pressable>
-            ) : null}
-          </View>
-
-          <Pressable style={s.aiPreviewCard} onPress={onOpenInsights}>
-            <View style={s.aiPreviewTopRow}>
-              <View style={s.aiPreviewIconWrap}>
-                <TrendingUp size={18} color="#47664a" strokeWidth={2.1} />
-              </View>
-              {primaryInsight ? (
-                <View style={[s.aiPriorityPill, { backgroundColor: insightPriorityTone(primaryInsight.priority).bg }]}>
-                  <Text style={[s.aiPriorityText, { color: insightPriorityTone(primaryInsight.priority).text }]}>
-                    {primaryInsight.priority === 'high'
-                      ? (isTr ? 'Yüksek öncelik' : 'High priority')
-                      : primaryInsight.priority === 'medium'
-                        ? (isTr ? 'İzlemeye değer' : 'Worth watching')
-                        : (isTr ? 'Kısa içgörü' : 'Light insight')}
-                  </Text>
-                </View>
-              ) : null}
-            </View>
-
-            <Text style={s.aiPreviewMessage}>
-              {primaryInsight?.message ?? (
-                isTr
-                  ? 'Health Hub yalnızca kısa bir özet gösterir. Daha derin AI analizi için Insights ekranına geçin.'
-                  : 'Health Hub only shows a short preview. Open Insights for deeper AI analysis.'
-              )}
-            </Text>
-
-            {secondaryInsight?.message ? (
-              <Text style={s.aiPreviewSecondary}>{secondaryInsight.message}</Text>
-            ) : null}
-
-            <View style={s.aiPreviewFooter}>
-              <Text style={s.aiPreviewFooterText}>{isTr ? 'Tüm analizleri aç' : 'Open full Insights'}</Text>
-              <ChevronRight size={16} color="#47664a" />
-            </View>
-          </Pressable>
+        <View style={s.aiTextRow}>
+          <TrendingUp size={16} color={C.primary} strokeWidth={2.1} />
+          <Text style={s.aiTextRowMessage} numberOfLines={2}>
+            {primaryInsight?.message ?? (
+              isTr
+                ? 'Daha derin analiz için Insights ekranını açın.'
+                : 'Open Insights for deeper AI analysis.'
+            )}
+          </Text>
+          {onOpenInsights ? (
+            <Pressable style={s.aiTextRowBtn} onPress={onOpenInsights}>
+              <Text style={s.aiTextRowBtnText}>{isTr ? 'Aç' : 'Open'}</Text>
+              <ChevronRight size={13} color={C.primary} strokeWidth={2.2} />
+            </Pressable>
+          ) : null}
         </View>
 
       </Animated.ScrollView>
@@ -3716,6 +3760,159 @@ const s = StyleSheet.create({
     color: 'rgba(255,255,255,0.6)',
     fontSize: 13,
     marginTop: 4,
+  },
+
+  // ── Health Status Banner ──────────────────────────────────────────────────
+  statusBannerRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 22,
+    marginBottom: 12,
+    minHeight: 44,
+    alignItems: 'center',
+  },
+  statusPillItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  statusPillItemText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  statusPillRed: {
+    backgroundColor: '#fde8e3',
+    borderColor: 'rgba(167,59,33,0.22)',
+  },
+  statusPillRedText: {
+    color: '#a73b21',
+  },
+  statusPillAmber: {
+    backgroundColor: '#fdf2dd',
+    borderColor: 'rgba(155,100,0,0.22)',
+  },
+  statusPillAmberText: {
+    color: '#9b6400',
+  },
+  statusPillGreen: {
+    backgroundColor: '#eaf4ec',
+    borderColor: 'rgba(65,109,73,0.22)',
+  },
+  statusPillGreenText: {
+    color: '#416d49',
+  },
+
+  // ── Quick Actions ─────────────────────────────────────────────────────────
+  quickActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 22,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+  },
+  quickActionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    height: 36,
+    paddingHorizontal: 14,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.14)',
+  },
+  quickActionChipUrgent: {
+    backgroundColor: 'rgba(253,232,227,0.88)',
+    borderColor: 'rgba(167,59,33,0.20)',
+  },
+  quickActionChipText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.primary,
+  },
+  quickActionChipUrgentText: {
+    color: '#a73b21',
+  },
+
+  // ── Timeline Preview ──────────────────────────────────────────────────────
+  timelinePreviewBlock: {
+    marginBottom: 20,
+  },
+  timelinePreviewList: {
+    backgroundColor: 'rgba(255,255,255,0.80)',
+    borderRadius: 22,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+  },
+  timelinePreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  timelinePreviewRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(93,96,90,0.10)',
+  },
+  timelinePreviewDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    flexShrink: 0,
+  },
+  timelinePreviewBody: {
+    flex: 1,
+    gap: 2,
+  },
+  timelinePreviewTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: C.onSurface,
+    letterSpacing: -0.1,
+  },
+  timelinePreviewMeta: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: C.onSurfaceVariant,
+  },
+
+  // ── AI Text Row ───────────────────────────────────────────────────────────
+  aiTextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  aiTextRowMessage: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+    color: C.onSurfaceVariant,
+  },
+  aiTextRowBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.70)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+  },
+  aiTextRowBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.primary,
   },
 
 });
