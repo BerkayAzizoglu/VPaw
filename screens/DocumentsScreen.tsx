@@ -259,6 +259,9 @@ export default function DocumentsScreen({
                   ? (isTr ? 'Filtreleri temizleyin veya farkli bir arama deneyin.' : 'Try clearing filters or using a different search.')
                   : (isTr ? 'Vet ziyaretleri ve saglik kayitlarina eklenen dosyalar burada toplanir.' : 'Files linked to visits and records will gather here.')}
               </Text>
+              <Pressable style={styles.emptyCta} onPress={onBack}>
+                <Text style={styles.emptyCtaText}>{isTr ? 'Saglik Merkezine Don' : 'Back to Health Hub'}</Text>
+              </Pressable>
             </View>
           )}
         </ScrollView>
@@ -550,5 +553,21 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: '#6c706a',
     textAlign: 'center',
+  },
+  emptyCta: {
+    marginTop: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(90,116,110,0.22)',
+    backgroundColor: '#eef4f1',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  emptyCtaText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#4a6a62',
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 });

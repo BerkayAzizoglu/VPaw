@@ -1,19 +1,10 @@
-import React, { useEffect, useRef, useState } from 'react';
-import {
-  Animated,
-  PanResponder,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useWindowDimensions,
-} from 'react-native';
-import { BlurView } from 'expo-blur';
+import React from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { hap } from '../lib/haptics';
 
-export type TabKey = 'home' | 'healthHub' | 'reminders' | 'insights';
+export type TabKey = 'home' | 'healthHub' | 'reminders' | 'insights' | 'profile';
 
 type Props = {
   activeTab: TabKey;
@@ -32,43 +23,11 @@ const TABS: TabDef[] = [
   { key: 'healthHub', labelTr: 'Saglik', labelEn: 'Health' },
   { key: 'reminders', labelTr: 'Takip', labelEn: 'Reminders' },
   { key: 'insights', labelTr: 'Analiz', labelEn: 'Insights' },
+  { key: 'profile', labelTr: 'Profil', labelEn: 'Profile' },
 ];
 
-const COLOR_ACTIVE = '#2e5a53';
-const COLOR_INACTIVE = '#8d958f';
-const BAR_MARGIN = 14;
-const BAR_HEIGHT = 70;
-const PILL_INSET = 6;
-const PILL_HEIGHT = 60;
-const DRAG_THRESHOLD = 6;
-
-function getTabIndex(tab: TabKey) {
-  return TABS.findIndex((item) => item.key === tab);
-}
-
-function getPillX(tabIndex: number, tabSlot: number) {
-  return tabIndex * tabSlot + PILL_INSET;
-}
-
-function clampPillX(fingerX: number, tabSlot: number, barWidth: number) {
-  const pillWidth = tabSlot - PILL_INSET * 2;
-  const minX = PILL_INSET;
-  const maxX = Math.max(minX, barWidth - pillWidth - PILL_INSET);
-  return Math.max(minX, Math.min(maxX, fingerX - pillWidth / 2));
-}
-
-function mixHexColor(fromHex: string, toHex: string, strength: number) {
-  const parse = (value: string) => {
-    const safe = value.replace('#', '');
-    const full = safe.length === 3 ? safe.split('').map((part) => part + part).join('') : safe;
-    const int = Number.parseInt(full, 16);
-    return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
-  };
-  const from = parse(fromHex);
-  const to = parse(toHex);
-  const t = Math.max(0, Math.min(1, strength));
-  return `rgb(${Math.round(from.r + (to.r - from.r) * t)}, ${Math.round(from.g + (to.g - from.g) * t)}, ${Math.round(from.b + (to.b - from.b) * t)})`;
-}
+const COLOR_ACTIVE = '#47664A';
+const COLOR_INACTIVE = '#484C52';
 
 function HomeIcon({ color }: { color: string }) {
   return (
@@ -131,161 +90,46 @@ function InsightsIcon({ color }: { color: string }) {
   );
 }
 
+function ProfileIcon({ color }: { color: string }) {
+  return (
+    <Svg width={22} height={22} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M12 12.5C14.1 12.5 15.8 10.8 15.8 8.7C15.8 6.6 14.1 4.9 12 4.9C9.9 4.9 8.2 6.6 8.2 8.7C8.2 10.8 9.9 12.5 12 12.5Z"
+        stroke={color}
+        strokeWidth={1.9}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M5.6 19.2C6.5 16.7 8.9 15.1 12 15.1C15.1 15.1 17.5 16.7 18.4 19.2"
+        stroke={color}
+        strokeWidth={1.9}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 function TabIcon({ tabKey, color }: { tabKey: TabKey; color: string }) {
   if (tabKey === 'home') return <HomeIcon color={color} />;
   if (tabKey === 'healthHub') return <HealthIcon color={color} />;
   if (tabKey === 'reminders') return <ReminderIcon color={color} />;
-  return <InsightsIcon color={color} />;
+  if (tabKey === 'insights') return <InsightsIcon color={color} />;
+  return <ProfileIcon color={color} />;
 }
 
 export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) {
-  const { width: screenWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const barWidth = screenWidth - BAR_MARGIN * 2;
-  const tabSlot = barWidth / TABS.length;
-  const pillWidth = tabSlot - PILL_INSET * 2;
-  const bottomOffset = Math.max(insets.bottom, 4);
-
-  const pillXAnim = useRef(new Animated.Value(getPillX(getTabIndex(activeTab), tabSlot))).current;
-  const [previewTab, setPreviewTab] = useState<TabKey | null>(null);
-  const [dragFingerX, setDragFingerX] = useState<number | null>(null);
-  const displayTab = previewTab ?? activeTab;
-
-  const isDraggingRef = useRef(false);
-  const lastHoverIndexRef = useRef(-1);
-  const lastDragXRef = useRef<number | null>(null);
-  const barPageXRef = useRef(BAR_MARGIN);
-
-  const latestRef = useRef({ tabSlot, barWidth, onTabPress, activeTab, barPageXRef });
-  latestRef.current = { tabSlot, barWidth, onTabPress, activeTab, barPageXRef };
-
-  useEffect(() => {
-    if (isDraggingRef.current) return;
-    Animated.spring(pillXAnim, {
-      toValue: getPillX(getTabIndex(activeTab), tabSlot),
-      useNativeDriver: false,
-      tension: 240,
-      friction: 26,
-    }).start();
-  }, [activeTab, pillXAnim, tabSlot]);
-
-  function snapToIndex(index: number) {
-    Animated.spring(pillXAnim, {
-      toValue: getPillX(index, latestRef.current.tabSlot),
-      useNativeDriver: false,
-      tension: 240,
-      friction: 26,
-    }).start();
-  }
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false,
-      onMoveShouldSetPanResponder: (_evt, gestureState) => Math.abs(gestureState.dx) > DRAG_THRESHOLD,
-      onMoveShouldSetPanResponderCapture: (_evt, gestureState) => Math.abs(gestureState.dx) > DRAG_THRESHOLD,
-
-      onPanResponderGrant: (_evt, gestureState) => {
-        const { barWidth: currentBarWidth, tabSlot: currentTabSlot, barPageXRef: currentBarPageXRef } = latestRef.current;
-        const startX = Math.max(0, Math.min(gestureState.x0 - currentBarPageXRef.current, currentBarWidth));
-        const startIndex = Math.min(Math.floor(startX / currentTabSlot), TABS.length - 1);
-
-        isDraggingRef.current = true;
-        lastHoverIndexRef.current = startIndex;
-        lastDragXRef.current = startX;
-        setDragFingerX(startX);
-        setPreviewTab(TABS[startIndex].key);
-        pillXAnim.setValue(clampPillX(startX, currentTabSlot, currentBarWidth));
-      },
-
-      onPanResponderMove: (_evt, gestureState) => {
-        const { barWidth: currentBarWidth, tabSlot: currentTabSlot, barPageXRef: currentBarPageXRef } = latestRef.current;
-        const nextX = Math.max(0, Math.min(gestureState.moveX - currentBarPageXRef.current, currentBarWidth));
-        const hoveredIndex = Math.min(Math.floor(nextX / currentTabSlot), TABS.length - 1);
-
-        if (lastDragXRef.current == null || Math.abs(lastDragXRef.current - nextX) >= 0.75) {
-          lastDragXRef.current = nextX;
-          setDragFingerX(nextX);
-        }
-
-        pillXAnim.setValue(clampPillX(nextX, currentTabSlot, currentBarWidth));
-
-        if (hoveredIndex !== lastHoverIndexRef.current) {
-          lastHoverIndexRef.current = hoveredIndex;
-          setPreviewTab(TABS[hoveredIndex].key);
-          hap.select();
-        }
-      },
-
-      onPanResponderRelease: (_evt, gestureState) => {
-        const {
-          activeTab: currentActiveTab,
-          barWidth: currentBarWidth,
-          tabSlot: currentTabSlot,
-          onTabPress: currentOnTabPress,
-          barPageXRef: currentBarPageXRef,
-        } = latestRef.current;
-        const nextX = Math.max(0, Math.min(gestureState.moveX - currentBarPageXRef.current, currentBarWidth));
-        const targetIndex = Math.min(Math.floor(nextX / currentTabSlot), TABS.length - 1);
-        const targetTab = TABS[targetIndex]?.key ?? currentActiveTab;
-
-        setDragFingerX(null);
-        setPreviewTab(null);
-        lastDragXRef.current = null;
-        lastHoverIndexRef.current = -1;
-        isDraggingRef.current = false;
-        snapToIndex(getTabIndex(targetTab));
-        hap.light();
-        currentOnTabPress(targetTab);
-      },
-
-      onPanResponderTerminate: () => {
-        setDragFingerX(null);
-        setPreviewTab(null);
-        lastDragXRef.current = null;
-        lastHoverIndexRef.current = -1;
-        isDraggingRef.current = false;
-        snapToIndex(getTabIndex(latestRef.current.activeTab));
-      },
-    }),
-  ).current;
-
-  const currentPillLeft =
-    dragFingerX == null ? getPillX(getTabIndex(displayTab), tabSlot) : clampPillX(dragFingerX, tabSlot, barWidth);
-  const currentPillRight = currentPillLeft + pillWidth;
-  const overlapRange = Math.max(16, tabSlot * 0.24);
+  const safeBottom = Math.max(insets.bottom - 4, 8);
+  const barHeight = 50 + safeBottom;
 
   return (
-    <View
-      style={[styles.host, { bottom: bottomOffset }]}
-      onLayout={(event) => {
-        event.target.measure((_x, _y, _w, _h, pageX) => {
-          barPageXRef.current = pageX;
-        });
-      }}
-      {...panResponder.panHandlers}
-    >
-      <BlurView intensity={44} tint="light" style={StyleSheet.absoluteFillObject} />
-      <View pointerEvents="none" style={styles.surfaceTint} />
-
-      <Animated.View
-        pointerEvents="none"
-        style={[
-          styles.selectionPill,
-          {
-            transform: [{ translateX: pillXAnim }],
-            width: pillWidth,
-          },
-        ]}
-      />
-
+    <View style={[styles.host, { height: barHeight, paddingBottom: safeBottom }]}>
       {TABS.map((tab, index) => {
         const label = locale === 'tr' ? tab.labelTr : tab.labelEn;
-        const iconCenter = tabSlot * (index + 0.5);
-        const isInsidePill = iconCenter >= currentPillLeft && iconCenter <= currentPillRight ? 1 : 0;
-        const distanceToEdge = Math.min(Math.abs(iconCenter - currentPillLeft), Math.abs(iconCenter - currentPillRight));
-        const edgeStrength = Math.max(0, 1 - distanceToEdge / overlapRange);
-        const strength = dragFingerX == null ? (displayTab === tab.key ? 1 : 0) : Math.max(isInsidePill, edgeStrength * 0.92);
-        const color = mixHexColor(COLOR_INACTIVE, COLOR_ACTIVE, strength);
+        const isActive = activeTab === tab.key;
+        const color = isActive ? COLOR_ACTIVE : COLOR_INACTIVE;
 
         return (
           <View key={tab.key} style={styles.tabSlot}>
@@ -296,8 +140,13 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
                 onTabPress(tab.key);
               }}
             >
-              <TabIcon tabKey={tab.key} color={color} />
-              <Text style={[styles.tabLabel, { color }, displayTab === tab.key && styles.tabLabelActive]}>{label}</Text>
+              {isActive ? <View style={styles.activeLine} /> : null}
+              <View style={styles.iconWrap}>
+                <View style={styles.iconScale}>
+                  <TabIcon tabKey={tab.key} color={color} />
+                </View>
+              </View>
+              <Text style={[styles.tabLabel, { color }, isActive && styles.tabLabelActive]}>{label}</Text>
             </Pressable>
           </View>
         );
@@ -309,54 +158,61 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
 const styles = StyleSheet.create({
   host: {
     position: 'absolute',
-    left: BAR_MARGIN,
-    right: BAR_MARGIN,
-    height: BAR_HEIGHT,
-    overflow: 'hidden',
-    borderRadius: 22,
-    borderWidth: 1,
-    borderColor: 'rgba(112,123,117,0.10)',
-    backgroundColor: 'rgba(250,248,244,0.88)',
+    left: -1,
+    right: -1,
+    bottom: -1,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    backgroundColor: '#FCFDFD',
     flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#48524d',
-    shadowOpacity: 0.07,
+    alignItems: 'flex-start',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(72,76,82,0.08)',
+    shadowColor: '#1D252D',
+    shadowOpacity: 0.06,
     shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 3,
-  },
-  surfaceTint: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(250,248,244,0.48)',
-  },
-  selectionPill: {
-    position: 'absolute',
-    left: 0,
-    top: (BAR_HEIGHT - PILL_HEIGHT) / 2,
-    height: PILL_HEIGHT,
-    borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    borderWidth: 1,
-    borderColor: 'rgba(95,110,102,0.10)',
+    shadowOffset: { width: 0, height: -1 },
+    elevation: 2,
+    overflow: 'hidden',
   },
   tabSlot: {
     flex: 1,
-    zIndex: 1,
   },
   tabButton: {
-    height: BAR_HEIGHT,
+    minHeight: 46,
+    paddingTop: 6,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    gap: 2,
+    paddingHorizontal: 6,
+    position: 'relative',
+  },
+  activeLine: {
+    position: 'absolute',
+    top: 0,
+    width: 30,
+    height: 2,
+    borderRadius: 999,
+    backgroundColor: COLOR_ACTIVE,
+  },
+  iconWrap: {
+    width: 24,
+    height: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
+  },
+  iconScale: {
+    transform: [{ scale: 0.92 }],
   },
   tabLabel: {
-    fontSize: 11,
-    lineHeight: 13,
-    fontWeight: '600',
-    letterSpacing: -0.1,
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '500',
+    textAlign: 'center',
   },
   tabLabelActive: {
-    fontWeight: '700',
+    fontWeight: '600',
   },
 });

@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgUri } from 'react-native-svg';
-import { Bell } from 'lucide-react-native';
+import { Bell, Plus } from 'lucide-react-native';
 import { hap } from '../lib/haptics';
 import type { PetProfile } from '../lib/petProfileTypes';
 import type { WeightPoint } from './WeightTrackingScreen';
@@ -23,8 +23,10 @@ import { useLocale } from '../hooks/useLocale';
 import { useAppSettings } from '../hooks/useAppSettings';
 import type { AiInsight } from '../lib/insightsEngine';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { monoType as mt } from '../lib/typography';
 
 const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
+const fallbackPetHeroUri = Image.resolveAssetSource(require('../assets/icon.png')).uri;
 
 export type JourneyEventItem = {
   id: string;
@@ -112,7 +114,10 @@ type HomeScreenProps = {
     currency: string;
     breakdown: Array<{ label: string; amount: number; color: string }>;
   };
+  onQuickAdd?: () => void;
+  onTestOnboarding?: () => void;
 };
+type DayPhase = 'morning' | 'afternoon' | 'evening' | 'night';
 
 function formatPetAge(birthDate: string, locale: 'en' | 'tr') {
   const now = new Date();
@@ -167,6 +172,15 @@ function toDisplayName(value: string | undefined, locale: 'en' | 'tr') {
 function toFirstName(value: string | undefined, locale: 'en' | 'tr') {
   const display = toDisplayName(value, locale);
   return display.split(/\s+/).filter(Boolean)[0] ?? display;
+}
+
+function formatHeaderDate(locale: 'en' | 'tr') {
+  const localeCode = locale === 'tr' ? 'tr-TR' : 'en-US';
+  return new Intl.DateTimeFormat(localeCode, {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'short',
+  }).format(new Date());
 }
 
 const MONTHS_SHORT_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -231,29 +245,37 @@ export default function HomeScreen({
   healthJourneyEvents,
   summaryCard,
   expenseBreakdown,
+  onQuickAdd,
+  onTestOnboarding,
 }: HomeScreenProps) {
   const { locale } = useLocale();
   const { settings } = useAppSettings();
   const insets = useSafeAreaInsets();
   const isTr = locale === 'tr';
-  const homeGreeting = useMemo(() => {
+  const dayPhase = useMemo<DayPhase>(() => {
     const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return 'morning';
+    if (hour >= 12 && hour < 18) return 'afternoon';
+    if (hour >= 18 && hour < 22) return 'evening';
+    return 'night';
+  }, []);
+  const homeDayPartGreeting = useMemo(() => {
     if (isTr) {
-      if (hour >= 5 && hour < 12) return 'Günaydın!';
-      if (hour >= 12 && hour < 18) return 'İyi günler!';
-      if (hour >= 18 && hour < 22) return 'İyi akşamlar!';
-      return 'İyi geceler!';
+      if (dayPhase === 'morning') return 'Günaydın';
+      if (dayPhase === 'afternoon') return 'İyi günler';
+      if (dayPhase === 'evening') return 'İyi akşamlar';
+      return 'İyi geceler';
     }
-    if (hour >= 5 && hour < 12) return 'Good morning!';
-    if (hour >= 12 && hour < 18) return 'Good afternoon!';
-    if (hour >= 18 && hour < 22) return 'Good evening!';
-    return 'Good night!';
-  }, [isTr]);
+    if (dayPhase === 'morning') return 'Good morning';
+    if (dayPhase === 'afternoon') return 'Good afternoon';
+    if (dayPhase === 'evening') return 'Good evening';
+    return 'Good night';
+  }, [dayPhase, isTr]);
   const homeDisplayName = useMemo(() => {
     return toFirstName(userName, isTr ? 'tr' : 'en');
   }, [isTr, userName]);
-  const headerSmallLine = homeGreeting;
-  const headerTitle = homeDisplayName;
+  const headerSmallLine = useMemo(() => formatHeaderDate(isTr ? 'tr' : 'en'), [isTr]);
+  const headerTitle = `${homeDayPartGreeting} ${homeDisplayName} !`;
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const mainScrollRef = useRef<ScrollView | null>(null);
@@ -269,6 +291,8 @@ export default function HomeScreen({
   const cardDragY = useRef(new Animated.Value(0)).current;
   const switchFade = useRef(new Animated.Value(1)).current;
   const switchScale = useRef(new Animated.Value(1)).current;
+  const heroWiggleX = useRef(new Animated.Value(0)).current;
+  const suppressHeroPressRef = useRef(false);
   const [isGestureActive, setIsGestureActive] = useState(false);
   const isPetLockEnabled = petLockEnabled ?? false;
   const [frontImageLoaded, setFrontImageLoaded] = useState(false);
@@ -342,7 +366,7 @@ export default function HomeScreen({
           coatPattern: profile.coatPattern,
           age: formatPetAge(profile.birthDate, locale),
           gender: profile.gender,
-          heroImage: profile.image,
+          heroImage: profile.image?.trim() ? profile.image : fallbackPetHeroUri,
           weight: computedWeight,
           weightDelta: computedDelta,
           vaccines: isTr ? 'Kayıt yok' : 'No data',
@@ -601,13 +625,36 @@ export default function HomeScreen({
     [backPet, cardDragY, isPetLockEnabled, onChangeActivePet, pets.length, prevPet],
   );
 
+  const runHeroWiggle = () => {
+    heroWiggleX.stopAnimation();
+    heroWiggleX.setValue(0);
+    Animated.sequence([
+      Animated.timing(heroWiggleX, { toValue: -4, duration: 45, useNativeDriver: true }),
+      Animated.timing(heroWiggleX, { toValue: 4, duration: 75, useNativeDriver: true }),
+      Animated.timing(heroWiggleX, { toValue: -3, duration: 70, useNativeDriver: true }),
+      Animated.timing(heroWiggleX, { toValue: 2, duration: 55, useNativeDriver: true }),
+      Animated.timing(heroWiggleX, { toValue: 0, duration: 45, useNativeDriver: true }),
+    ]).start();
+  };
+
+  const handleHeroLongPress = () => {
+    if (pets.length <= 1) return;
+    suppressHeroPressRef.current = true;
+    hap.medium();
+    runHeroWiggle();
+    setTimeout(() => {
+      commitSwitchDown();
+      suppressHeroPressRef.current = false;
+    }, 170);
+  };
+
   if (!activePet) {
     return (
       <View style={styles.screen}>
         <StatusBar style="dark" />
         <View style={styles.noPetWrap}>
           <Text style={styles.noPetTitle}>{isTr ? 'Hoş geldin!' : 'Welcome!'}</Text>
-          <Text style={styles.noPetSub}>{isTr ? 'İlk evcil hayvanını eklemek için profil sayfasına git.' : 'Go to your profile to add your first pet.'}</Text>
+          <Text style={styles.noPetSub}>{isTr ? 'Başlamak için profilinden ilk petini ekle.' : 'Add your first pet from Profile to get started.'}</Text>
           <Pressable style={styles.noPetBtn} onPress={onOpenProfile}>
             <Text style={styles.noPetBtnText}>{isTr ? 'Profil' : 'Profile'}</Text>
           </Pressable>
@@ -630,7 +677,7 @@ export default function HomeScreen({
         <View style={styles.heroStackWrap}>
           <View style={styles.backCardWrap}>
             {backPet ? (
-              <ImageBackground key={`back-${backPet.id}-${backPet.heroImage}`} source={{ uri: backPet.heroImage }} style={[styles.heroCardBack, !frontImageLoaded && styles.heroCardBackHidden]} imageStyle={styles.heroImageBack}>
+              <ImageBackground key={`back-${backPet.id}-${backPet.heroImage}`} source={{ uri: backPet.heroImage || fallbackPetHeroUri }} style={[styles.heroCardBack, !frontImageLoaded && styles.heroCardBackHidden]} imageStyle={styles.heroImageBack}>
                 <View style={styles.heroBottomBack}>
                   <Text style={styles.heroNameBack}>{backPet.name}</Text>
                 </View>
@@ -640,24 +687,30 @@ export default function HomeScreen({
 
           <Animated.View
             {...cardPanResponder.panHandlers}
-            style={[styles.frontCardWrap, { opacity: switchFade, transform: [{ translateY: cardDragY }, { scale: switchScale }] }]}
+            style={[styles.frontCardWrap, { opacity: switchFade, transform: [{ translateY: cardDragY }, { scale: switchScale }, { translateX: heroWiggleX }] }]}
           >
             <Pressable
               style={({ pressed }) => [styles.heroCard, pressed && styles.heroCardPressed]}
+              delayLongPress={240}
+              onLongPress={handleHeroLongPress}
               onPress={() => {
+                if (suppressHeroPressRef.current) {
+                  suppressHeroPressRef.current = false;
+                  return;
+                }
                 hap.light();
                 onOpenPetProfile?.(activePet.id);
               }}
             >
               <ImageBackground
                 key={`front-${activePet.id}-${activePet.heroImage}`}
-                source={{ uri: activePet.heroImage }}
+                source={{ uri: activePet.heroImage || fallbackPetHeroUri }}
                 style={styles.heroCardImageWrap}
                 imageStyle={styles.heroImage}
                 onLoadEnd={() => setFrontImageLoaded(true)}
               >
                 <View style={styles.heroBottom}>
-                  <Text style={styles.heroName}>{activePet.name}</Text>
+                  <Text style={styles.heroName} numberOfLines={1} ellipsizeMode="tail">{activePet.name}</Text>
                   <View style={styles.heroMetaRow}>
                     <Text style={styles.heroBreedPill}>{activePet.breed === 'Other' ? (activePet.coatPattern === 'Other' ? 'Other' : activePet.coatPattern) : activePet.breed}</Text>
                     <Text style={styles.heroMeta}>{activePet.age}</Text>
@@ -667,6 +720,23 @@ export default function HomeScreen({
             </Pressable>
           </Animated.View>
         </View>
+
+        {/* ── Quick Add CTA ── */}
+        {onQuickAdd && (
+          <Pressable
+            style={({ pressed }) => [styles.quickAddCta, pressed && styles.quickAddCtaPressed]}
+            onPress={() => { hap.light(); onQuickAdd(); }}
+          >
+            <View style={styles.quickAddCtaInner}>
+              <View style={styles.quickAddCtaIcon}>
+                <Plus size={16} color="#47664a" strokeWidth={2.5} />
+              </View>
+              <Text style={styles.quickAddCtaText}>
+                {isTr ? 'Sağlık Kaydı Ekle' : 'Add Health Record'}
+              </Text>
+            </View>
+          </Pressable>
+        )}
 
         {/* ── PRIMARY HEALTH CARD (breathing animation) ── */}
         <Animated.View style={breathAnimStyle}>
@@ -784,12 +854,12 @@ export default function HomeScreen({
             </View>
           ) : (
             <View style={styles.nextEmptyWrap}>
-              <Text style={styles.nextEmptyTitle}>{isTr ? 'Henüz planlı olay yok' : 'No upcoming event yet'}</Text>
+              <Text style={styles.nextEmptyTitle}>{isTr ? 'Her şey hazır' : 'All set for now'}</Text>
               <Text style={styles.nextEmptySub}>
-                {isTr ? 'Aşı, ziyaret veya hatırlatma ekleyerek planını başlat.' : 'Start by adding a vaccine, visit, or reminder.'}
+                {isTr ? 'Yeni bir kayıt ekleyerek planını güncel tut.' : 'Add a record to keep your plan up to date.'}
               </Text>
               <Pressable style={styles.nextEmptyCta} onPress={onOpenAddReminder}>
-                <Text style={styles.nextEmptyCtaText}>{isTr ? 'Hatırlatma Ekle' : 'Add Reminder'}</Text>
+                <Text style={styles.nextEmptyCtaText}>{isTr ? 'Oluştur' : 'Create'}</Text>
               </Pressable>
             </View>
           )}
@@ -839,15 +909,15 @@ export default function HomeScreen({
         ) : (
           <View style={styles.journeyEmpty}>
             <Text style={styles.journeyEmptyTitle}>
-              {isTr ? 'Henüz sağlık kaydı yok' : 'No health events yet'}
+              {isTr ? 'Henüz sağlık geçmişi yok' : 'No health history yet'}
             </Text>
             <Text style={styles.journeyEmptySub}>
               {isTr
-                ? 'Veteriner ziyareti, aşı veya hatırlatma ekleyerek başla.'
-                : 'Add a vet visit, vaccine, or reminder to get started.'}
+                ? 'İlk kaydı ekleyin, yolculuk burada akmaya başlasın.'
+                : 'Add your first record and this timeline will come alive.'}
             </Text>
             <Pressable style={styles.journeyEmptyCta} onPress={onOpenAddReminder}>
-              <Text style={styles.journeyEmptyCtaText}>{isTr ? '+ Ekle' : '+ Add'}</Text>
+              <Text style={styles.journeyEmptyCtaText}>{isTr ? 'İlk Kaydı Ekle' : 'Add First Record'}</Text>
             </Pressable>
           </View>
         )}
@@ -938,8 +1008,15 @@ export default function HomeScreen({
               <SvgUri uri={logoUri} width={28} height={28} />
             </Animated.View>
             <View style={styles.greetingWrap}>
+              {__DEV__ && onTestOnboarding ? (
+                <Pressable style={styles.devOnboardingBadge} onPress={onTestOnboarding}>
+                  <Text style={styles.devOnboardingBadgeText}>OB</Text>
+                </Pressable>
+              ) : null}
               <Text style={styles.greetingSmall} numberOfLines={1}>{headerSmallLine}</Text>
-              <Text style={styles.greetingName} numberOfLines={1}>{headerTitle}</Text>
+              <Text style={styles.greetingName} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.78}>
+                {headerTitle}
+              </Text>
             </View>
           </View>
 
@@ -951,13 +1028,6 @@ export default function HomeScreen({
                   <Text style={styles.notifyBadgeText}>{Math.min(reminderBadgeCount, 9)}</Text>
                 </View>
               ) : null}
-            </Pressable>
-            <Pressable onPress={onOpenProfile} style={styles.avatarBtn}>
-              {userAvatarUri ? (
-                <Image source={{ uri: userAvatarUri, cache: 'force-cache' }} fadeDuration={0} style={styles.avatarImage} />
-              ) : (
-                <Text style={styles.avatarInitials}>{userInitials}</Text>
-              )}
             </Pressable>
           </View>
         </View>
@@ -1105,27 +1175,29 @@ const styles = StyleSheet.create({
     height: 32,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 7,
+    marginTop: 10,
   },
   greetingWrap: {
     flex: 1,
     minWidth: 0,
     gap: 2,
     paddingRight: 8,
+    position: 'relative',
   },
   greetingSmall: {
+    ...mt.metricSm,
     fontSize: 12,
     lineHeight: 15,
     color: '#7f7f78',
-    fontWeight: '600',
     letterSpacing: -0.1,
   },
   greetingName: {
-    fontSize: 25,
-    lineHeight: 28,
+    ...mt.metricLg,
+    fontSize: 21,
+    lineHeight: 24,
     color: '#1f2f2a',
-    fontWeight: '700',
-    letterSpacing: -0.35,
+    letterSpacing: -0.2,
+    flexShrink: 1,
   },
   topActions: {
     flexDirection: 'row',
@@ -1137,16 +1209,14 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.72)',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(70,74,66,0.08)',
-    shadowColor: '#685d51',
-    shadowOpacity: 0.08,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    borderWidth: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
+    elevation: 0,
   },
   notifyBadge: {
     position: 'absolute',
@@ -1167,30 +1237,6 @@ const styles = StyleSheet.create({
     fontSize: 10,
     lineHeight: 11,
     fontWeight: '700',
-  },
-  avatarBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.07)',
-  },
-  avatarImage: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 18,
-  },
-  avatarInitials: {
-    color: '#5a5a5a',
-    fontSize: 11,
-    lineHeight: 12,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-    alignItems: 'center',
   },
   heroStackWrap: {
     height: 288,
@@ -1230,6 +1276,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: 'rgba(255,255,255,0.9)',
   },
+  devOnboardingBadge: {
+    position: 'absolute',
+    left: 6,
+    top: 14,
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(40, 52, 70, 0.88)',
+    zIndex: 10,
+  },
+  devOnboardingBadgeText: {
+    fontSize: 10,
+    lineHeight: 12,
+    color: '#fff',
+    fontWeight: '700',
+    letterSpacing: 0.2,
+  },
   heroCard: {
     height: 288,
     borderRadius: 20,
@@ -1265,6 +1331,7 @@ const styles = StyleSheet.create({
     lineHeight: 50,
     fontWeight: '500',
     color: '#fff',
+    maxWidth: '94%',
   },
   heroMetaRow: {
     marginTop: 7,
@@ -1399,10 +1466,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   sectionBadgeText: {
+    ...mt.metric,
     fontSize: 11,
     lineHeight: 14,
     color: '#fff',
-    fontWeight: '700',
   },
   nextSectionTitle: {
     fontSize: 20,
@@ -1584,9 +1651,9 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   weightValue: {
+    ...mt.metricLg,
     fontSize: 48,
     lineHeight: 50,
-    fontWeight: '700',
     color: '#2d2d2d',
     letterSpacing: -0.8,
   },
@@ -1796,9 +1863,9 @@ const styles = StyleSheet.create({
     color: '#6a6d67',
   },
   expenseFooterValue: {
+    ...mt.metric,
     fontSize: 16,
     lineHeight: 20,
-    fontWeight: '800',
     color: '#30332e',
     letterSpacing: -0.2,
   },
@@ -1901,8 +1968,8 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   weightDeltaBadgeText: {
+    ...mt.metric,
     fontSize: 13,
-    fontWeight: '700',
     color: '#4a8b56',
   },
   weightStatusText: {
@@ -1931,9 +1998,9 @@ const styles = StyleSheet.create({
     borderRadius: 2,
   },
   goalProgressText: {
+    ...mt.metricSm,
     fontSize: 11,
     color: '#8f8f8f',
-    fontWeight: '500',
   },
 
   // ── Health Journey ──
@@ -2097,6 +2164,41 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 16,
     fontWeight: '700',
+  },
+  quickAddCta: {
+    marginHorizontal: 20,
+    marginTop: 12,
+    marginBottom: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.2)',
+    backgroundColor: 'rgba(71,102,74,0.07)',
+    overflow: 'hidden',
+  },
+  quickAddCtaPressed: {
+    backgroundColor: 'rgba(71,102,74,0.14)',
+  },
+  quickAddCtaInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+    paddingHorizontal: 20,
+  },
+  quickAddCtaIcon: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: 'rgba(71,102,74,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickAddCtaText: {
+    color: '#47664a',
+    fontSize: 15,
+    fontWeight: '600',
+    letterSpacing: 0.1,
   },
 });
 

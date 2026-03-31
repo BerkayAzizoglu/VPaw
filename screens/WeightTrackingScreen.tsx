@@ -3,7 +3,6 @@ import { StatusBar } from 'expo-status-bar';
 import {
   Alert,
   Animated,
-  FlatList,
   KeyboardAvoidingView,
   Modal,
   PanResponder,
@@ -55,7 +54,7 @@ type WeightReference = {
 
 // ─── Chart constants ──────────────────────────────────────────────────────────
 
-const CHART_HEIGHT = 160;
+const CHART_HEIGHT = 172;
 const CHART_INSET = 10;
 const PW_ROW_HEIGHT = 34;
 const PW_WHEEL_HEIGHT = 136;
@@ -157,11 +156,9 @@ function daysInMonth(year: number, month: number) {
 
 function clampDateParts(parts: DateParts, today: DateParts): DateParts {
   const year = Math.max(today.year - 20, Math.min(today.year, parts.year));
-  const monthMax = year === today.year ? today.month : 12;
-  const month = Math.max(1, Math.min(monthMax, parts.month));
+  const month = Math.max(1, Math.min(12, parts.month));
   const dim = daysInMonth(year, month);
-  const dayMax = year === today.year && month === today.month ? Math.min(today.day, dim) : dim;
-  const day = Math.max(1, Math.min(dayMax, parts.day));
+  const day = Math.max(1, Math.min(dim, parts.day));
   return { day, month, year };
 }
 
@@ -190,7 +187,7 @@ function formatTemplate(template: string, params: Record<string, string>) {
 
 // ─── Icon component ───────────────────────────────────────────────────────────
 
-function Icon({ kind, size = 20, color = '#787878' }: { kind: 'back' | 'plus' | 'up' | 'check' | 'left' | 'calendar' | 'spark' | 'close'; size?: number; color?: string }) {
+function Icon({ kind, size = 20, color = '#787878' }: { kind: 'back' | 'plus' | 'up' | 'check' | 'left' | 'calendar' | 'spark' | 'trendline' | 'close'; size?: number; color?: string }) {
   if (kind === 'back') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -247,6 +244,15 @@ function Icon({ kind, size = 20, color = '#787878' }: { kind: 'back' | 'plus' | 
     );
   }
 
+  if (kind === 'trendline') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M4.5 17.5L9.4 12.6L12.3 15.2L19.5 8" stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
+        <Path d="M15.7 8H19.5V11.7" stroke={color} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
+
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M6.5 12.2L10.2 15.6L17.5 8.5" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
@@ -259,6 +265,8 @@ type PickerWheelItem = {
   label: string;
 };
 
+type ChartRange = 'all' | '1y' | '6m' | '3m' | '1m' | '1w';
+
 function PickerWheelColumn({
   items,
   selectedValue,
@@ -270,55 +278,44 @@ function PickerWheelColumn({
   onValueChange: (value: string) => void;
   width: number;
 }) {
-  const listRef = useRef<FlatList<PickerWheelItem>>(null);
+  const scrollRef = useRef<ScrollView | null>(null);
   const selectedIndex = Math.max(0, items.findIndex((item) => item.value === selectedValue));
 
   useEffect(() => {
     if (!items.length) return;
     requestAnimationFrame(() => {
-      listRef.current?.scrollToIndex({ index: selectedIndex, animated: false, viewPosition: 0.5 });
+      scrollRef.current?.scrollTo({ y: selectedIndex * PW_ROW_HEIGHT, animated: false });
     });
   }, [items, selectedIndex]);
 
   return (
     <View style={[styles.column, { width }]}>
-      <FlatList
-        ref={listRef}
-        data={items}
-        keyExtractor={(item) => item.value}
+      <ScrollView
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
         bounces={false}
         snapToInterval={PW_ROW_HEIGHT}
         decelerationRate="fast"
         contentContainerStyle={styles.columnContent}
-        getItemLayout={(_, index) => ({
-          length: PW_ROW_HEIGHT,
-          offset: PW_ROW_HEIGHT * index,
-          index,
-        })}
-        initialScrollIndex={selectedIndex}
-        onScrollToIndexFailed={(info) => {
-          requestAnimationFrame(() => {
-            listRef.current?.scrollToOffset({
-              offset: Math.max(0, info.averageItemLength * info.index),
-              animated: true,
-            });
-          });
-        }}
         onMomentumScrollEnd={(event) => {
           const index = Math.max(0, Math.min(Math.round(event.nativeEvent.contentOffset.y / PW_ROW_HEIGHT), items.length - 1));
           const next = items[index];
           if (next && next.value !== selectedValue) onValueChange(next.value);
         }}
-        renderItem={({ item }) => {
+      >
+        {items.map((item) => {
           const active = item.value === selectedValue;
           return (
-            <Pressable onPress={() => onValueChange(item.value)} style={({ pressed }) => [styles.row, pressed && styles.rowPressed, active && styles.rowActive]}>
+            <Pressable
+              key={item.value}
+              onPress={() => onValueChange(item.value)}
+              style={({ pressed }) => [styles.row, pressed && styles.rowPressed, active && styles.rowActive]}
+            >
               <Text style={[styles.rowText, active && styles.rowTextActive]}>{item.label}</Text>
             </Pressable>
           );
-        }}
-      />
+        })}
+      </ScrollView>
       <View pointerEvents="none" style={styles.selectionBand} />
     </View>
   );
@@ -355,6 +352,7 @@ export default function WeightTrackingScreen({
 
   // ─── State ──────────────────────────────────────────────────────────────────
   const [selectedIndex, setSelectedIndex] = useState(Math.max(entries.length - 1, 0));
+  const [chartRange, setChartRange] = useState<ChartRange>('all');
   const [isScrubbing, setIsScrubbing] = useState(false);
   const [scrubX, setScrubX] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -381,7 +379,7 @@ export default function WeightTrackingScreen({
   const addSheetBackdropOpacity = useRef(new Animated.Value(0)).current;
   const addSheetHeightRef = useRef(680);
   const { width } = useWindowDimensions();
-  const chartWidth = Math.max(240, width - 96);
+  const chartWidth = Math.max(250, width - 84);
   const chartHeight = CHART_HEIGHT;
 
   const edgeSwipeResponder = useEdgeSwipeBack({
@@ -391,34 +389,54 @@ export default function WeightTrackingScreen({
 
   // ─── Derived / memoized ─────────────────────────────────────────────────────
   const reference = useMemo(() => getWeightReference(petType, petBreed, copy.refs), [petType, petBreed, copy.refs]);
+  const allEntriesSorted = useMemo(() => {
+    return [...entries].sort((a, b) => {
+      const da = parseEntryDate(a.date);
+      const db = parseEntryDate(b.date);
+      if (!da || !db) return 0;
+      return da.getTime() - db.getTime();
+    });
+  }, [entries]);
+
+  const chartEntries = useMemo(() => {
+    if (allEntriesSorted.length === 0) return [];
+    if (chartRange === 'all') return allEntriesSorted;
+
+    const latestDate = parseEntryDate(allEntriesSorted[allEntriesSorted.length - 1]?.date);
+    if (!latestDate) return allEntriesSorted;
+
+    const from = new Date(latestDate);
+    if (chartRange === '1y') from.setFullYear(from.getFullYear() - 1);
+    if (chartRange === '6m') from.setMonth(from.getMonth() - 6);
+    if (chartRange === '3m') from.setMonth(from.getMonth() - 3);
+    if (chartRange === '1m') from.setMonth(from.getMonth() - 1);
+    if (chartRange === '1w') from.setDate(from.getDate() - 7);
+
+    const filtered = allEntriesSorted.filter((entry) => {
+      const d = parseEntryDate(entry.date);
+      return d ? d.getTime() >= from.getTime() : true;
+    });
+    return filtered.length > 0 ? filtered : [allEntriesSorted[allEntriesSorted.length - 1]];
+  }, [allEntriesSorted, chartRange]);
+
   useEffect(() => {
-    setSelectedIndex(Math.max(entries.length - 1, 0));
-  }, [entries.length]);
+    setSelectedIndex(Math.max(chartEntries.length - 1, 0));
+  }, [chartEntries.length, chartRange]);
 
-  const hasEntries = entries.length > 0;
-  const safeEntries = hasEntries ? entries : [{ label: isTr ? 'No records' : 'No records', value: reference.min, date: '', change: '' }];
-
-  const MAX_X_LABELS = 5;
-  const visibleLabelIndices = useMemo(() => {
-    const n = safeEntries.length;
-    if (n <= MAX_X_LABELS) return new Set(Array.from({ length: n }, (_, i) => i));
-    const result = new Set<number>();
-    result.add(0);
-    result.add(n - 1);
-    const step = (n - 1) / (MAX_X_LABELS - 1);
-    for (let i = 1; i < MAX_X_LABELS - 1; i++) result.add(Math.round(i * step));
-    return result;
-  }, [safeEntries.length]);
+  const hasEntries = allEntriesSorted.length > 0;
+  const safeChartEntries = hasEntries
+    ? chartEntries
+    : [{ label: isTr ? 'No records' : 'No records', value: reference.min, date: '', change: '' }];
 
   const yBounds = useMemo(() => {
-    const values = safeEntries.map((e) => e.value);
+    const values = safeChartEntries.map((e) => e.value);
     values.push(reference.min, reference.max);
     const min = Math.min(...values);
     const max = Math.max(...values);
     const span = Math.max(0.8, max - min);
     const pad = span * 0.14;
     return { min: Math.max(0, min - pad), max: max + pad };
-  }, [safeEntries, reference.max, reference.min]);
+  }, [safeChartEntries, reference.max, reference.min]);
 
   const toY = (value: number) => {
     const usableHeight = chartHeight - CHART_INSET * 2;
@@ -428,8 +446,8 @@ export default function WeightTrackingScreen({
 
   const chart = useMemo(() => {
     const usableWidth = chartWidth - CHART_INSET * 2;
-    const xStep = safeEntries.length > 1 ? usableWidth / (safeEntries.length - 1) : 0;
-    const points = safeEntries.map((p, idx) => ({
+    const xStep = safeChartEntries.length > 1 ? usableWidth / (safeChartEntries.length - 1) : 0;
+    const points = safeChartEntries.map((p, idx) => ({
       x: CHART_INSET + idx * xStep,
       y: toY(p.value),
     }));
@@ -441,7 +459,7 @@ export default function WeightTrackingScreen({
     const lineLength = computePolylineLength(points);
 
     return { points, linePath, areaPath, selected, lineLength };
-  }, [chartHeight, chartWidth, safeEntries, selectedIndex, yBounds.max, yBounds.min]);
+  }, [chartHeight, chartWidth, safeChartEntries, selectedIndex, yBounds.max, yBounds.min]);
 
   useEffect(() => {
     if (previewMode) {
@@ -454,7 +472,7 @@ export default function WeightTrackingScreen({
       duration: 620,
       useNativeDriver: false,
     }).start();
-  }, [previewMode, safeEntries.length, lineAnim]);
+  }, [previewMode, safeChartEntries.length, lineAnim]);
 
   const lineDashOffset = lineAnim.interpolate({
     inputRange: [0, 1],
@@ -462,7 +480,7 @@ export default function WeightTrackingScreen({
   });
 
   const updateSelectionFromX = (locationX: number) => {
-    if (safeEntries.length <= 1) {
+    if (safeChartEntries.length <= 1) {
       setSelectedIndex(0);
       setScrubX(CHART_INSET);
       return;
@@ -472,22 +490,22 @@ export default function WeightTrackingScreen({
     setScrubX(clampedX);
 
     const ratio = (clampedX - CHART_INSET) / (chartWidth - CHART_INSET * 2);
-    const idx = Math.round(ratio * (safeEntries.length - 1));
+    const idx = Math.round(ratio * (safeChartEntries.length - 1));
     setSelectedIndex(idx);
   };
 
   const interpolatedSample = useMemo(() => {
-    if (!isScrubbing || scrubX == null || safeEntries.length === 0) return null;
-    if (safeEntries.length === 1) return { value: safeEntries[0].value, date: safeEntries[0].date, x: scrubX };
+    if (!isScrubbing || scrubX == null || safeChartEntries.length === 0) return null;
+    if (safeChartEntries.length === 1) return { value: safeChartEntries[0].value, date: safeChartEntries[0].date, x: scrubX };
 
     const ratio = Math.max(0, Math.min(1, (scrubX - CHART_INSET) / (chartWidth - CHART_INSET * 2)));
-    const segment = ratio * (safeEntries.length - 1);
+    const segment = ratio * (safeChartEntries.length - 1);
     const left = Math.floor(segment);
-    const right = Math.min(safeEntries.length - 1, left + 1);
+    const right = Math.min(safeChartEntries.length - 1, left + 1);
     const t = segment - left;
 
-    const leftEntry = safeEntries[left];
-    const rightEntry = safeEntries[right];
+    const leftEntry = safeChartEntries[left];
+    const rightEntry = safeChartEntries[right];
     const value = leftEntry.value + (rightEntry.value - leftEntry.value) * t;
 
     const leftDate = parseEntryDate(leftEntry.date);
@@ -503,9 +521,9 @@ export default function WeightTrackingScreen({
     }
 
     return { value, date, x: scrubX };
-  }, [safeEntries, isScrubbing, scrubX, chartWidth, isTr]);
+  }, [safeChartEntries, isScrubbing, scrubX, chartWidth, isTr]);
 
-  const selectedWeight = safeEntries[Math.min(selectedIndex, Math.max(safeEntries.length - 1, 0))];
+  const selectedWeight = safeChartEntries[Math.min(selectedIndex, Math.max(safeChartEntries.length - 1, 0))];
   const displayedValue = interpolatedSample?.value ?? selectedWeight?.value ?? 0;
   const displayedDate = hasEntries ? (interpolatedSample?.date ?? selectedWeight?.date ?? copy.noDate) : (isTr ? 'Kayit yok' : 'No records yet');
 
@@ -516,8 +534,16 @@ export default function WeightTrackingScreen({
   const refBandY = Math.min(refMinY, refMaxY);
   const refBandH = Math.abs(refMaxY - refMinY);
 
-  const latestWeight = hasEntries ? safeEntries[safeEntries.length - 1] : null;
+  const latestWeight = hasEntries ? allEntriesSorted[allEntriesSorted.length - 1] : null;
   const deltaFromCurrent = latestWeight ? displayedValue - latestWeight.value : 0;
+
+  const chartEdgeLabels = useMemo(() => {
+    if (!hasEntries || safeChartEntries.length === 0) return null;
+    const start = safeChartEntries[0]?.label ?? '';
+    const mid = safeChartEntries[Math.floor((safeChartEntries.length - 1) / 2)]?.label ?? '';
+    const end = safeChartEntries[safeChartEntries.length - 1]?.label ?? '';
+    return { start, mid, end };
+  }, [hasEntries, safeChartEntries]);
 
   const rangeStatus = displayedValue < reference.min ? 'below' : displayedValue > reference.max ? 'above' : 'within';
   const comparisonText = Math.abs(deltaFromCurrent) < 0.01
@@ -826,10 +852,7 @@ export default function WeightTrackingScreen({
     const year = addPickerToday.year - index;
     return { value: String(year), label: String(year) };
   }), [addPickerToday.year]);
-  const addMonthLimit = entryDateParts.year === addPickerToday.year ? addPickerToday.month : 12;
-  const addDayLimit = entryDateParts.year === addPickerToday.year && entryDateParts.month === addPickerToday.month
-    ? addPickerToday.day
-    : daysInMonth(entryDateParts.year, entryDateParts.month);
+  const addDayLimit = daysInMonth(entryDateParts.year, entryDateParts.month);
   const addDayItems = useMemo(() => Array.from({ length: addDayLimit }, (_, index) => ({
     value: String(index + 1),
     label: String(index + 1),
@@ -845,6 +868,11 @@ export default function WeightTrackingScreen({
     const parsedDate = dateFromParts(entryDateParts);
     if (!Number.isFinite(parsedDate.getTime())) {
       setFormError(isTr ? 'Lütfen geçerli bir tarih seçin.' : 'Please choose a valid date.');
+      return;
+    }
+    const now = new Date();
+    if (parsedDate.getTime() > now.getTime()) {
+      setFormError(isTr ? 'Gelecekteki bir tarih seçemezsiniz.' : 'Future dates are not allowed.');
       return;
     }
 
@@ -930,8 +958,14 @@ export default function WeightTrackingScreen({
               <View style={styles.emptyCurrentState}>
                 <Text style={styles.emptyCurrentTitle}>{isTr ? 'Kayit yok' : 'No records yet'}</Text>
                 <Text style={styles.emptyCurrentText}>
-                  {isTr ? 'Ilk kilo girisini ekleyerek grafik ve trendleri baslatin.' : 'Add the first weight entry to unlock chart and trend insights.'}
+                  {isTr ? 'Ilk kaydi ekleyin, grafik ve trendler hazir olsun.' : 'Add your first entry to unlock charts and trends.'}
                 </Text>
+                <Pressable
+                  style={styles.historyAddBtn}
+                  onPress={() => openAddSheet('add', latestWeight?.value ?? 1, new Date(), '', null)}
+                >
+                  <Text style={styles.historyAddBtnText}>{isTr ? 'Kilo Ekle' : 'Add Weight'}</Text>
+                </Pressable>
               </View>
             )}
 
@@ -992,8 +1026,40 @@ export default function WeightTrackingScreen({
             {hasEntries ? <Text style={styles.referenceNote}>{reference.note}</Text> : null}
           </View>
 
-          {/* ── Section title ────────────────────────────────────────────────── */}
-          <Text style={styles.sectionTitle}>{copy.last90Days}</Text>
+          {/* ── Chart header & range controls ────────────────────────────────── */}
+          <View style={styles.chartHeaderRow}>
+            <View style={styles.chartHeaderTitleWrap}>
+              <View style={styles.chartHeaderIcon}>
+                <Icon kind="trendline" size={16} color="#8f5d42" />
+              </View>
+              <Text style={styles.sectionTitle}>{copy.last90Days}</Text>
+            </View>
+          </View>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.rangeRow}
+          >
+            {[
+              { key: 'all', label: 'All' },
+              { key: '1y', label: '1 Yıl' },
+              { key: '6m', label: '6 Ay' },
+              { key: '3m', label: '3 Ay' },
+              { key: '1m', label: '1 Ay' },
+              { key: '1w', label: '1 Hafta' },
+            ].map((option) => {
+              const isActive = chartRange === option.key;
+              return (
+                <Pressable
+                  key={option.key}
+                  onPress={() => setChartRange(option.key as ChartRange)}
+                  style={[styles.rangeChip, isActive && styles.rangeChipActive]}
+                >
+                  <Text style={[styles.rangeChipText, isActive && styles.rangeChipTextActive]}>{option.label}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
           {/* ── Chart card ──────────────────────────────────────────────────── */}
           <View style={styles.chartCard}>
@@ -1077,24 +1143,31 @@ export default function WeightTrackingScreen({
               </View>
             </View>
 
-            {hasEntries ? (
-              <View style={styles.xLabelsRow}>
-                {safeEntries.map((point, idx) => (
-                  <Pressable key={`${point.label}-${idx}`} onPress={() => setSelectedIndex(idx)} style={styles.xLabelBtn}>
-                    <Text style={[styles.xLabel, selectedIndex === idx && styles.xLabelActive]}>
-                      {visibleLabelIndices.has(idx) || selectedIndex === idx ? point.label : ''}
-                    </Text>
-                  </Pressable>
-                ))}
+            {hasEntries && chartEdgeLabels ? (
+              <View style={styles.xLabelsCompact}>
+                <View style={styles.xLabelsCompactRow}>
+                  <Text style={styles.xLabelCompact}>{chartEdgeLabels.start}</Text>
+                  <Text style={styles.xLabelCompactCenter}>{chartEdgeLabels.mid}</Text>
+                  <Text style={styles.xLabelCompact}>{chartEdgeLabels.end}</Text>
+                </View>
+                <View style={styles.xLabelSelectedPill}>
+                  <Text style={styles.xLabelSelectedText}>{selectedWeight?.label ?? ''}</Text>
+                </View>
               </View>
             ) : null}
 
             {!hasEntries ? (
               <View style={styles.chartEmptyState}>
-                <Text style={styles.chartEmptyTitle}>{isTr ? 'Grafik kaydi bekleniyor' : 'Waiting for the first entry'}</Text>
+                <Text style={styles.chartEmptyTitle}>{isTr ? 'Grafik hazir' : 'Chart is ready'}</Text>
                 <Text style={styles.chartEmptyText}>
-                  {isTr ? 'Sag ustteki artidan ilk kilo kaydini ekleyin.' : 'Use the top-right add button to log the first weight entry.'}
+                  {isTr ? 'Ilk kaydi ekleyin, ilerleme aninda gorunsun.' : 'Add your first entry to see progress instantly.'}
                 </Text>
+                <Pressable
+                  style={styles.historyAddBtn}
+                  onPress={() => openAddSheet('add', latestWeight?.value ?? 1, new Date(), '', null)}
+                >
+                  <Text style={styles.historyAddBtnText}>{isTr ? 'Ilk Kaydi Ekle' : 'Add First Entry'}</Text>
+                </Pressable>
               </View>
             ) : null}
           </View>
@@ -1162,12 +1235,12 @@ export default function WeightTrackingScreen({
           <Text style={styles.sectionTitle}>{copy.history}</Text>
           {hasEntries ? (
             <View style={styles.historyCard}>
-              {safeEntries.slice().reverse().map((item, idx) => {
-                const sortedIndex = safeEntries.length - 1 - idx;
+              {allEntriesSorted.slice().reverse().map((item, idx) => {
+                const sortedIndex = allEntriesSorted.length - 1 - idx;
                 return (
                 <Pressable
                   key={`${item.date}-${idx}`}
-                  style={[styles.historyRow, idx !== safeEntries.length - 1 && styles.historyDivider]}
+                  style={[styles.historyRow, idx !== allEntriesSorted.length - 1 && styles.historyDivider]}
                   onPress={() => openAddSheet('edit', item.value, new Date(item.date), item.note ?? '', sortedIndex)}
                 >
                   <View style={styles.historyLeft}>
@@ -1190,8 +1263,14 @@ export default function WeightTrackingScreen({
             <View style={styles.historyEmptyCard}>
               <Text style={styles.historyEmptyTitle}>{isTr ? 'Henuz kayit yok' : 'No entries yet'}</Text>
               <Text style={styles.historyEmptyText}>
-                {isTr ? 'Ilk kilo girisi sonrasinda tarihce burada listelenir.' : 'History will appear here after the first weight entry.'}
+                {isTr ? 'Ilk kayit eklendiginde gecmis burada listelenir.' : 'Your history will appear here after the first entry.'}
               </Text>
+              <Pressable
+                style={styles.historyAddBtn}
+                onPress={() => openAddSheet('add', latestWeight?.value ?? 1, new Date(), '', null)}
+              >
+                <Text style={styles.historyAddBtnText}>{isTr ? 'Ilk Kaydi Ekle' : 'Add First Entry'}</Text>
+              </Pressable>
             </View>
           )}
         </Animated.ScrollView>
@@ -1294,7 +1373,7 @@ export default function WeightTrackingScreen({
                       width={60}
                     />
                     <PickerWheelColumn
-                      items={addMonthItems.slice(0, addMonthLimit)}
+                      items={addMonthItems}
                       selectedValue={String(entryDateParts.month)}
                       onValueChange={(value) => {
                         setEntryDateParts((prev) => clampDateParts({ ...prev, month: Number(value) }, addPickerToday));
@@ -1612,6 +1691,53 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: -0.4,
   },
+  chartHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  chartHeaderTitleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  chartHeaderIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: 'rgba(201,146,114,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rangeRow: {
+    paddingBottom: 4,
+    gap: 8,
+  },
+  rangeChip: {
+    height: 32,
+    borderRadius: 16,
+    paddingHorizontal: 12,
+    backgroundColor: '#f2eee8',
+    borderWidth: 1,
+    borderColor: 'rgba(143,93,66,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rangeChipActive: {
+    backgroundColor: '#faede2',
+    borderColor: '#d7ad90',
+  },
+  rangeChipText: {
+    fontSize: 12,
+    lineHeight: 15,
+    color: '#6f5a4d',
+    fontWeight: '600',
+  },
+  rangeChipTextActive: {
+    color: '#8f5d42',
+    fontWeight: '700',
+  },
 
   // Chart card
   chartCard: {
@@ -1631,6 +1757,45 @@ const styles = StyleSheet.create({
   },
   chartTouchLayer: {
     borderRadius: 16,
+  },
+  xLabelsCompact: {
+    marginTop: 10,
+    paddingHorizontal: 10,
+    gap: 8,
+  },
+  xLabelsCompactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  xLabelCompact: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#9a9f98',
+    fontWeight: '600',
+  },
+  xLabelCompactCenter: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#a8aca6',
+    fontWeight: '500',
+  },
+  xLabelSelectedPill: {
+    alignSelf: 'center',
+    minHeight: 24,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(201,146,114,0.13)',
+    borderWidth: 1,
+    borderColor: 'rgba(201,146,114,0.24)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  xLabelSelectedText: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#8f5d42',
+    fontWeight: '700',
   },
   xLabelsRow: {
     marginTop: 8,
@@ -1813,6 +1978,23 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: '#69706b',
     fontWeight: '500',
+  },
+  historyAddBtn: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(112,132,126,0.24)',
+    backgroundColor: '#eef4f1',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  historyAddBtnText: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#4a6a62',
+    fontWeight: '700',
+    letterSpacing: 0.2,
   },
 
   // Bottom-sheet modal

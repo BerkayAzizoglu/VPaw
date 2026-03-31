@@ -53,7 +53,7 @@ function getNavRows(isTr: boolean) {
       { key: 'feedback', label: isTr ? 'Geri Bildirim' : 'Feedback', icon: 'feedback' as const },
     ],
     management: [
-      { key: 'pet_health_card', label: isTr ? 'Pet Sağlık Kartı' : 'Pet Health Card', icon: 'card' as const, premiumFeature: true },
+      { key: 'pet_health_card', label: isTr ? 'Sağlık Pasaportu' : 'Health Passport', icon: 'card' as const, premiumFeature: true },
       { key: 'pets', label: isTr ? 'Evcil Hayvanlar' : 'Pets', icon: 'share' as const },
       { key: 'family_sharing', label: isTr ? 'Aile Paylaşımı' : 'Family Sharing', icon: 'share' as const, premiumFeature: true },
     ],

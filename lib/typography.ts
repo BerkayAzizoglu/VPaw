@@ -14,6 +14,12 @@ import { Platform } from 'react-native';
 
 // Explicit system-font reference (platform-safe)
 const SYS = Platform.OS === 'ios' ? ('System' as const) : undefined;
+const MAPLE_MONO_FAMILY = Platform.select({
+  ios: 'Maple Mono',
+  android: 'Maple Mono',
+  default: 'monospace',
+}) as string;
+const TABULAR_NUMS: Array<'tabular-nums'> = ['tabular-nums'];
 
 // ─── Type scale (mirrors Apple HIG text styles) ───────────────────────────────
 
@@ -57,4 +63,12 @@ export const type = {
   semibold:   { fontFamily: SYS, fontWeight: '600' as const },
   bold:       { fontFamily: SYS, fontWeight: '700' as const },
   heavy:      { fontFamily: SYS, fontWeight: '800' as const },
+} as const;
+
+// Numeric/metric styles: opt-in for values, counters, and compact data rows.
+// If Maple Mono is unavailable on device, React Native falls back to the platform default.
+export const monoType = {
+  metricLg: { fontFamily: MAPLE_MONO_FAMILY, fontVariant: TABULAR_NUMS, fontWeight: '700' as const },
+  metric: { fontFamily: MAPLE_MONO_FAMILY, fontVariant: TABULAR_NUMS, fontWeight: '600' as const },
+  metricSm: { fontFamily: MAPLE_MONO_FAMILY, fontVariant: TABULAR_NUMS, fontWeight: '500' as const },
 } as const;

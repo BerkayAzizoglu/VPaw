@@ -701,3 +701,49 @@ export function createMedicationCourse(
     },
   };
 }
+
+// ─── UI Bridge Types ──────────────────────────────────────────────────────────
+// Shared between HealthHub dashboard and lib adapters. Kept here to avoid
+// importing from screen files.
+
+export type VaccinationsHistoryItem = {
+  name: string;
+  subtitle: string;
+  status: 'overdue' | 'dueSoon' | 'upToDate';
+  dueDate: string;
+  tint?: 'danger' | 'neutral';
+};
+
+export type VaccinationsAttentionCounts = {
+  overdueCount: number;
+  dueSoonCount: number;
+};
+
+export type VaccinationsNextUpData = {
+  name: string;
+  subtitle: string;
+  date: string;
+  inWeeks: string;
+};
+
+export type HealthRecordsSegmentContent = {
+  activeTitle: string;
+  activeDate: string;
+  activeBody: string;
+  activeBadge: string;
+  activeSeverity: string;
+  activeSourceType?: 'manual' | 'vet_visit';
+  historyTitle: string;
+  historyDate: string;
+  historyBody: string;
+  resolvedBadge: string;
+  historySeverity: string;
+  historySourceType?: 'manual' | 'vet_visit';
+};
+
+export type HealthRecordsData = {
+  recordsCountText?: string;
+  activeCountText?: string;
+  upToDateText?: string;
+  bySegment?: Partial<Record<'allergies' | 'diagnoses' | 'labResults', HealthRecordsSegmentContent>>;
+};

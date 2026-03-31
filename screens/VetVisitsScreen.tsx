@@ -27,14 +27,6 @@ import StickyBlurTopBar, { getStickyHeaderContentTop } from '../components/Stick
 export type VisitActionType = 'vaccine' | 'diagnosis' | 'procedure' | 'test' | 'prescription';
 type ReminderPreset = 'same_day' | 'one_day_before' | 'custom';
 
-export type VetVisitCreatePreset = {
-  reason?: VetVisitReasonCategory;
-  actions?: VisitActionType[];
-  openCreate?: boolean;
-  source?: 'vaccinations' | 'healthRecords' | 'other';
-  nonce?: number;
-};
-
 export type CreateVetVisitPayload = {
   date: string;
   clinic?: string;
@@ -54,9 +46,7 @@ export type CreateVetVisitPayload = {
 type VetVisitsScreenProps = {
   onBack: () => void;
   backPreview?: ReactNode;
-  createPreset?: VetVisitCreatePreset | null;
   onAddVisit?: () => void;
-  onCreateVisit?: (payload: CreateVetVisitPayload) => void;
   onEditVisit?: (id: string, payload: CreateVetVisitPayload) => void;
   onOpenDocuments?: () => void;
   status?: 'ready' | ScreenStateMode;
@@ -301,9 +291,7 @@ function CompletedVisitCard({
 export default function VetVisitsScreen({
   onBack,
   backPreview,
-  createPreset,
   onAddVisit,
-  onCreateVisit,
   onEditVisit,
   onOpenDocuments,
   status = 'ready',
@@ -360,7 +348,6 @@ export default function VetVisitsScreen({
     test: '',
     prescription: '',
   });
-  const lastPresetRef = useRef<string | null>(null);
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const savePressScale = useRef(new Animated.Value(1)).current;
 
@@ -561,26 +548,6 @@ export default function VetVisitsScreen({
   };
 
   useEffect(() => {
-    if (!createPreset?.openCreate) return;
-    const actionsKey = (createPreset.actions ?? []).join(',');
-    const reasonKey = createPreset.reason ?? '';
-    const sourceKey = createPreset.source ?? '';
-    const presetKey = `${sourceKey}|${reasonKey}|${actionsKey}|${String(createPreset.nonce ?? '')}`;
-    if (lastPresetRef.current === presetKey) return;
-    lastPresetRef.current = presetKey;
-
-    setVisitReason(createPreset.reason ?? 'checkup');
-    setSelectedActions({
-      vaccine: createPreset.actions?.includes('vaccine') ?? false,
-      diagnosis: createPreset.actions?.includes('diagnosis') ?? false,
-      procedure: createPreset.actions?.includes('procedure') ?? false,
-      test: createPreset.actions?.includes('test') ?? false,
-      prescription: createPreset.actions?.includes('prescription') ?? false,
-    });
-    setIsCreateVisible(true);
-  }, [createPreset]);
-
-  useEffect(() => {
     if (!reminderEnabled) return;
     if (reminderPreset === 'custom') return;
     const visitIso = parseInputDate(visitDate);
@@ -735,27 +702,7 @@ export default function VetVisitsScreen({
       setIsCreateVisible(false);
       setEditingVisitId(null);
       resetCreateForm();
-      return;
     }
-
-    if (onCreateVisit) {
-      onCreateVisit(payload);
-      setIsCreateVisible(false);
-      resetCreateForm();
-      return;
-    }
-
-    if (onAddVisit) {
-      onAddVisit();
-      setIsCreateVisible(false);
-      resetCreateForm();
-      return;
-    }
-
-    Alert.alert(
-      isTr ? 'Yakinda' : 'Coming soon',
-      isTr ? 'Ziyaret ekleme akis bir sonraki adimda aktif edilecek.' : 'Add visit flow will be enabled in the next step.',
-    );
   };
 
   const visitsData = visits ?? fallbackVisits;
@@ -886,8 +833,8 @@ export default function VetVisitsScreen({
             mode={screenState as ScreenStateMode}
             title={stateTitle}
             body={stateBody}
-            actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : undefined}
-            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lütfen kısa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.'))) : undefined}
+            actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : screenState === 'empty' ? (isTr ? 'Ziyaret Ekle' : 'Add Visit') : undefined}
+            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lütfen kısa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.'))) : screenState === 'empty' ? (onAddVisit ?? (() => Alert.alert(isTr ? 'Yeni Ziyaret' : 'New Visit', isTr ? 'Ilk ziyareti ekleyerek bu alani doldurun.' : 'Add your first visit to populate this area.'))) : undefined}
           />
         )}
       </Animated.ScrollView>
@@ -905,7 +852,7 @@ export default function VetVisitsScreen({
           </Pressable>
         )}
         rightSlot={showAddButton ? (
-          <Pressable style={styles.backBtn} onPress={() => setIsCreateVisible(true)}>
+          <Pressable style={styles.backBtn} onPress={() => onAddVisit?.()}>
             <Icon kind="plus" size={18} color="#5d605a" />
           </Pressable>
         ) : undefined}

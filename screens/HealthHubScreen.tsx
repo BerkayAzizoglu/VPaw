@@ -19,6 +19,7 @@ import { getBreedHealthEntry, type BreedHealthEntry, type DailyCareCategory } fr
 import { generateBreedInsight } from '../lib/breedInsightsEngine';
 import type { AiInsight } from '../lib/insightsEngine';
 import AddRecordSheet, { type AddRecordMode } from '../components/AddRecordSheet';
+import type { VaccinationsHistoryItem, VaccinationsAttentionCounts, VaccinationsNextUpData, HealthRecordsData } from '../lib/healthMvpModel';
 import {
   ChevronRight,
   FileText,
@@ -79,6 +80,7 @@ export type AddHealthRecordPayload = {
   note?: string;
   // Extended fields (v2)
   visitReason?: string;
+  visitStatus?: string;  // 'completed' | 'planned' | 'canceled'
   clinicName?: string;
   vetName?: string;
   fee?: number;
@@ -185,6 +187,10 @@ type HealthHubScreenProps = {
   petAvatarUri?: string;
   isPremium?: boolean;
   onUpgradePremium?: () => void;
+  vaccineHistoryItems?: VaccinationsHistoryItem[];
+  vaccineAttentionCounts?: VaccinationsAttentionCounts;
+  vaccineNextUpData?: VaccinationsNextUpData;
+  healthRecordsData?: HealthRecordsData;
 };
 type HealthHubIconKind = 'vet' | 'records' | 'vaccines' | 'weight' | 'documents';
 type AreaRowKey = HealthHubIconKind;
@@ -1039,6 +1045,139 @@ const bs = StyleSheet.create({
   },
 });
 
+// ─── Vaccine category sub-components ─────────────────────────────────────────
+const HUB_SEGMENT_ACCENTS = {
+  allergies:  { accent: '#a63050', accentBg: '#fdf0f3', label: 'Allergies', labelTr: 'Alerjiler' },
+  diagnoses:  { accent: '#1e6b85', accentBg: '#edf6fa', label: 'Diagnoses', labelTr: 'Tanılar' },
+  labResults: { accent: '#5242a0', accentBg: '#f0eef8', label: 'Lab Results', labelTr: 'Lab Sonuçları' },
+} as const;
+
+function HubFeaturedVaccineCard({ data, isTr }: { data: VaccinationsNextUpData; isTr: boolean }) {
+  const dayStr = data.date.split(/[.\-\/\s]/)[0] ?? '—';
+  return (
+    <View style={hvs.featuredCard}>
+      <View style={hvs.featuredBlob} />
+      <View style={hvs.featuredTop}>
+        <View style={hvs.featuredLeft}>
+          <View style={hvs.glassTag}>
+            <Text style={hvs.glassTagText}>{isTr ? 'YAKLAŞAN' : 'UPCOMING'}</Text>
+          </View>
+          <Text style={hvs.featuredTitle}>{data.name}</Text>
+          <Text style={hvs.featuredSub}>{data.subtitle}</Text>
+        </View>
+        <View style={hvs.featuredDateBox}>
+          <Text style={hvs.featuredDateNum}>{dayStr}</Text>
+          <Text style={hvs.featuredDateSub}>{data.inWeeks}</Text>
+        </View>
+      </View>
+      <View style={hvs.featuredMeta}>
+        <Syringe size={14} color="rgba(255,255,255,0.8)" />
+        <Text style={hvs.featuredMetaText}>{data.date}</Text>
+      </View>
+    </View>
+  );
+}
+
+function HubVaccineCard({ item, isTr: _isTr }: { item: VaccinationsHistoryItem; isTr: boolean }) {
+  const isOverdue = item.status === 'overdue';
+  const isDueSoon = item.status === 'dueSoon';
+  const iconBg = isOverdue ? '#fdf0f0' : isDueSoon ? '#fef6ea' : '#eaf2f4';
+  const iconColor = isOverdue ? '#c96a6a' : isDueSoon ? '#c48d42' : '#56757c';
+  const pillBg = iconBg;
+  const pillBorder = isOverdue ? '#f5dede' : isDueSoon ? '#f5e9d1' : '#c0d8de';
+  const pillLabel = isOverdue ? (_isTr ? 'Gecikmiş' : 'Overdue') : isDueSoon ? (_isTr ? 'Yaklaşan' : 'Due soon') : (_isTr ? 'Güncel' : 'Up to date');
+  return (
+    <View style={hvs.vaccineCard}>
+      <View style={[hvs.vaccineIconBox, { backgroundColor: iconBg }]}>
+        {isOverdue
+          ? <Svg width={22} height={22} viewBox="0 0 24 24"><Path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke={iconColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" /></Svg>
+          : isDueSoon
+            ? <Svg width={22} height={22} viewBox="0 0 24 24"><Circle cx={12} cy={12} r={10} stroke={iconColor} strokeWidth={2} fill="none" /><Path d="M12 6v6l4 2" stroke={iconColor} strokeWidth={2} strokeLinecap="round" fill="none" /></Svg>
+            : <Svg width={22} height={22} viewBox="0 0 24 24"><Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke={iconColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" /></Svg>
+        }
+      </View>
+      <View style={hvs.vaccineMain}>
+        <Text style={hvs.vaccineName}>{item.name}</Text>
+        <View style={hvs.vaccineMetaRow}>
+          <Text style={hvs.vaccineSub}>{item.subtitle}</Text>
+          <View style={hvs.vaccineDot} />
+          <Text style={hvs.vaccineDueText}>{item.dueDate}</Text>
+        </View>
+      </View>
+      <View style={[hvs.vaccinePill, { backgroundColor: pillBg, borderColor: pillBorder }]}>
+        <Text style={[hvs.vaccinePillText, { color: iconColor }]}>{pillLabel}</Text>
+      </View>
+    </View>
+  );
+}
+
+const hvs = StyleSheet.create({
+  featuredCard: {
+    backgroundColor: '#1e5c6e',
+    borderRadius: 16,
+    padding: 18,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  featuredBlob: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    top: -30,
+    right: -20,
+  },
+  featuredTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  featuredLeft: { flex: 1, marginRight: 12 },
+  glassTag: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 8,
+  },
+  glassTagText: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
+  featuredTitle: { color: '#fff', fontSize: 17, fontWeight: '700', marginBottom: 4 },
+  featuredSub: { color: 'rgba(255,255,255,0.65)', fontSize: 13 },
+  featuredDateBox: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    minWidth: 60,
+  },
+  featuredDateNum: { color: '#fff', fontSize: 22, fontWeight: '700' },
+  featuredDateSub: { color: 'rgba(255,255,255,0.65)', fontSize: 11, marginTop: 2 },
+  featuredMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 },
+  featuredMetaText: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
+  vaccineCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 8,
+    gap: 12,
+  },
+  vaccineIconBox: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  vaccineMain: { flex: 1 },
+  vaccineName: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  vaccineMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3, gap: 6 },
+  vaccineSub: { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
+  vaccineDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.3)' },
+  vaccineDueText: { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
+  vaccinePill: {
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  vaccinePillText: { fontSize: 11, fontWeight: '600' },
+});
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 export default function HealthHubScreen({
   scrollToTopSignal = 0,
@@ -1073,6 +1212,10 @@ export default function HealthHubScreen({
   petAvatarUri,
   isPremium = false,
   onUpgradePremium,
+  vaccineHistoryItems,
+  vaccineAttentionCounts,
+  vaccineNextUpData,
+  healthRecordsData,
 }: HealthHubScreenProps) {
   const isTr = locale === 'tr';
   const insets = useSafeAreaInsets();
@@ -1082,15 +1225,12 @@ export default function HealthHubScreen({
   const [selectedItem, setSelectedItem] = useState<HealthHubTimelineItem | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
-  const [addSheetMode, setAddSheetMode] = useState<AddRecordMode>('record');
+  const [addSheetMode, setAddSheetMode] = useState<AddRecordMode>('typeSelect');
+  const [recordsSegment, setRecordsSegment] = useState<'allergies' | 'diagnoses' | 'labResults'>('allergies');
   const [addSheetPresetTitle, setAddSheetPresetTitle] = useState('');
   const [addSheetPresetType, setAddSheetPresetType] = useState<AddHealthRecordType>('diagnosis');
-  const [quickAddOpen, setQuickAddOpen] = useState(false);
   const scrollY = useRef(new Animated.Value(0)).current;
   const mainScrollRef = useRef<ScrollView | null>(null);
-  const quickTranslateY = useRef(new Animated.Value(500)).current;
-  const quickBackdropOpacity = useRef(new Animated.Value(0)).current;
-  const quickHeightRef = useRef(500);
   const [breedSheetOpen, setBreedSheetOpen] = useState(false);
   const sheetTranslateY = useRef(new Animated.Value(800)).current;
   const sheetBackdropOpacity = useRef(new Animated.Value(0)).current;
@@ -1157,12 +1297,6 @@ export default function HealthHubScreen({
   const createSavedPayloadRef = useRef<AddHealthRecordPayload | null>(null);
   const headerBtnScale = useRef(new Animated.Value(1)).current;
   const { width } = useWindowDimensions();
-  const qaScales = useRef([
-    new Animated.Value(1),
-    new Animated.Value(1),
-    new Animated.Value(1),
-    new Animated.Value(1),
-  ]).current;
 
   useEffect(() => { setCategory(initialCategory); }, [initialCategory, categoryResetKey]);
 
@@ -1303,6 +1437,12 @@ export default function HealthHubScreen({
     setAddSheetOpen(true);
   };
 
+  const openTypeSelect = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setAddSheetMode('typeSelect');
+    setAddSheetOpen(true);
+  };
+
   const getIconAnim = (key: string) => {
     if (!iconAnimByKeyRef.current[key]) iconAnimByKeyRef.current[key] = new Animated.Value(0);
     return iconAnimByKeyRef.current[key];
@@ -1318,49 +1458,6 @@ export default function HealthHubScreen({
   const springUp = (v: Animated.Value) =>
     () => Animated.spring(v, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 7 }).start();
 
-  // ── Quick-add sheet animation ────────────────────────────────────────────────
-  const quickSheetPan = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 4,
-      onPanResponderMove: (_, gs) => {
-        if (gs.dy > 0) {
-          quickTranslateY.setValue(gs.dy);
-          quickBackdropOpacity.setValue(Math.max(0, 1 - gs.dy / Math.max(quickHeightRef.current, 1)));
-        }
-      },
-      onPanResponderRelease: (_, gs) => {
-        if (gs.dy > 80 || gs.vy > 0.7) {
-          Animated.parallel([
-            Animated.spring(quickTranslateY, { toValue: quickHeightRef.current, damping: 28, stiffness: 400, useNativeDriver: true }),
-            Animated.timing(quickBackdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-          ]).start(() => setQuickAddOpen(false));
-        } else {
-          Animated.parallel([
-            Animated.spring(quickTranslateY, { toValue: 0, damping: 26, stiffness: 380, mass: 0.85, useNativeDriver: true }),
-            Animated.timing(quickBackdropOpacity, { toValue: 1, duration: 150, useNativeDriver: true }),
-          ]).start();
-        }
-      },
-    }),
-  ).current;
-
-  function openQuickAdd() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setQuickAddOpen(true);
-    quickTranslateY.setValue(quickHeightRef.current);
-    Animated.parallel([
-      Animated.spring(quickTranslateY, { toValue: 0, damping: 26, stiffness: 380, mass: 0.85, useNativeDriver: true }),
-      Animated.timing(quickBackdropOpacity, { toValue: 1, duration: 220, useNativeDriver: true }),
-    ]).start();
-  }
-
-  function closeQuickAdd(onClosed?: () => void) {
-    Animated.parallel([
-      Animated.spring(quickTranslateY, { toValue: quickHeightRef.current, damping: 28, stiffness: 400, useNativeDriver: true }),
-      Animated.timing(quickBackdropOpacity, { toValue: 0, duration: 200, useNativeDriver: true }),
-    ]).start(() => { setQuickAddOpen(false); onClosed?.(); });
-  }
 
   useEffect(() => {
     const keys: AreaRowKey[] = ['vet', 'vaccines', 'weight', 'records', 'documents'];
@@ -1548,6 +1645,114 @@ export default function HealthHubScreen({
           })}
         </View>
 
+        {/* ── Vaccine category detail section ─────────────────────────────── */}
+        {category === 'vaccine' && (
+          <View style={s.categoryDetailSection}>
+            {(vaccineAttentionCounts?.overdueCount ?? 0) + (vaccineAttentionCounts?.dueSoonCount ?? 0) > 0 && (
+              <View style={s.vaccineAttentionRow}>
+                {(vaccineAttentionCounts?.overdueCount ?? 0) > 0 && (
+                  <View style={[s.vaccineAttentionPill, { backgroundColor: '#fdf0f0', borderColor: '#f5dede' }]}>
+                    <Svg width={13} height={13} viewBox="0 0 24 24">
+                      <Path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#c96a6a" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                    </Svg>
+                    <Text style={[s.vaccineAttentionText, { color: '#c96a6a' }]}>
+                      {vaccineAttentionCounts!.overdueCount} {isTr ? 'Gecikmiş' : 'Overdue'}
+                    </Text>
+                  </View>
+                )}
+                {(vaccineAttentionCounts?.dueSoonCount ?? 0) > 0 && (
+                  <View style={[s.vaccineAttentionPill, { backgroundColor: '#fef6ea', borderColor: '#f5e9d1' }]}>
+                    <Svg width={13} height={13} viewBox="0 0 24 24">
+                      <Circle cx={12} cy={12} r={10} stroke="#c48d42" strokeWidth={2} fill="none" />
+                      <Path d="M12 6v6l4 2" stroke="#c48d42" strokeWidth={2} strokeLinecap="round" fill="none" />
+                    </Svg>
+                    <Text style={[s.vaccineAttentionText, { color: '#c48d42' }]}>
+                      {vaccineAttentionCounts!.dueSoonCount} {isTr ? 'Yaklaşan' : 'Due Soon'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+
+            {vaccineNextUpData && <HubFeaturedVaccineCard data={vaccineNextUpData} isTr={isTr} />}
+
+            {vaccineHistoryItems && vaccineHistoryItems.length > 0 ? (
+              <>
+                <Text style={s.categorySectionLabel}>{isTr ? 'AŞI GEÇMİŞİ' : 'VACCINE HISTORY'}</Text>
+                {vaccineHistoryItems.map((item) => (
+                  <HubVaccineCard key={`${item.name}-${item.dueDate}`} item={item} isTr={isTr} />
+                ))}
+              </>
+            ) : (
+              !vaccineNextUpData && (
+                <View>
+                  <Text style={s.categoryEmptyText}>{isTr ? 'Henüz aşı kaydı yok' : 'No vaccine data yet'}</Text>
+                  <Pressable style={s.emptyCta} onPress={() => openCreate('vaccine')}>
+                    <Text style={s.emptyCtaText}>{isTr ? 'Aşı Ekle' : 'Add Vaccine'}</Text>
+                  </Pressable>
+                </View>
+              )
+            )}
+          </View>
+        )}
+
+        {/* ── Record category detail section ──────────────────────────────── */}
+        {category === 'record' && (
+          <View style={s.categoryDetailSection}>
+            <View style={s.recordSegmentRow}>
+              {(['allergies', 'diagnoses', 'labResults'] as const).map((seg) => {
+                const accent = HUB_SEGMENT_ACCENTS[seg];
+                const isActive = recordsSegment === seg;
+                return (
+                  <Pressable
+                    key={seg}
+                    style={[s.recordSegmentChip, isActive && { backgroundColor: accent.accentBg, borderColor: accent.accent }]}
+                    onPress={() => setRecordsSegment(seg)}
+                  >
+                    <Text style={[s.recordSegmentText, isActive && { color: accent.accent }]}>
+                      {isTr ? accent.labelTr : accent.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {healthRecordsData?.bySegment?.[recordsSegment] ? (
+              <>
+                <Text style={s.categorySectionLabel}>{isTr ? 'AKTİF' : 'ACTIVE'}</Text>
+                <View style={s.recordCard}>
+                  <View style={[s.recordAccentStripe, { backgroundColor: HUB_SEGMENT_ACCENTS[recordsSegment].accent }]} />
+                  <View style={s.recordCardInner}>
+                    <Text style={s.recordCardTitle}>{healthRecordsData.bySegment[recordsSegment]!.activeTitle}</Text>
+                    <Text style={s.recordCardDate}>{healthRecordsData.bySegment[recordsSegment]!.activeDate}</Text>
+                    <Text style={s.recordCardBody} numberOfLines={2}>{healthRecordsData.bySegment[recordsSegment]!.activeBody}</Text>
+                  </View>
+                </View>
+
+                {!!healthRecordsData.bySegment[recordsSegment]!.historyTitle && (
+                  <>
+                    <Text style={s.categorySectionLabel}>{isTr ? 'GEÇMİŞ' : 'HISTORY'}</Text>
+                    <View style={[s.recordCard, s.recordCardMuted]}>
+                      <View style={[s.recordAccentStripe, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
+                      <View style={s.recordCardInner}>
+                        <Text style={s.recordCardTitleMuted}>{healthRecordsData.bySegment[recordsSegment]!.historyTitle}</Text>
+                        <Text style={s.recordCardDate}>{healthRecordsData.bySegment[recordsSegment]!.historyDate}</Text>
+                      </View>
+                    </View>
+                  </>
+                )}
+              </>
+            ) : (
+              <View>
+                <Text style={s.categoryEmptyText}>{isTr ? 'Henüz sağlık kaydı yok' : 'No record data yet'}</Text>
+                <Pressable style={s.emptyCta} onPress={() => openCreate('diagnosis')}>
+                  <Text style={s.emptyCtaText}>{isTr ? 'Kayıt Ekle' : 'Add Record'}</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        )}
+
         <Animated.View style={[s.documentsFullWidthWrap, { transform: [{ scale: getCardScale('documents') }] }]}>
           <Pressable
             style={[s.moduleCard, s.documentCard, s.documentCardLight, { backgroundColor: HEALTH_MODULE_CARD_THEMES.documents.background, shadowColor: HEALTH_MODULE_CARD_THEMES.documents.shadow, height: documentsCardHeight }]}
@@ -1723,7 +1928,7 @@ export default function HealthHubScreen({
               style={s.heroActionButton}
               onPressIn={springDown(headerBtnScale, 0.9)}
               onPressOut={springUp(headerBtnScale)}
-              onPress={openQuickAdd}
+              onPress={openTypeSelect}
               android_ripple={{ color: 'rgba(71,102,74,0.10)', borderless: false }}
             >
               <Plus size={18} color={C.primary} strokeWidth={2.4} />
@@ -1732,102 +1937,6 @@ export default function HealthHubScreen({
         </View>
       </View>
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* QUICK-ADD BOTTOM SHEET                                                */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      <Modal visible={quickAddOpen} transparent animationType="none" onRequestClose={() => closeQuickAdd()}>
-        <View style={{ flex: 1, justifyContent: 'flex-end' }}>
-          <Animated.View style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.55)', opacity: quickBackdropOpacity }]} pointerEvents="none" />
-          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => closeQuickAdd()} />
-          <Animated.View
-            style={[bs.sheet, { transform: [{ translateY: quickTranslateY }] }]}
-            onLayout={(e) => { quickHeightRef.current = e.nativeEvent.layout.height; }}
-          >
-            <View style={bs.sheetHandleArea} {...quickSheetPan.panHandlers}>
-              <View style={bs.sheetHandle} />
-            </View>
-            <Text style={qa.title}>{isTr ? 'Kayıt Ekle' : 'Add Record'}</Text>
-
-            {/* Vet Visit */}
-            <Animated.View style={{ transform: [{ scale: qaScales[0] }] }}>
-              <Pressable
-                style={({ pressed }) => [qa.row, pressed && qa.rowPressed]}
-                onPressIn={springDown(qaScales[0], 0.97)}
-                onPressOut={springUp(qaScales[0])}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeQuickAdd(() => openCreate('procedure', isTr ? 'Veteriner Ziyareti' : 'Vet Visit')); }}
-              >
-                <View style={[qa.iconBox, { backgroundColor: 'rgba(100,200,180,0.12)', borderColor: 'rgba(100,200,180,0.22)' }]}>
-                  <Stethoscope size={20} color="#7fc4b8" strokeWidth={1.8} />
-                </View>
-                <View style={qa.rowBody}>
-                  <Text style={qa.rowLabel}>{isTr ? 'Veteriner Ziyareti' : 'Vet Visit'}</Text>
-                  <Text style={qa.rowSub}>{isTr ? 'Muayene ve kontrol kaydı' : 'Checkup or examination record'}</Text>
-                </View>
-                <ChevronRight size={14} color="rgba(127,196,184,0.4)" strokeWidth={2.2} />
-              </Pressable>
-            </Animated.View>
-
-            {/* Vaccine */}
-            <Animated.View style={{ transform: [{ scale: qaScales[1] }] }}>
-              <Pressable
-                style={({ pressed }) => [qa.row, pressed && qa.rowPressed]}
-                onPressIn={springDown(qaScales[1], 0.97)}
-                onPressOut={springUp(qaScales[1])}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeQuickAdd(() => openCreate('vaccine', isTr ? 'Aşı Kaydı' : 'Vaccine Record')); }}
-              >
-                <View style={[qa.iconBox, { backgroundColor: 'rgba(100,160,240,0.12)', borderColor: 'rgba(100,160,240,0.22)' }]}>
-                  <Syringe size={20} color="#88aaee" strokeWidth={1.8} />
-                </View>
-                <View style={qa.rowBody}>
-                  <Text style={qa.rowLabel}>{isTr ? 'Aşı' : 'Vaccine'}</Text>
-                  <Text style={qa.rowSub}>{isTr ? 'Aşı ve hatırlatma kaydı' : 'Vaccination & booster record'}</Text>
-                </View>
-                <ChevronRight size={14} color="rgba(127,196,184,0.4)" strokeWidth={2.2} />
-              </Pressable>
-            </Animated.View>
-
-            {/* Weight */}
-            <Animated.View style={{ transform: [{ scale: qaScales[2] }] }}>
-              <Pressable
-                style={({ pressed }) => [qa.row, pressed && qa.rowPressed]}
-                onPressIn={springDown(qaScales[2], 0.97)}
-                onPressOut={springUp(qaScales[2])}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeQuickAdd(() => onAddWeightEntry ? onAddWeightEntry() : onOpenWeightTracking?.()); }}
-              >
-                <View style={[qa.iconBox, { backgroundColor: 'rgba(240,180,80,0.12)', borderColor: 'rgba(240,180,80,0.22)' }]}>
-                  <BathroomScaleIcon size={20} color="#e8c46a" />
-                </View>
-                <View style={qa.rowBody}>
-                  <Text style={qa.rowLabel}>{isTr ? 'Kilo' : 'Weight'}</Text>
-                  <Text style={qa.rowSub}>{isTr ? 'Güncel kilo ölçümü ekle' : 'Log a new weight measurement'}</Text>
-                </View>
-                <ChevronRight size={14} color="rgba(127,196,184,0.4)" strokeWidth={2.2} />
-              </Pressable>
-            </Animated.View>
-
-            {/* Health Record */}
-            <Animated.View style={{ transform: [{ scale: qaScales[3] }] }}>
-              <Pressable
-                style={({ pressed }) => [qa.row, qa.rowLast, pressed && qa.rowPressed]}
-                onPressIn={springDown(qaScales[3], 0.97)}
-                onPressOut={springUp(qaScales[3])}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); closeQuickAdd(() => openCreate('diagnosis', isTr ? 'Sağlık Kaydı' : 'Health Record')); }}
-              >
-                <View style={[qa.iconBox, { backgroundColor: 'rgba(180,130,240,0.12)', borderColor: 'rgba(180,130,240,0.22)' }]}>
-                  <FileText size={20} color="#c4a0e8" strokeWidth={1.8} />
-                </View>
-                <View style={qa.rowBody}>
-                  <Text style={qa.rowLabel}>{isTr ? 'Sağlık Kaydı' : 'Health Record'}</Text>
-                  <Text style={qa.rowSub}>{isTr ? 'Teşhis, reçete, test sonucu' : 'Diagnosis, prescription, test result'}</Text>
-                </View>
-                <ChevronRight size={14} color="rgba(127,196,184,0.4)" strokeWidth={2.2} />
-              </Pressable>
-            </Animated.View>
-
-            <View style={{ height: 24 }} />
-          </Animated.View>
-        </View>
-      </Modal>
 
       {/* ────────────────────────────────────────────────────────────────────── */}
       {/* BREED INSIGHTS BOTTOM SHEET                                           */}
@@ -3514,57 +3623,99 @@ const s = StyleSheet.create({
     color: '#fff',
   },
 
-});
-
-// ─── Quick-add sheet styles ───────────────────────────────────────────────────
-const qa = StyleSheet.create({
-  title: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#dff2ef',
-    letterSpacing: -0.3,
+  // ── Category detail sections ──────────────────────────────────────────────
+  categoryDetailSection: {
     paddingHorizontal: 20,
-    paddingTop: 4,
-    paddingBottom: 16,
+    paddingTop: 24,
+    paddingBottom: 8,
   },
-  row: {
+  vaccineAttentionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+  },
+  vaccineAttentionPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    gap: 14,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(127,196,184,0.08)',
-  },
-  rowLast: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(127,196,184,0.08)',
-  },
-  rowPressed: {
-    backgroundColor: 'rgba(127,196,184,0.06)',
-  },
-  iconBox: {
-    width: 44,
-    height: 44,
-    borderRadius: 13,
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
     borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
   },
-  rowBody: {
-    flex: 1,
-    gap: 2,
-  },
-  rowLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#dff2ef',
-    letterSpacing: -0.2,
-  },
-  rowSub: {
+  vaccineAttentionText: {
     fontSize: 12,
-    color: 'rgba(160,210,204,0.6)',
-    fontWeight: '400',
+    fontWeight: '600',
   },
+  categorySectionLabel: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  categoryEmptyText: {
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
+    marginTop: 40,
+    fontSize: 14,
+  },
+  recordSegmentRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 4,
+  },
+  recordSegmentChip: {
+    flex: 1,
+    paddingVertical: 7,
+    alignItems: 'center',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+  },
+  recordSegmentText: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  recordCard: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  recordCardMuted: {
+    opacity: 0.6,
+  },
+  recordAccentStripe: {
+    width: 4,
+  },
+  recordCardInner: {
+    flex: 1,
+    padding: 12,
+  },
+  recordCardTitle: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  recordCardTitleMuted: {
+    color: 'rgba(255,255,255,0.5)',
+    fontSize: 14,
+  },
+  recordCardDate: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  recordCardBody: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 13,
+    marginTop: 4,
+  },
+
 });

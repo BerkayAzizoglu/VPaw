@@ -1,5 +1,4 @@
-﻿import type { WeightPoint, VetVisit, Reminder } from './healthMvpModel';
-import type { VaccinationsAttentionCounts, VaccinationsNextUpData } from '../screens/VaccinationsScreen';
+﻿import type { WeightPoint, VetVisit, Reminder, VaccinationsAttentionCounts, VaccinationsNextUpData } from './healthMvpModel';
 
 type InsightPriority = 'low' | 'medium' | 'high';
 type InsightType = 'trend' | 'alert' | 'suggestion';

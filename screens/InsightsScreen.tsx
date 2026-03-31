@@ -7,6 +7,7 @@ import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle, Path } from 'react-native-svg';
 import type { AiInsight } from '../lib/insightsEngine';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { monoType as mt } from '../lib/typography';
 
 type InsightItem = {
   label: string;
@@ -19,6 +20,12 @@ type InsightsScreenProps = {
   title?: string;
   items: InsightItem[];
   insights?: AiInsight[];
+  breedCard?: {
+    title: string;
+    breed: string;
+    text: string;
+    meta?: string;
+  };
   onInsightAction?: (insight: AiInsight) => void;
   onEmptyCta?: () => void;
   locale?: 'en' | 'tr';
@@ -121,6 +128,7 @@ export default function InsightsScreen({
   title,
   items,
   insights = [],
+  breedCard,
   onInsightAction,
   onEmptyCta,
   locale = 'en',
@@ -171,6 +179,20 @@ export default function InsightsScreen({
                 : 'As more records arrive, this view turns them into clearer health context and priorities.'}
           </Text>
         </View>
+
+        {breedCard ? (
+          <View style={styles.breedInsightCard}>
+            <View style={styles.breedInsightTop}>
+              <View style={styles.breedInsightIconWrap}>
+                <IconSvg kind="spark" size={16} color="#43688d" />
+              </View>
+              <Text style={styles.breedInsightTitle}>{breedCard.title}</Text>
+            </View>
+            <Text style={styles.breedInsightBreed}>{breedCard.breed}</Text>
+            {breedCard.meta ? <Text style={styles.breedInsightMeta}>{breedCard.meta}</Text> : null}
+            <Text style={styles.breedInsightBody}>{breedCard.text}</Text>
+          </View>
+        ) : null}
 
         {items.length > 0 ? (
           <View style={styles.metricsShell}>
@@ -230,15 +252,15 @@ export default function InsightsScreen({
         ) : (
           <View style={styles.emptyCard}>
             <PawLottie size={92} />
-            <Text style={styles.emptyTitle}>{isTr ? 'Henuz icgoru yok' : 'No insights yet'}</Text>
+            <Text style={styles.emptyTitle}>{isTr ? 'Icgoruler hazirlaniyor' : 'Insights are getting ready'}</Text>
             <Text style={styles.emptyBody}>
               {isTr
-                ? 'Asi, ziyaret, kilo veya saglik kaydi geldikce burada daha anlamli ozetler olusur.'
-                : 'As vaccines, visits, weight, and records arrive, this space becomes a more meaningful summary.'}
+                ? 'Ilk saglik kaydini ekleyin, burada net ozetler gorunmeye baslasin.'
+                : 'Add your first health record and this space will turn into a clear summary.'}
             </Text>
             {onEmptyCta ? (
               <Pressable style={styles.emptyCtaBtn} onPress={onEmptyCta}>
-                <Text style={styles.emptyCtaText}>{isTr ? 'Kilo ekle' : 'Log weight'}</Text>
+                <Text style={styles.emptyCtaText}>{isTr ? 'Ilk Kaydi Ekle' : 'Add First Record'}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -340,6 +362,55 @@ const styles = StyleSheet.create({
     color: C.onSurfaceVariant,
     fontWeight: '500',
   },
+  breedInsightCard: {
+    borderRadius: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(74,114,148,0.14)',
+    gap: 6,
+  },
+  breedInsightTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  breedInsightIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#e7f0fb',
+  },
+  breedInsightTitle: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#5a6982',
+    fontWeight: '800',
+    letterSpacing: 0.2,
+  },
+  breedInsightBreed: {
+    fontSize: 19,
+    lineHeight: 24,
+    color: '#233244',
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  breedInsightMeta: {
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#6e7b89',
+    fontWeight: '600',
+  },
+  breedInsightBody: {
+    marginTop: 2,
+    fontSize: 13,
+    lineHeight: 19,
+    color: '#4c5866',
+    fontWeight: '500',
+  },
   metricsShell: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -366,10 +437,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   metricValue: {
+    ...mt.metricLg,
     fontSize: 25,
     lineHeight: 28,
     color: '#26312f',
-    fontWeight: '800',
     letterSpacing: -0.6,
   },
   metricLabel: {

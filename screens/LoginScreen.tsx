@@ -3,6 +3,9 @@ import { StatusBar } from 'expo-status-bar';
 import {
   Animated,
   Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -13,11 +16,10 @@ import Svg, { Path, SvgUri } from 'react-native-svg';
 import FloatingDecor from '../components/FloatingDecor';
 import { useAuth } from '../hooks/useAuth';
 import { useLocale } from '../hooks/useLocale';
+import { hap } from '../lib/haptics';
 
-const loginIllustratorUri = Image.resolveAssetSource(require('../assets/vpaw-login-illustrator.svg')).uri;
+const loginIllustrationAsset = require('../assets/illustrations/login-cat-dog.png');
 const loginFigmaLogoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
-const pczDecorUri = Image.resolveAssetSource(require('../assets/pcz-svg.svg')).uri;
-const dogDecorUri = Image.resolveAssetSource(require('../assets/dog-ikon.svg')).uri;
 
 function AppleMiniLogo({ size = 22, color = '#2D2D2D' }: { size?: number; color?: string }) {
   return (
@@ -43,9 +45,10 @@ function GoogleMiniLogo({ size = 22 }: { size?: number }) {
 
 type LoginScreenProps = {
   onSignedIn?: () => void;
+  onTestOnboarding?: () => void;
 };
 
-export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
+export default function LoginScreen({ onSignedIn, onTestOnboarding }: LoginScreenProps) {
   const { signIn, signUp } = useAuth();
   const { locale } = useLocale();
   const isTr = locale === 'tr';
@@ -54,50 +57,29 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
 
-  const bob = useRef(new Animated.Value(-12)).current;
-  const catDecorFloat = useRef(new Animated.Value(-8)).current;
-  const dogDecorFloat = useRef(new Animated.Value(10)).current;
   const screenOpacity = useRef(new Animated.Value(1)).current;
   const screenScale = useRef(new Animated.Value(1)).current;
 
-  React.useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(bob, { toValue: 12, duration: 1900, useNativeDriver: true }),
-        Animated.timing(bob, { toValue: -12, duration: 1900, useNativeDriver: true }),
-      ]),
-    );
-
-    loop.start();
-    return () => loop.stop();
-  }, [bob]);
+  const focusPasswordField = React.useCallback(() => {
+    requestAnimationFrame(() => {
+      passwordInputRef.current?.focus();
+      setKeyboardOpen(true);
+    });
+  }, []);
 
   React.useEffect(() => {
-    const decorLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(catDecorFloat, { toValue: 12, duration: 4200, useNativeDriver: true }),
-        Animated.timing(catDecorFloat, { toValue: -8, duration: 4200, useNativeDriver: true }),
-      ]),
-    );
-
-    decorLoop.start();
-    return () => decorLoop.stop();
-  }, [catDecorFloat]);
-
-  React.useEffect(() => {
-    const dogLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(dogDecorFloat, { toValue: -6, duration: 4400, useNativeDriver: true }),
-        Animated.timing(dogDecorFloat, { toValue: 10, duration: 4400, useNativeDriver: true }),
-      ]),
-    );
-
-    dogLoop.start();
-    return () => dogLoop.stop();
-  }, [dogDecorFloat]);
+    const showSub = Keyboard.addListener('keyboardDidShow', () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardOpen(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   const onContinue = async () => {
+    hap.medium();
     setError(null);
     if (!email.trim() || !password) {
       setError(isTr ? 'Lütfen e-posta ve şifre girin.' : 'Please enter email and password.');
@@ -131,6 +113,7 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
   };
 
   const onSignUp = async () => {
+    hap.light();
     setError(null);
     if (!email.trim() || !password) {
       setError(isTr ? 'Hesap oluşturmak için e-posta ve şifre girin.' : 'Enter email and password to create an account.');
@@ -152,85 +135,99 @@ export default function LoginScreen({ onSignedIn }: LoginScreenProps) {
     <Animated.View style={[styles.loginScreen, { opacity: screenOpacity, transform: [{ scale: screenScale }] }]}>
       <StatusBar style="dark" />
       <FloatingDecor hideBottomPaw hiddenIds={['d3', 'd4', 'd5']} flowDirection="down" />
+      <KeyboardAvoidingView
+        style={styles.keyboardWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'position'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 18 : 12}
+      >
+        <View style={[styles.contentWrap, keyboardOpen ? styles.contentWrapKeyboard : null]}>
+          <View style={styles.brandBlock}>
+            <SvgUri uri={loginFigmaLogoUri} width={48} height={48} />
+            <Text style={styles.brandTitle}>VPaw</Text>
+            <Text style={styles.brandSubtitle}>BY VIRNELO</Text>
+          </View>
 
-      <View style={styles.brandBlock}>
-        <SvgUri uri={loginFigmaLogoUri} width={48} height={48} />
-        <Text style={styles.brandTitle}>V-Paw</Text>
-        <Text style={styles.brandSubtitle}>BY VIRNELO</Text>
-      </View>
+          <View style={[styles.illustrationWrap, keyboardOpen ? styles.illustrationWrapKeyboard : null]}>
+            <Image source={loginIllustrationAsset} style={styles.illustrationImage} resizeMode="contain" />
+          </View>
 
-      <Animated.View style={[styles.illustrationWrap, { transform: [{ translateY: bob }] }]}>
-        <SvgUri uri={loginIllustratorUri} width={168} height={168} />
-      </Animated.View>
+          <View style={[styles.copyBlock, keyboardOpen ? styles.copyBlockKeyboard : null]}>
+            <Text style={styles.headline}>{isTr ? 'Bakımı akıllı şekilde yönet.' : 'Care, intelligently\nsimplified.'}</Text>
+            {!keyboardOpen ? (
+              <Text style={styles.subheadline}>{isTr ? 'Hayvanın için gereken her şey, tek yerde.' : 'Everything your pet needs,\nin one place.'}</Text>
+            ) : null}
+          </View>
 
-      <Animated.View pointerEvents="none" style={[styles.catDecor, { transform: [{ translateY: catDecorFloat }] }]}>
-        <SvgUri uri={pczDecorUri} width={30} height={30} />
-      </Animated.View>
+          <View style={styles.authCard}>
+            <Text style={styles.inputLabel}>{isTr ? 'E-posta' : 'Email'}</Text>
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              returnKeyType="next"
+              blurOnSubmit={false}
+              onSubmitEditing={focusPasswordField}
+              onEndEditing={(event) => {
+                if (event.nativeEvent.text?.trim()?.length) focusPasswordField();
+              }}
+              onKeyPress={(event) => {
+                if (event.nativeEvent.key === 'Enter') focusPasswordField();
+              }}
+              placeholder={isTr ? 'sen@alanadi.com' : 'you@domain.com'}
+              placeholderTextColor="#a7a7a7"
+              style={styles.input}
+            />
 
-      <Animated.View pointerEvents="none" style={[styles.dogDecor, { transform: [{ translateY: dogDecorFloat }] }]}>
-        <SvgUri uri={dogDecorUri} width={30} height={30} />
-      </Animated.View>
+            <Text style={[styles.inputLabel, styles.passwordLabel]}>{isTr ? 'Şifre' : 'Password'}</Text>
+            <TextInput
+              ref={passwordInputRef}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              returnKeyType="done"
+              onSubmitEditing={onContinue}
+              placeholder={isTr ? 'Şifre gir' : 'Enter password'}
+              placeholderTextColor="#a7a7a7"
+              style={styles.input}
+            />
+          </View>
 
-      <View style={styles.copyBlock}>
-        <Text style={styles.headline}>{isTr ? 'Bakımı akıllı şekilde yönet.' : 'Care, intelligently\nsimplified.'}</Text>
-        <Text style={styles.subheadline}>{isTr ? 'Hayvanın için gereken her şey, tek yerde.' : 'Everything your pet needs,\nin one place.'}</Text>
-      </View>
+          <View style={styles.ctaBlock}>
+            <Pressable style={[styles.primaryButton, loading && { opacity: 0.75 }]} disabled={loading} onPress={onContinue}>
+              <Text style={styles.primaryButtonText}>{loading ? (isTr ? 'Lütfen bekle...' : 'Please wait...') : (isTr ? 'Giriş Yap' : 'Sign In')}</Text>
+            </Pressable>
 
-      <View style={styles.authCard}>
-        <Text style={styles.inputLabel}>{isTr ? 'E-posta' : 'Email'}</Text>
-        <TextInput
-          value={email}
-          onChangeText={setEmail}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          returnKeyType="next"
-          blurOnSubmit={false}
-          onSubmitEditing={() => passwordInputRef.current?.focus()}
-          placeholder={isTr ? 'sen@alanadi.com' : 'you@domain.com'}
-          placeholderTextColor="#a7a7a7"
-          style={styles.input}
-        />
+            <View style={styles.socialRow}>
+              <Pressable style={styles.socialButton} disabled>
+                <View style={styles.socialIconWrap}><AppleMiniLogo size={23} /></View>
+                <Text style={styles.socialText}>Apple</Text>
+              </Pressable>
+              <Pressable style={styles.socialButton} disabled>
+                <View style={styles.socialIconWrap}><GoogleMiniLogo size={22} /></View>
+                <Text style={styles.socialText}>Google</Text>
+              </Pressable>
+            </View>
 
-        <Text style={[styles.inputLabel, styles.passwordLabel]}>{isTr ? 'Şifre' : 'Password'}</Text>
-        <TextInput
-          ref={passwordInputRef}
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-          returnKeyType="done"
-          onSubmitEditing={onContinue}
-          placeholder={isTr ? 'Şifre gir' : 'Enter password'}
-          placeholderTextColor="#a7a7a7"
-          style={styles.input}
-        />
-      </View>
+            <Pressable style={styles.signUpButton} disabled={loading} onPress={onSignUp}>
+              <Text style={styles.signUpButtonText}>{isTr ? 'E-posta ile Kayıt Ol' : 'Sign up with Email'}</Text>
+            </Pressable>
 
-      <View style={styles.ctaBlock}>
-        <Pressable style={[styles.primaryButton, loading && { opacity: 0.75 }]} disabled={loading} onPress={onContinue}>
-          <Text style={styles.primaryButtonText}>{loading ? (isTr ? 'Lütfen bekle...' : 'Please wait...') : (isTr ? 'Giriş Yap' : 'Sign In')}</Text>
-        </Pressable>
+            {error ? <Text style={styles.feedbackText}>{error}</Text> : null}
 
-        <View style={styles.socialRow}>
-          <Pressable style={styles.socialButton} disabled>
-            <View style={styles.socialIconWrap}><AppleMiniLogo size={23} /></View>
-            <Text style={styles.socialText}>Apple</Text>
-          </Pressable>
-          <Pressable style={styles.socialButton} disabled>
-            <View style={styles.socialIconWrap}><GoogleMiniLogo size={22} /></View>
-            <Text style={styles.socialText}>Google</Text>
+            <Text style={styles.authLegalText}>
+              {isTr ? 'Devam ederek Koşullar ve Gizlilik Politikası\'nı kabul edersin.' : 'By continuing, you agree to our Terms and Privacy Policy.'}
+            </Text>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+      {__DEV__ && onTestOnboarding ? (
+        <View pointerEvents="box-none" style={styles.devOnboardingWrap}>
+          <Pressable style={styles.devOnboardingButton} onPress={() => { hap.light(); onTestOnboarding(); }}>
+            <Text style={styles.devOnboardingButtonText}>Test Onboarding</Text>
           </Pressable>
         </View>
-
-        <Pressable style={styles.signUpButton} disabled={loading} onPress={onSignUp}>
-          <Text style={styles.signUpButtonText}>{isTr ? 'E-posta ile Kayıt Ol' : 'Sign up with Email'}</Text>
-        </Pressable>
-
-        {error ? <Text style={styles.feedbackText}>{error}</Text> : null}
-
-        <Text style={styles.authLegalText}>
-          {isTr ? 'Devam ederek Koşullar ve Gizlilik Politikası\'nı kabul edersin.' : 'By continuing, you agree to our Terms and Privacy Policy.'}
-        </Text>
-      </View>
+      ) : null}
     </Animated.View>
   );
 }
@@ -243,27 +240,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 46,
     paddingBottom: 18,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
+  },
+  keyboardWrap: {
+    flex: 1,
+  },
+  contentWrap: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    paddingBottom: 8,
+  },
+  contentWrapKeyboard: {
+    paddingTop: 6,
   },
   brandBlock: { alignItems: 'center', gap: 6, zIndex: 2, marginTop: 14, marginBottom: 6 },
   brandTitle: { fontSize: 28, lineHeight: 30, fontWeight: '700', color: '#2d2d2d', letterSpacing: -0.6, textAlign: 'center' },
   brandSubtitle: { fontSize: 10, lineHeight: 14, fontWeight: '600', color: '#787878', letterSpacing: 2, textAlign: 'center' },
-  illustrationWrap: { width: '100%', alignItems: 'center', justifyContent: 'center', minHeight: 170, zIndex: 2, marginTop: 4 },
-  catDecor: {
-    position: 'absolute',
-    right: 36,
-    top: 318,
-    opacity: 0.14,
-    zIndex: 1,
-  },
-  dogDecor: {
-    position: 'absolute',
-    left: 36,
-    top: 366,
-    opacity: 0.14,
-    zIndex: 1,
-  },
+  illustrationWrap: { width: '100%', alignItems: 'center', justifyContent: 'center', minHeight: 206, zIndex: 2, marginTop: 0 },
+  illustrationWrapKeyboard: { minHeight: 132, marginTop: -6 },
+  illustrationImage: { width: 230, height: 196 },
   copyBlock: { alignItems: 'center', gap: 8, zIndex: 2, marginBottom: 8 },
+  copyBlockKeyboard: { marginBottom: 4 },
   headline: { textAlign: 'center', fontSize: 30, lineHeight: 34, fontWeight: '700', color: '#2d2d2d', letterSpacing: -0.7 },
   subheadline: { textAlign: 'center', fontSize: 15, lineHeight: 22, fontWeight: '500', color: '#787878', letterSpacing: 0.2 },
   authCard: {
@@ -299,7 +296,7 @@ const styles = StyleSheet.create({
     color: '#2d2d2d',
     textAlign: 'left',
   },
-  ctaBlock: { gap: 10, zIndex: 2, marginTop: 8 },
+  ctaBlock: { gap: 8, zIndex: 2, marginTop: 2, marginBottom: 4 },
   primaryButton: {
     height: 58,
     borderRadius: 22,
@@ -350,6 +347,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignSelf: 'center',
     maxWidth: 320,
+  },
+  devOnboardingWrap: {
+    position: 'absolute',
+    top: 56,
+    right: 14,
+    zIndex: 6,
+  },
+  devOnboardingButton: {
+    alignSelf: 'center',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  devOnboardingButtonText: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#8f8f8f',
+    letterSpacing: 0.2,
   },
 });
 

@@ -17,6 +17,7 @@ import { getWording } from '../lib/wording';
 import { localizeVaccine } from '../lib/vaccineI18n';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 import StickyBlurTopBar, { getStickyHeaderContentTop } from '../components/StickyBlurTopBar';
+import type { VaccinationsHistoryItem, VaccinationsAttentionCounts, VaccinationsNextUpData } from '../lib/healthMvpModel';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -30,26 +31,6 @@ type VaccinationsScreenProps = {
   historyItems?: VaccinationsHistoryItem[];
   attentionCounts?: VaccinationsAttentionCounts;
   nextUpData?: VaccinationsNextUpData;
-};
-
-export type VaccinationsHistoryItem = {
-  name: string;
-  subtitle: string;
-  status: 'overdue' | 'dueSoon' | 'upToDate';
-  dueDate: string;
-  tint?: 'danger' | 'neutral';
-};
-
-export type VaccinationsAttentionCounts = {
-  overdueCount: number;
-  dueSoonCount: number;
-};
-
-export type VaccinationsNextUpData = {
-  name: string;
-  subtitle: string;
-  date: string;
-  inWeeks: string;
 };
 
 // ─── Icons ───────────────────────────────────────────────────────────────────

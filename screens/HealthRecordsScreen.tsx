@@ -17,32 +17,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
+import type { HealthRecordsData, HealthRecordsSegmentContent } from '../lib/healthMvpModel';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 import StickyBlurTopBar, { getStickyHeaderContentTop } from '../components/StickyBlurTopBar';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-export type HealthRecordsSegmentContent = {
-  activeTitle: string;
-  activeDate: string;
-  activeBody: string;
-  activeBadge: string;
-  activeSeverity: string;
-  activeSourceType?: 'manual' | 'vet_visit';
-  historyTitle: string;
-  historyDate: string;
-  historyBody: string;
-  resolvedBadge: string;
-  historySeverity: string;
-  historySourceType?: 'manual' | 'vet_visit';
-};
-
-export type HealthRecordsData = {
-  recordsCountText?: string;
-  activeCountText?: string;
-  upToDateText?: string;
-  bySegment?: Partial<Record<'allergies' | 'diagnoses' | 'labResults', HealthRecordsSegmentContent>>;
-};
 
 type HealthRecordsSegment = 'allergies' | 'diagnoses' | 'labResults';
 

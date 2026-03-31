@@ -1,13 +1,15 @@
 import type { PetProfile } from './petProfileTypes';
 import type { VisitItem } from '../screens/VetVisitsScreen';
-import type { HealthRecordsData } from '../screens/HealthRecordsScreen';
-import type { VaccinationsAttentionCounts, VaccinationsHistoryItem, VaccinationsNextUpData } from '../screens/VaccinationsScreen';
 import type {
   ByPet,
   MedicalEvent as MvpMedicalEvent,
   MedicationCourse,
   Reminder,
   VetVisit as MvpVetVisit,
+  HealthRecordsData,
+  VaccinationsAttentionCounts,
+  VaccinationsHistoryItem,
+  VaccinationsNextUpData,
 } from './healthMvpModel';
 import { isSameMedicalEvent, isSameVetVisit } from './healthEventDedup';
 

@@ -1,7 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import type { AddHealthRecordType, HealthHubCategory } from '../screens/HealthHubScreen';
 
-type PrimaryTabLike = 'home' | 'healthHub' | 'reminders' | 'insights';
+type PrimaryTabLike = 'home' | 'healthHub' | 'reminders' | 'insights' | 'profile';
 
 type HealthHubCreatePreset = {
   type: AddHealthRecordType;
@@ -11,13 +11,11 @@ type HealthHubCreatePreset = {
   nonce: number;
 };
 
-export function useHealthHubActions<Route extends string, VetVisitCreatePreset>(args: {
+export function useHealthHubActions<Route extends string>(args: {
   setPrimaryTab: Dispatch<SetStateAction<PrimaryTabLike>>;
   setHealthHubInitialCategory: Dispatch<SetStateAction<HealthHubCategory>>;
   setHealthHubCategoryResetKey: Dispatch<SetStateAction<number>>;
   setHealthHubCreatePreset: Dispatch<SetStateAction<HealthHubCreatePreset | null>>;
-  setSubBackRoute: Dispatch<SetStateAction<Route>>;
-  setVetVisitCreatePreset: Dispatch<SetStateAction<VetVisitCreatePreset | null>>;
   setRoute: Dispatch<SetStateAction<Route>>;
 }) {
   const {
@@ -25,8 +23,6 @@ export function useHealthHubActions<Route extends string, VetVisitCreatePreset>(
     setHealthHubInitialCategory,
     setHealthHubCategoryResetKey,
     setHealthHubCreatePreset,
-    setSubBackRoute,
-    setVetVisitCreatePreset,
     setRoute,
   } = args;
 
@@ -56,19 +52,8 @@ export function useHealthHubActions<Route extends string, VetVisitCreatePreset>(
     setRoute('healthHub' as Route);
   }, [setHealthHubCategoryResetKey, setHealthHubCreatePreset, setHealthHubInitialCategory, setPrimaryTab, setRoute]);
 
-  const openVetVisitWithPreset = useCallback((backTo: Route, preset: VetVisitCreatePreset) => {
-    setSubBackRoute(backTo);
-    setVetVisitCreatePreset({
-      ...preset,
-      openCreate: true,
-      nonce: Date.now(),
-    } as VetVisitCreatePreset);
-    setRoute('vetVisits' as Route);
-  }, [setRoute, setSubBackRoute, setVetVisitCreatePreset]);
-
   return {
     openHealthHubWithCategory,
     openHealthHubCreate,
-    openVetVisitWithPreset,
   };
 }

@@ -3,6 +3,7 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { ChevronRight } from 'lucide-react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 type PetListCardProps = {
   name: string;
@@ -10,6 +11,7 @@ type PetListCardProps = {
   weightValue: number | null;
   updatedLabel?: string | null;
   imageUri?: string;
+  completionPercent?: number;
   highlighted?: boolean;
   compact?: boolean;
   onPress: () => void;
@@ -30,6 +32,7 @@ export default function PetListCard({
   weightValue,
   updatedLabel,
   imageUri,
+  completionPercent = 0,
   highlighted = false,
   compact = false,
   onPress,
@@ -38,6 +41,26 @@ export default function PetListCard({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onPress();
   };
+  const avatarSize = compact ? 74 : 88;
+  const ringSize = avatarSize + 10;
+  const ringStrokeWidth = 3;
+  const ringRectSize = ringSize - ringStrokeWidth;
+  const avatarRadius = compact ? 24 : 28;
+  const ringCornerRadius = avatarRadius + 4;
+  const perimeter = (4 * (ringRectSize - 2 * ringCornerRadius)) + (2 * Math.PI * ringCornerRadius);
+  const safePercent = Math.max(0, Math.min(100, completionPercent));
+  const progress = perimeter - (safePercent / 100) * perimeter;
+  const gradientIdRef = React.useRef(`pet-completion-${Math.random().toString(36).slice(2, 10)}`);
+  const gradientId = gradientIdRef.current;
+  const progressColors = React.useMemo(() => {
+    if (safePercent < 40) {
+      return { start: '#c48563', end: '#d69f78', badgeBg: '#fff4ea', badgeText: '#8f5f43' };
+    }
+    if (safePercent < 75) {
+      return { start: '#b0905f', end: '#d0ad74', badgeBg: '#fff8ec', badgeText: '#7f6338' };
+    }
+    return { start: '#5b8b5f', end: '#8caf73', badgeBg: '#eef7ed', badgeText: '#416747' };
+  }, [safePercent]);
 
   return (
     <Pressable
@@ -57,11 +80,49 @@ export default function PetListCard({
         >
           <View pointerEvents="none" style={styles.petCardHighlight} />
           <View style={styles.petCardRow}>
-            {imageUri ? (
-              <Image source={{ uri: imageUri }} style={[styles.petImage, compact && styles.petImageCompact]} />
-            ) : (
-              <InitialAvatar name={name} compact={compact} />
-            )}
+            <View style={[styles.avatarRingWrap, { width: ringSize, height: ringSize }]}>
+              <Svg width={ringSize} height={ringSize} style={styles.avatarRingSvg}>
+                <Defs>
+                  <LinearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
+                    <Stop offset="0" stopColor={progressColors.start} />
+                    <Stop offset="1" stopColor={progressColors.end} />
+                  </LinearGradient>
+                </Defs>
+                <Rect
+                  x={ringStrokeWidth / 2}
+                  y={ringStrokeWidth / 2}
+                  width={ringRectSize}
+                  height={ringRectSize}
+                  rx={ringCornerRadius}
+                  ry={ringCornerRadius}
+                  stroke="rgba(126, 95, 71, 0.18)"
+                  strokeWidth={ringStrokeWidth}
+                  fill="none"
+                />
+                <Rect
+                  x={ringStrokeWidth / 2}
+                  y={ringStrokeWidth / 2}
+                  width={ringRectSize}
+                  height={ringRectSize}
+                  rx={ringCornerRadius}
+                  ry={ringCornerRadius}
+                  stroke={`url(#${gradientId})`}
+                  strokeWidth={ringStrokeWidth}
+                  fill="none"
+                  strokeLinecap="round"
+                  strokeDasharray={perimeter}
+                  strokeDashoffset={progress}
+                />
+              </Svg>
+              {imageUri ? (
+                <Image source={{ uri: imageUri }} style={[styles.petImage, compact && styles.petImageCompact]} />
+              ) : (
+                <InitialAvatar name={name} compact={compact} />
+              )}
+              <View style={[styles.completionBadge, { backgroundColor: progressColors.badgeBg }]}>
+                <Text style={[styles.completionBadgeText, { color: progressColors.badgeText }]}>{safePercent}%</Text>
+              </View>
+            </View>
 
             <View style={styles.petCardContent}>
               <Text numberOfLines={1} style={[styles.petName, compact && styles.petNameCompact]}>{name}</Text>
@@ -134,6 +195,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  avatarRingWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 2,
+  },
+  avatarRingSvg: {
+    position: 'absolute',
+  },
   petCardActive: {
     borderColor: 'rgba(227,190,154,0.38)',
     backgroundColor: 'rgba(255,248,241,0.82)',
@@ -188,6 +257,27 @@ const styles = StyleSheet.create({
   initialTextCompact: {
     fontSize: 19,
     lineHeight: 22,
+  },
+  completionBadge: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    minWidth: 30,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fffaf4',
+    borderWidth: 1,
+    borderColor: 'rgba(171,143,116,0.26)',
+  },
+  completionBadgeText: {
+    fontSize: 10,
+    lineHeight: 12,
+    color: '#6f5544',
+    fontWeight: '700',
+    letterSpacing: 0.1,
   },
   petCardContent: {
     flex: 1,

@@ -42,6 +42,7 @@ type PetsViewItem = {
   updatedLabel?: string | null;
   imageUri?: string;
   isActive: boolean;
+  completionPercent: number;
 };
 
 function localizeType(type: PetProfile['petType'], locale: 'en' | 'tr') {
@@ -54,6 +55,20 @@ function formatShortDate(value: string | undefined, locale: 'en' | 'tr') {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return new Intl.DateTimeFormat(locale === 'tr' ? 'tr-TR' : 'en-US', { day: 'numeric', month: 'short' }).format(date);
+}
+
+function getProfileCompletionPercent(pet: PetProfile) {
+  const checks = [
+    pet.name.trim().length > 0,
+    pet.petType === 'Dog' || pet.petType === 'Cat',
+    pet.gender === 'male' || pet.gender === 'female',
+    pet.breed.trim().length > 0,
+    pet.birthDate.trim().length > 0,
+    pet.microchip.trim().length > 0,
+    pet.image.trim().length > 0,
+  ];
+  const score = checks.reduce((sum, ok) => (ok ? sum + 1 : sum), 0);
+  return Math.round((score / checks.length) * 100);
 }
 
 export default function PetsScreen(props: PetsScreenProps) {
@@ -84,9 +99,13 @@ export default function PetsScreen(props: PetsScreenProps) {
     a.id === activePetId ? -1 : b.id === activePetId ? 1 : a.name.localeCompare(b.name)
   );
 
-  const viewItems: PetsViewItem[] = sortedPets.map((pet) => {
+  const completionPreview = [18, 42, 67, 91];
+  const viewItems: PetsViewItem[] = sortedPets.map((pet, index) => {
     const latestWeightPoint = (weightsByPet?.[pet.id] ?? []).at(-1);
     const typeLabel = localizeType(pet.petType, locale);
+    const completionPercent = __DEV__
+      ? completionPreview[index % completionPreview.length]
+      : getProfileCompletionPercent(pet);
     return {
       id: pet.id,
       name: pet.name,
@@ -95,6 +114,7 @@ export default function PetsScreen(props: PetsScreenProps) {
       updatedLabel: formatShortDate(latestWeightPoint?.date, locale),
       imageUri: pet.image || undefined,
       isActive: pet.id === activePetId,
+      completionPercent,
     };
   });
 
@@ -208,6 +228,7 @@ export default function PetsScreen(props: PetsScreenProps) {
                     imageUri={pet.imageUri}
                     highlighted={pet.isActive || index === 0}
                     compact={compact || viewItems.length >= 4}
+                    completionPercent={pet.completionPercent}
                     onPress={() => onOpenPet(pet.id)}
                   />
                 ))}
@@ -437,3 +458,4 @@ const styles = StyleSheet.create({
     color: 'rgba(74, 56, 45, 0.72)',
   },
 });
+

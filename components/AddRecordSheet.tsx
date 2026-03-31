@@ -1,11 +1,15 @@
 /**
- * AddRecordSheet — near full-screen bottom sheet for adding:
- *   • Vet Visit  (mode='vetVisit')
- *   • Vaccine    (mode='vaccine')
- *   • Health Record (mode='record')
+ * AddRecordSheet — unified health record entry sheet.
  *
- * Shares the same spring-slide pattern as the breed insight sheet.
- * Design pass is deferred — layout and fields are the focus here.
+ * Modes:
+ *   'typeSelect' — Step 0 type picker, then transitions to the appropriate form
+ *   'vetVisit'   — Vet visit form (context-based: 'quick' or 'detailed')
+ *   'vaccine'    — Vaccine form
+ *   'record'     — Health record form (diagnosis / procedure / test / note)
+ *
+ * Context:
+ *   'quick'    — opened from Home or Health Hub (default)
+ *   'detailed' — opened from Vet Visits screen (same form, more prominent status)
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -28,11 +32,15 @@ import type { AddHealthRecordPayload, AddHealthRecordType } from '../screens/Hea
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type AddRecordMode = 'vetVisit' | 'vaccine' | 'record';
+export type AddRecordMode = 'vetVisit' | 'vaccine' | 'record' | 'typeSelect';
+export type AddRecordContext = 'quick' | 'detailed';
+
+type EntryType = 'vetVisit' | 'vaccine' | 'diagnosis' | 'treatment' | 'test' | 'note';
 
 type Props = {
   visible: boolean;
   mode: AddRecordMode;
+  context?: AddRecordContext;
   initialTitle?: string;
   initialType?: AddHealthRecordType;
   locale: 'en' | 'tr';
@@ -40,7 +48,7 @@ type Props = {
   onSave: (payload: AddHealthRecordPayload) => void;
 };
 
-// ─── Design tokens (mirrors app palette) ─────────────────────────────────────
+// ─── Design tokens ────────────────────────────────────────────────────────────
 
 const C = {
   bg: '#f6f4f0',
@@ -54,12 +62,16 @@ const C = {
   outlineVariant: '#b1b3ab',
   outline: '#797c75',
   urgent: '#a73b21',
+  separator: 'rgba(0,0,0,0.07)',
 };
 
 // ─── Option arrays ────────────────────────────────────────────────────────────
 
 const VISIT_REASONS = ['checkup', 'vaccine', 'illness', 'injury', 'follow_up', 'other'] as const;
 type VisitReason = (typeof VISIT_REASONS)[number];
+
+const VISIT_STATUS_OPTIONS = ['completed', 'planned', 'canceled'] as const;
+type VisitStatus = (typeof VISIT_STATUS_OPTIONS)[number];
 
 const RECORD_TYPES: AddHealthRecordType[] = ['diagnosis', 'procedure', 'prescription', 'test'];
 
@@ -70,6 +82,87 @@ const VACCINES_TR = ['Karma Aşı', 'Kuduz', 'Leptospiroz', 'Bordetella', 'FeLV'
 const VACCINES_EN = ['Core Vaccine', 'Rabies', 'Leptospirosis', 'Bordetella', 'FeLV', 'FIV', 'Giardia', 'Chlamydophila'];
 
 const CURRENCIES = ['₺', '$', '€'] as const;
+
+// ─── Type picker config ────────────────────────────────────────────────────────
+
+type TypeOption = {
+  key: EntryType;
+  labelEn: string;
+  labelTr: string;
+  descEn: string;
+  descTr: string;
+  accent: string;
+  symbol: string;
+};
+
+const TYPE_OPTIONS: TypeOption[] = [
+  {
+    key: 'vetVisit',
+    labelEn: 'Vet Visit',
+    labelTr: 'Veteriner Ziyareti',
+    descEn: 'Clinic visit, examination, checkup',
+    descTr: 'Klinik ziyareti, muayene, kontrol',
+    accent: '#4a7c59',
+    symbol: '⚕',
+  },
+  {
+    key: 'vaccine',
+    labelEn: 'Vaccine',
+    labelTr: 'Aşı',
+    descEn: 'Vaccination record with due date',
+    descTr: 'Aşı kaydı ve hatırlatma tarihi',
+    accent: '#3d6e9e',
+    symbol: '💉',
+  },
+  {
+    key: 'diagnosis',
+    labelEn: 'Diagnosis / Condition',
+    labelTr: 'Tanı / Durum',
+    descEn: 'Allergy, chronic condition, illness',
+    descTr: 'Alerji, kronik durum, hastalık',
+    accent: '#9b4040',
+    symbol: '✚',
+  },
+  {
+    key: 'treatment',
+    labelEn: 'Treatment / Procedure',
+    labelTr: 'Tedavi / İşlem',
+    descEn: 'Surgery, dental, medication course',
+    descTr: 'Ameliyat, diş, ilaç tedavisi',
+    accent: '#6b4ea8',
+    symbol: '✦',
+  },
+  {
+    key: 'test',
+    labelEn: 'Test / Lab Result',
+    labelTr: 'Test / Lab Sonucu',
+    descEn: 'Blood panel, urinalysis, imaging',
+    descTr: 'Kan testi, idrar, görüntüleme',
+    accent: '#2d7a5c',
+    symbol: '◎',
+  },
+  {
+    key: 'note',
+    labelEn: 'Note',
+    labelTr: 'Not',
+    descEn: 'General observation or reminder',
+    descTr: 'Genel gözlem veya hatırlatma',
+    accent: '#8b6914',
+    symbol: '≡',
+  },
+];
+
+// Mapping from EntryType to form mode + initial record type
+function entryTypeToForm(entry: EntryType): { mode: AddRecordMode; recType: AddHealthRecordType } {
+  switch (entry) {
+    case 'vetVisit':  return { mode: 'vetVisit',  recType: 'procedure' };
+    case 'vaccine':   return { mode: 'vaccine',   recType: 'procedure' };
+    case 'diagnosis': return { mode: 'record',    recType: 'diagnosis' };
+    case 'treatment': return { mode: 'record',    recType: 'procedure' };
+    case 'test':      return { mode: 'record',    recType: 'test' };
+    case 'note':      return { mode: 'record',    recType: 'prescription' };
+  }
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -86,6 +179,7 @@ function todayStr() {
 export default function AddRecordSheet({
   visible,
   mode,
+  context = 'quick',
   initialTitle = '',
   initialType = 'diagnosis',
   locale,
@@ -95,6 +189,11 @@ export default function AddRecordSheet({
   const isTr = locale === 'tr';
   const { height: screenH } = useWindowDimensions();
   const sheetH = screenH * 0.93;
+
+  // ── Navigation step (type selector vs form) ────────────────────────────────
+  const [step, setStep] = useState<'pick' | 'form'>(mode === 'typeSelect' ? 'pick' : 'form');
+  const [activeMode, setActiveMode] = useState<AddRecordMode>(mode === 'typeSelect' ? 'vetVisit' : mode);
+  const stepAnim = useRef(new Animated.Value(0)).current;
 
   // ── Animation ──────────────────────────────────────────────────────────────
   const translateY = useRef(new Animated.Value(sheetH)).current;
@@ -154,6 +253,7 @@ export default function AddRecordSheet({
 
   // Vet Visit
   const [visitReason, setVisitReason] = useState<VisitReason>('checkup');
+  const [visitStatus, setVisitStatus] = useState<VisitStatus>('completed');
   const [clinicName, setClinicName] = useState('');
   const [vetName, setVetName] = useState('');
   const [fee, setFee] = useState('');
@@ -176,15 +276,22 @@ export default function AddRecordSheet({
   const [valueUnit, setValueUnit] = useState('');
   const [dueDate, setDueDate] = useState('');
 
-  // Reset all fields when sheet opens
+  // Reset all fields and step when sheet opens
   useEffect(() => {
     if (!visible) return;
+    // Step reset
+    const initialStep = mode === 'typeSelect' ? 'pick' : 'form';
+    setStep(initialStep);
+    setActiveMode(mode === 'typeSelect' ? 'vetVisit' : mode);
+    stepAnim.setValue(0);
+    // Field reset
     setFormDate(todayStr());
     setNotes('');
     setFocusedField(null);
     setFormError('');
     // vet visit
     setVisitReason('checkup');
+    setVisitStatus('completed');
     setClinicName('');
     setVetName('');
     setFee('');
@@ -204,12 +311,26 @@ export default function AddRecordSheet({
     setValueNumber('');
     setValueUnit('');
     setDueDate('');
-  }, [visible, initialTitle, initialType, mode]);
+  }, [visible, initialTitle, initialType, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Type selector → form transition ────────────────────────────────────────
+  const selectType = (entry: EntryType) => {
+    const { mode: nextMode, recType: nextRecType } = entryTypeToForm(entry);
+    setActiveMode(nextMode);
+    setRecType(nextRecType);
+    setStep('form');
+    Animated.timing(stepAnim, { toValue: 1, duration: 220, useNativeDriver: true }).start();
+  };
+
+  const goBackToPicker = () => {
+    setStep('pick');
+    stepAnim.setValue(0);
+  };
 
   // ── Validation ─────────────────────────────────────────────────────────────
   const isValid =
-    mode === 'vetVisit' ? isValidDate(formDate) :
-    mode === 'vaccine' ? (vaccineName.trim().length > 0 && isValidDate(formDate)) :
+    activeMode === 'vetVisit' ? isValidDate(formDate) :
+    activeMode === 'vaccine'  ? (vaccineName.trim().length > 0 && isValidDate(formDate)) :
     (recTitle.trim().length > 0 && isValidDate(formDate));
 
   // ── Submit ─────────────────────────────────────────────────────────────────
@@ -222,7 +343,7 @@ export default function AddRecordSheet({
 
     let payload: AddHealthRecordPayload;
 
-    if (mode === 'vetVisit') {
+    if (activeMode === 'vetVisit') {
       const rLabelTr: Record<VisitReason, string> = {
         checkup: 'Kontrol', vaccine: 'Aşı', illness: 'Hastalık',
         injury: 'Yaralanma', follow_up: 'Takip', other: 'Diğer',
@@ -238,13 +359,14 @@ export default function AddRecordSheet({
         date: formDate,
         note: notes.trim() || undefined,
         visitReason,
+        visitStatus,
         clinicName: clinicName.trim() || undefined,
         vetName: vetName.trim() || undefined,
         fee: fee.trim() ? parseFloat(fee.replace(',', '.')) : undefined,
         feeCurrency: fee.trim() ? feeCurrency : undefined,
         dueDate: followUpEnabled && isValidDate(followUpDate) ? followUpDate : undefined,
       };
-    } else if (mode === 'vaccine') {
+    } else if (activeMode === 'vaccine') {
       payload = {
         type: 'vaccine',
         title: vaccineName.trim(),
@@ -273,10 +395,12 @@ export default function AddRecordSheet({
   }
 
   // ── Titles ─────────────────────────────────────────────────────────────────
-  const sheetTitle =
-    mode === 'vetVisit' ? (isTr ? 'Veteriner Ziyareti' : 'Vet Visit') :
-    mode === 'vaccine'  ? (isTr ? 'Aşı Kaydı'          : 'Vaccine Record') :
-                          (isTr ? 'Sağlık Kaydı'        : 'Health Record');
+  const formTitle = (() => {
+    if (step === 'pick') return isTr ? 'Kayıt Ekle' : 'Add Record';
+    if (activeMode === 'vetVisit') return isTr ? (context === 'detailed' ? 'Veteriner Ziyareti' : 'Veteriner Ziyareti') : (context === 'detailed' ? 'Vet Visit' : 'Vet Visit');
+    if (activeMode === 'vaccine')  return isTr ? 'Aşı Kaydı' : 'Vaccine Record';
+    return isTr ? 'Sağlık Kaydı' : 'Health Record';
+  })();
 
   // ── Label helpers ──────────────────────────────────────────────────────────
   function visitReasonLabel(r: VisitReason) {
@@ -288,18 +412,24 @@ export default function AddRecordSheet({
     return isTr ? m[r][0] : m[r][1];
   }
 
+  function visitStatusLabel(s: VisitStatus) {
+    if (s === 'completed') return isTr ? 'Tamamlandı' : 'Completed';
+    if (s === 'planned')   return isTr ? 'Planlandı'  : 'Planned';
+    return isTr ? 'İptal' : 'Canceled';
+  }
+
   function recTypeLabel(t: AddHealthRecordType) {
-    if (t === 'diagnosis') return isTr ? 'Teşhis' : 'Diagnosis';
-    if (t === 'procedure') return isTr ? 'İşlem' : 'Procedure';
+    if (t === 'diagnosis')   return isTr ? 'Teşhis'  : 'Diagnosis';
+    if (t === 'procedure')   return isTr ? 'İşlem'   : 'Procedure';
     if (t === 'prescription') return isTr ? 'Reçete' : 'Prescription';
     return 'Test';
   }
 
   function statusLabel(s: RecordStatus) {
-    if (s === 'active') return isTr ? 'Aktif' : 'Active';
-    if (s === 'resolved') return isTr ? 'Çözüldü' : 'Resolved';
-    if (s === 'normal') return 'Normal';
-    if (s === 'abnormal') return isTr ? 'Anormal' : 'Abnormal';
+    if (s === 'active')     return isTr ? 'Aktif'      : 'Active';
+    if (s === 'resolved')   return isTr ? 'Çözüldü'   : 'Resolved';
+    if (s === 'normal')     return 'Normal';
+    if (s === 'abnormal')   return isTr ? 'Anormal'   : 'Abnormal';
     return isTr ? 'Tamamlandı' : 'Completed';
   }
 
@@ -359,14 +489,42 @@ export default function AddRecordSheet({
     </ScrollView>
   );
 
+  // ── Type picker ────────────────────────────────────────────────────────────
+
+  const renderTypePicker = () => (
+    <View style={st.pickerList}>
+      {TYPE_OPTIONS.map((opt, index) => (
+        <Pressable
+          key={opt.key}
+          style={[st.pickerRow, index < TYPE_OPTIONS.length - 1 && st.pickerRowBorder]}
+          onPress={() => selectType(opt.key)}
+        >
+          <View style={[st.pickerAccentBar, { backgroundColor: opt.accent }]} />
+          <View style={[st.pickerIconBox, { backgroundColor: opt.accent + '18' }]}>
+            <Text style={[st.pickerIcon, { color: opt.accent }]}>{opt.symbol}</Text>
+          </View>
+          <View style={st.pickerTextCol}>
+            <Text style={st.pickerLabel}>{isTr ? opt.labelTr : opt.labelEn}</Text>
+            <Text style={st.pickerDesc}>{isTr ? opt.descTr : opt.descEn}</Text>
+          </View>
+          <Text style={st.pickerChevron}>›</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+
   // ── Form bodies ────────────────────────────────────────────────────────────
 
   const renderVetVisitForm = () => (
     <>
+      {/* Status — always shown, more prominent in detailed context */}
+      {renderLabel(isTr ? 'ZİYARET DURUMU' : 'VISIT STATUS', true)}
+      {renderChips(VISIT_STATUS_OPTIONS, visitStatus, (v) => v && setVisitStatus(v as VisitStatus), visitStatusLabel)}
+
       {renderLabel(isTr ? 'ZİYARET NEDENİ' : 'VISIT REASON', true)}
       {renderChips(VISIT_REASONS, visitReason, (v) => v && setVisitReason(v as VisitReason), visitReasonLabel)}
 
-      {renderLabel(isTr ? 'ZİYARET TARİHİ' : 'VISIT DATE', true)}
+      {renderLabel(isTr ? 'TARİH' : 'DATE', true)}
       {renderInput(formDate, setFormDate, 'YYYY-MM-DD', 'date', { noCapitalize: true })}
 
       <View style={st.twoCol}>
@@ -542,37 +700,67 @@ export default function AddRecordSheet({
               <View style={st.handle} />
             </View>
             <View style={st.header}>
-              <Pressable onPress={() => closeAnim()} hitSlop={16} style={st.cancelBtn}>
-                <Text style={st.cancelText}>{isTr ? 'İptal' : 'Cancel'}</Text>
-              </Pressable>
-              <Text style={st.headerTitle}>{sheetTitle}</Text>
-              <Pressable
-                onPress={handleSave}
-                hitSlop={16}
-                style={[st.saveBtn, !isValid && st.saveBtnDisabled]}
-                disabled={!isValid}
-              >
-                <Text style={[st.saveText, !isValid && st.saveTextDisabled]}>
-                  {isTr ? 'Kaydet' : 'Save'}
-                </Text>
-              </Pressable>
+              {/* Left action */}
+              {step === 'form' && mode === 'typeSelect' ? (
+                <Pressable onPress={goBackToPicker} hitSlop={16} style={st.cancelBtn}>
+                  <Text style={st.backText}>‹ {isTr ? 'Geri' : 'Back'}</Text>
+                </Pressable>
+              ) : (
+                <Pressable onPress={() => closeAnim()} hitSlop={16} style={st.cancelBtn}>
+                  <Text style={st.cancelText}>{isTr ? 'İptal' : 'Cancel'}</Text>
+                </Pressable>
+              )}
+
+              <Text style={st.headerTitle}>{formTitle}</Text>
+
+              {/* Right action */}
+              {step === 'form' ? (
+                <Pressable
+                  onPress={handleSave}
+                  hitSlop={16}
+                  style={[st.saveBtn, !isValid && st.saveBtnDisabled]}
+                  disabled={!isValid}
+                >
+                  <Text style={[st.saveText, !isValid && st.saveTextDisabled]}>
+                    {isTr ? 'Kaydet' : 'Save'}
+                  </Text>
+                </Pressable>
+              ) : (
+                <Pressable onPress={() => closeAnim()} hitSlop={16} style={st.saveBtn}>
+                  <Text style={st.cancelText}>{isTr ? 'Kapat' : 'Close'}</Text>
+                </Pressable>
+              )}
             </View>
             <View style={st.divider} />
           </View>
 
-          {/* ── Scrollable form ── */}
-          <ScrollView
-            style={{ flex: 1 }}
-            contentContainerStyle={st.body}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {mode === 'vetVisit' ? renderVetVisitForm() : null}
-            {mode === 'vaccine'  ? renderVaccineForm()  : null}
-            {mode === 'record'   ? renderRecordForm()   : null}
-            {formError ? <Text style={st.error}>{formError}</Text> : null}
-            <View style={{ height: 48 }} />
-          </ScrollView>
+          {/* ── Content ── */}
+          {step === 'pick' ? (
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={st.pickerBody}
+              showsVerticalScrollIndicator={false}
+            >
+              <Text style={st.pickerHint}>
+                {isTr ? 'Hangi tür kaydı eklemek istiyorsunuz?' : 'What type of record would you like to add?'}
+              </Text>
+              {renderTypePicker()}
+              <View style={{ height: 48 }} />
+            </ScrollView>
+          ) : (
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={st.body}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {activeMode === 'vetVisit' ? renderVetVisitForm() : null}
+              {activeMode === 'vaccine'  ? renderVaccineForm()  : null}
+              {activeMode === 'record'   ? renderRecordForm()   : null}
+              {formError ? <Text style={st.error}>{formError}</Text> : null}
+              <View style={{ height: 48 }} />
+            </ScrollView>
+          )}
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
@@ -629,6 +817,11 @@ const st = StyleSheet.create({
     fontSize: 15,
     color: C.onSurfaceVariant,
   },
+  backText: {
+    fontSize: 15,
+    color: C.primary,
+    fontWeight: '500',
+  },
   saveBtn: {
     minWidth: 60,
     alignItems: 'flex-end',
@@ -645,6 +838,72 @@ const st = StyleSheet.create({
   divider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: 'rgba(0,0,0,0.08)',
+  },
+
+  // ── Picker ──
+  pickerBody: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
+  pickerHint: {
+    fontSize: 13,
+    color: C.onSurfaceVariant,
+    marginBottom: 16,
+    letterSpacing: -0.1,
+  },
+  pickerList: {
+    backgroundColor: C.surface,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: C.separator,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 12,
+  },
+  pickerRowBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: C.separator,
+  },
+  pickerAccentBar: {
+    width: 3,
+    height: 36,
+    borderRadius: 2,
+  },
+  pickerIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerIcon: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  pickerTextCol: {
+    flex: 1,
+    gap: 2,
+  },
+  pickerLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: C.onSurface,
+    letterSpacing: -0.2,
+  },
+  pickerDesc: {
+    fontSize: 12,
+    color: C.onSurfaceVariant,
+    lineHeight: 16,
+  },
+  pickerChevron: {
+    fontSize: 20,
+    color: C.outlineVariant,
+    marginRight: 2,
   },
 
   // ── Body ──

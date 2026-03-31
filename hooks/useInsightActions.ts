@@ -2,7 +2,7 @@ import { useCallback, type Dispatch, type SetStateAction } from 'react';
 import type { AiInsight } from '../lib/insightsEngine';
 import type { ReminderSubtype } from '../lib/healthMvpModel';
 
-type PrimaryTabLike = 'home' | 'healthHub' | 'reminders' | 'insights';
+type PrimaryTabLike = 'home' | 'healthHub' | 'reminders' | 'insights' | 'profile';
 
 export function useInsightActions<Route extends string>(args: {
   activePetId: string;
@@ -11,8 +11,13 @@ export function useInsightActions<Route extends string>(args: {
   setReminderCreateNonce: Dispatch<SetStateAction<number>>;
   setPrimaryTab: Dispatch<SetStateAction<PrimaryTabLike>>;
   setRoute: Dispatch<SetStateAction<Route>>;
-  openHealthHubCreate: (type: 'vaccine' | 'diagnosis', category?: 'vaccine' | 'record') => void;
-  openVetVisitWithPreset: (backTo: Route, preset: { source: 'other'; reason: 'checkup'; actions: [] }) => void;
+  openHealthHubCreateWithContext: (
+    origin: Route,
+    type: 'vaccine' | 'diagnosis',
+    category?: 'vaccine' | 'record',
+    successRoute?: Route,
+  ) => void;
+  onOpenVetVisitCreate: () => void;
   openWeightTracking: (petId: string, from: Route) => void;
 }) {
   const {
@@ -22,8 +27,8 @@ export function useInsightActions<Route extends string>(args: {
     setReminderCreateNonce,
     setPrimaryTab,
     setRoute,
-    openHealthHubCreate,
-    openVetVisitWithPreset,
+    openHealthHubCreateWithContext,
+    onOpenVetVisitCreate,
     openWeightTracking,
   } = args;
 
@@ -36,15 +41,11 @@ export function useInsightActions<Route extends string>(args: {
       return;
     }
     if (insight.actionType === 'addVaccine') {
-      openHealthHubCreate('vaccine', 'vaccine');
+      openHealthHubCreateWithContext(route, 'vaccine', 'vaccine');
       return;
     }
     if (insight.actionType === 'addVisit') {
-      openVetVisitWithPreset(route, {
-        source: 'other',
-        reason: 'checkup',
-        actions: [],
-      });
+      onOpenVetVisitCreate();
       return;
     }
     if (insight.actionType === 'logWeight') {
@@ -52,8 +53,8 @@ export function useInsightActions<Route extends string>(args: {
     }
   }, [
     activePetId,
-    openHealthHubCreate,
-    openVetVisitWithPreset,
+    openHealthHubCreateWithContext,
+    onOpenVetVisitCreate,
     openWeightTracking,
     route,
     setPrimaryTab,

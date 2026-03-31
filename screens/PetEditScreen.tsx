@@ -1,6 +1,8 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as ImagePicker from 'expo-image-picker';
 import {
   Alert,
   Image,
@@ -28,6 +30,7 @@ type PetEditScreenProps = {
 type PickerField = 'name' | 'microchip' | 'petType' | 'gender' | 'breed' | 'coatPattern' | 'birthDate' | 'vaccines' | 'surgeries' | 'allergies' | 'diabetes' | 'photo' | null;
 
 const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
+const fallbackPetAvatarUri = Image.resolveAssetSource(require('../assets/icon.png')).uri;
 
 const CAT_BREEDS = [
   'Abyssinian',
@@ -549,6 +552,52 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
       onSaved(saved);
     }
   };
+
+  const handlePickPetPhoto = async () => {
+    try {
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          isTr ? 'Fotoğraf erişimi gerekli' : 'Photo access required',
+          isTr ? 'Pet fotoğrafı seçmek için galeri erişimini aç.' : 'Enable gallery access to choose a pet photo.',
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.82,
+      });
+
+      if (result.canceled || !result.assets?.[0]?.uri) return;
+
+      const pickedUri = result.assets[0].uri;
+      const ext = pickedUri.split('.').pop()?.split('?')[0] || 'jpg';
+      const dir = `${FileSystem.documentDirectory ?? ''}pet-photos`;
+      const target = `${dir}/pet-${draft.id || 'local'}.${ext}`;
+
+      const dirInfo = await FileSystem.getInfoAsync(dir);
+      if (!dirInfo.exists) {
+        await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+      }
+
+      const targetInfo = await FileSystem.getInfoAsync(target);
+      if (targetInfo.exists) {
+        await FileSystem.deleteAsync(target, { idempotent: true });
+      }
+
+      await FileSystem.copyAsync({ from: pickedUri, to: target });
+      setDraft((prev) => ({ ...prev, image: target }));
+      setPickerField(null);
+    } catch {
+      Alert.alert(
+        isTr ? 'Fotoğraf seçilemedi' : 'Photo could not be selected',
+        isTr ? 'Lütfen tekrar dene.' : 'Please try again.',
+      );
+    }
+  };
   const useFocusedEditLayout = true;
   if (useFocusedEditLayout) {
     return (
@@ -604,7 +653,12 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
 
           <View style={styles.editHeroCard}>
             <View style={styles.editHeroTopRow}>
-              <Image source={{ uri: draft.image }} style={styles.editHeroAvatar} />
+              <Pressable style={styles.editHeroAvatarPress} onPress={() => setPickerField('photo')}>
+                <Image source={{ uri: draft.image?.trim() ? draft.image : fallbackPetAvatarUri }} style={styles.editHeroAvatar} />
+                <View style={styles.editHeroAvatarBadge}>
+                  <Text style={styles.editHeroAvatarBadgeText}>{isTr ? 'Foto' : 'Photo'}</Text>
+                </View>
+              </Pressable>
               <View style={styles.editHeroTextCol}>
                 <Text style={styles.editHeroName}>{draft.name}</Text>
                 <View style={styles.editHeroMetaRow}>
@@ -644,6 +698,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
           <Text style={styles.editSectionTitle}>{isTr ? 'Kimlik Detayları' : 'Identity Details'}</Text>
           <View style={styles.editSectionCard}>
             <InfoRow label={isTr ? 'Yaş' : 'Age'} value={formatAgeLabel(draft.birthDate)} onPress={() => { setBirthPicker(parseBirthDate(draft.birthDate)); setPickerField('birthDate'); }} />
+            <InfoRow label={isTr ? 'Profil Fotoğrafı' : 'Profile Photo'} value={draft.image?.trim() ? (isTr ? 'Eklendi' : 'Added') : (isTr ? 'Yok' : 'None')} onPress={() => setPickerField('photo')} />
             <InfoRow label={isTr ? 'Mikroçip' : 'Microchip'} value={draft.microchip || '-'} onPress={() => { setMicrochipDraft(draft.microchip || ''); setPickerField('microchip'); }} noBorder />
           </View>
 
@@ -797,6 +852,11 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
                 </View>
               ) : (
                 <ScrollView style={styles.modalScroll} showsVerticalScrollIndicator={false}>
+                  {pickerField === 'photo' ? (
+                    <Pressable style={styles.photoLibraryBtn} onPress={handlePickPetPhoto}>
+                      <Text style={styles.photoLibraryBtnText}>{isTr ? 'Galeriden Seç' : 'Choose From Library'}</Text>
+                    </Pressable>
+                  ) : null}
                   {pickerItems.map((item) => {
                     const selected =
                       (pickerField === 'petType' && draft.petType === item) ||
@@ -1238,6 +1298,24 @@ const styles = StyleSheet.create({
     height: 104,
     borderRadius: 28,
   },
+  editHeroAvatarPress: {
+    position: 'relative',
+  },
+  editHeroAvatarBadge: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    backgroundColor: 'rgba(26, 23, 16, 0.72)',
+  },
+  editHeroAvatarBadgeText: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#fff',
+    fontWeight: '700',
+  },
   editHeroTextCol: {
     flex: 1,
     gap: 6,
@@ -1370,6 +1448,21 @@ const styles = StyleSheet.create({
   },
   modalScroll: {
     maxHeight: 420,
+  },
+  photoLibraryBtn: {
+    minHeight: 44,
+    borderRadius: 14,
+    backgroundColor: '#8b6a53',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 10,
+    paddingHorizontal: 12,
+  },
+  photoLibraryBtnText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#fff',
+    fontWeight: '700',
   },
   optionRow: {
     minHeight: 44,

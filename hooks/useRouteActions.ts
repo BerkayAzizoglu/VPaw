@@ -1,17 +1,17 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react';
 
-type SubRouteTarget = 'vaccinations' | 'healthRecords' | 'vetVisits';
+type SubRouteTarget = 'vetVisits';
 
-export function useRouteActions<Route extends string, VetVisitCreatePreset>(args: {
+export function useRouteActions<Route extends string>(args: {
   activePetId: string;
   setRoute: Dispatch<SetStateAction<Route>>;
   setSubBackRoute: Dispatch<SetStateAction<Route>>;
   setPetProfileBackRoute: Dispatch<SetStateAction<Route>>;
   setWeightBackRoute: Dispatch<SetStateAction<Route>>;
   setPassportBackRoute: Dispatch<SetStateAction<Route>>;
+  setPremiumBackRoute: Dispatch<SetStateAction<Route>>;
   setDocumentsBackRoute: Dispatch<SetStateAction<Route>>;
   setNotificationsBackRoute: Dispatch<SetStateAction<Route>>;
-  setVetVisitCreatePreset: Dispatch<SetStateAction<VetVisitCreatePreset | null>>;
   setActivePetWithPersist: (petId: string) => void;
 }) {
   const {
@@ -21,17 +21,16 @@ export function useRouteActions<Route extends string, VetVisitCreatePreset>(args
     setPetProfileBackRoute,
     setWeightBackRoute,
     setPassportBackRoute,
+    setPremiumBackRoute,
     setDocumentsBackRoute,
     setNotificationsBackRoute,
-    setVetVisitCreatePreset,
     setActivePetWithPersist,
   } = args;
 
   const openSubRoute = useCallback((target: SubRouteTarget, backTo: Route) => {
     setSubBackRoute(backTo);
-    setVetVisitCreatePreset(null);
     setRoute(target as Route);
-  }, [setRoute, setSubBackRoute, setVetVisitCreatePreset]);
+  }, [setRoute, setSubBackRoute]);
 
   const openPetProfile = useCallback((petId: string = activePetId, from: Route = 'home' as Route) => {
     setActivePetWithPersist(petId);
@@ -52,6 +51,11 @@ export function useRouteActions<Route extends string, VetVisitCreatePreset>(args
     setRoute('passport' as Route);
   }, [activePetId, setActivePetWithPersist, setPassportBackRoute, setRoute]);
 
+  const openPremium = useCallback((from: Route = 'profile' as Route) => {
+    setPremiumBackRoute(from);
+    setRoute('premium' as Route);
+  }, [setPremiumBackRoute, setRoute]);
+
   const openDocuments = useCallback((from: Route = 'healthHub' as Route) => {
     setDocumentsBackRoute(from);
     setRoute('documents' as Route);
@@ -67,6 +71,7 @@ export function useRouteActions<Route extends string, VetVisitCreatePreset>(args
     openPetProfile,
     openWeightTracking,
     openPassport,
+    openPremium,
     openDocuments,
     openNotifications,
   };

@@ -13,9 +13,8 @@ import ProfileScreen from '../screens/ProfileScreen';
 import HomeScreen, { type JourneyEventItem as HomeJourneyEventItem, type NextImportantEventItem } from '../screens/HomeScreen';
 import PremiumScreen from '../screens/PremiumScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
-import VaccinationsScreen from '../screens/VaccinationsScreen';
 import WeightTrackingScreen from '../screens/WeightTrackingScreen';
-import VetVisitsScreen, { type CreateVetVisitPayload, type VetVisitCreatePreset } from '../screens/VetVisitsScreen';
+import VetVisitsScreen from '../screens/VetVisitsScreen';
 import PetEditScreen from '../screens/PetEditScreen';
 import PetDetailScreen from '../screens/PetDetailScreen';
 import PetsScreen from '../screens/PetsScreen';
@@ -25,7 +24,8 @@ import RemindersScreen, { type ReminderSuggestion } from '../screens/RemindersSc
 import InsightsScreen from '../screens/InsightsScreen';
 import DocumentsScreen from '../screens/DocumentsScreen';
 import NotificationCenterScreen from '../screens/NotificationCenterScreen';
-import HealthRecordsScreen from '../screens/HealthRecordsScreen';
+import OnboardingScreen from '../screens/onboarding';
+import OnboardingPetCreateScreen from '../screens/OnboardingPetCreate';
 import HealthHubScreen, {
   type AddHealthRecordPayload,
   type AddHealthRecordType,
@@ -35,6 +35,7 @@ import HealthHubScreen, {
 } from '../screens/HealthHubScreen';
 import LensMagTabBar from './LensMagTabBar';
 import SuccessOverlay, { type SuccessOverlayHandle } from './SuccessOverlay';
+import AddRecordSheet, { type AddRecordMode } from './AddRecordSheet';
 import { deletePetProfilesFromCloud, fetchPetProfilesFromCloud, savePetProfilesToCloud } from '../lib/petProfilesRepo';
 import { getHealthCardSummary, getHealthRecordsForUI, getVaccinesForUI, getVetVisitsForUI } from '../lib/healthEventAdapters';
 import { getAllDocumentsForPet } from '../lib/healthDocumentsVault';
@@ -58,6 +59,8 @@ import { cancelReminderNotification, reconcileReminderNotifications } from '../l
 import { hap } from '../lib/haptics';
 import { buildAiInsights, type AiInsight } from '../lib/insightsEngine';
 import { buildUnifiedHealthEventsForPet, summarizeUnifiedHealthEvents } from '../lib/unifiedHealthEvents';
+import { getBreedHealthEntry } from '../lib/breedHealthData';
+import { generateBreedInsight } from '../lib/breedInsightsEngine';
 import { buildPetHealthPassportData, generatePetPassportPDF, type PetPassportExportSelection } from '../lib/petHealthPassportPdf';
 import { supabase } from '../lib/supabase';
 import {
@@ -125,6 +128,8 @@ import {
 } from '../lib/petProfileUtils';
 
 type AppRoute =
+  | 'onboarding'
+  | 'onboardingPetCreate'
   | 'home'
   | 'healthHub'
   | 'reminders'
@@ -133,9 +138,7 @@ type AppRoute =
   | 'pets'
   | 'premium'
   | 'profileEdit'
-  | 'vaccinations'
   | 'petProfile'
-  | 'healthRecords'
   | 'vetVisits'
   | 'petEdit'
   | 'addPet'
@@ -145,7 +148,7 @@ type AppRoute =
   | 'notifications'
   | 'weightTracking';
 
-type PrimaryTab = 'home' | 'healthHub' | 'reminders' | 'insights';
+type PrimaryTab = 'home' | 'healthHub' | 'reminders' | 'insights' | 'profile';
 
 const PET_PROFILES_STORAGE_KEY = 'vpaw_pet_profiles';
 const PET_PROFILES_UPDATED_AT_STORAGE_KEY = 'vpaw_pet_profiles_updated_at';
@@ -167,6 +170,7 @@ const WEIGHT_HISTORY_RESET_VERSION_STORAGE_KEY = 'vpaw_weight_history_reset_vers
 const NOTIFICATION_READ_MAP_STORAGE_KEY = 'vpaw_notification_read_map';
 const NOTIFICATION_LAST_TRIGGERED_STORAGE_KEY = 'vpaw_notification_last_triggered_by_key';
 const NOTIFICATION_INBOX_STORAGE_KEY = 'vpaw_notification_inbox';
+const ONBOARDING_COMPLETED_STORAGE_KEY = 'vpaw_onboarding_completed';
 const DATA_RESET_TARGET_VERSION = 'milo-clean-reset-2026-03-22';
 const WEIGHT_HISTORY_RESET_TARGET_VERSION = 'milo-weight-history-clear-2026-03-29-v2';
 
@@ -191,10 +195,13 @@ export default function AuthGate() {
     healthHub: 0,
     reminders: 0,
     insights: 0,
+    profile: 0,
   });
   const [reminderCreateNonce, setReminderCreateNonce] = useState(0);
   const [reminderCreateSubtypePreset, setReminderCreateSubtypePreset] = useState<ReminderSubtype | null>(null);
   const [healthHubInitialCategory, setHealthHubInitialCategory] = useState<HealthHubCategory>('all');
+  const [primaryAddSheetOpen, setPrimaryAddSheetOpen] = useState(false);
+  const [primaryAddSheetMode, setPrimaryAddSheetMode] = useState<AddRecordMode>('typeSelect');
   const [healthHubCategoryResetKey, setHealthHubCategoryResetKey] = useState(0);
   const [healthHubCreatePreset, setHealthHubCreatePreset] = useState<{
     type: AddHealthRecordType;
@@ -213,10 +220,10 @@ export default function AuthGate() {
   const [weightBackRoute, setWeightBackRoute] = useState<AppRoute>('home');
   const [petEditBackRoute, setPetEditBackRoute] = useState<AppRoute>('home');
   const [passportBackRoute, setPassportBackRoute] = useState<AppRoute>('home');
+  const [premiumBackRoute, setPremiumBackRoute] = useState<AppRoute>('profile');
   const [documentsBackRoute, setDocumentsBackRoute] = useState<AppRoute>('healthHub');
   const [notificationsBackRoute, setNotificationsBackRoute] = useState<AppRoute>('reminders');
   const [weightQuickAdd, setWeightQuickAdd] = useState(false);
-  const [vetVisitCreatePreset, setVetVisitCreatePreset] = useState<VetVisitCreatePreset | null>(null);
   const [petList, setPetList] = useState<string[]>([]);
   const [newPetTemplate, setNewPetTemplate] = useState<PetProfile | null>(null);
   const [activePetId, setActivePetId] = useState<string>('');
@@ -245,6 +252,9 @@ export default function AuthGate() {
   const [notificationInbox, setNotificationInbox] = useState<HealthNotification[]>([]);
   const [notificationLastTriggeredByKey, setNotificationLastTriggeredByKey] = useState<NotificationLastTriggeredByKey>({});
   const [profileNameRow, setProfileNameRow] = useState<ProfileNameRow | null>(null);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
+  const [onboardingHydrated, setOnboardingHydrated] = useState(false);
+  const [petCreateOrigin, setPetCreateOrigin] = useState<'onboarding' | 'pets'>('onboarding');
   const [routeToastText, setRouteToastText] = useState<string | null>(null);
   const successOverlayRef = useRef<SuccessOverlayHandle>(null);
   const routeToastOpacity = useRef(new Animated.Value(0)).current;
@@ -422,7 +432,7 @@ export default function AuthGate() {
 
 
   useEffect(() => {
-    if (route === 'home' || route === 'healthHub' || route === 'reminders' || route === 'insights') {
+    if (route === 'home' || route === 'healthHub' || route === 'reminders' || route === 'insights' || route === 'profile') {
       setPrimaryTab(route);
     }
   }, [route]);
@@ -439,6 +449,84 @@ export default function AuthGate() {
   useEffect(() => {
     setRoute('home');
   }, [session?.user?.id]);
+
+  useEffect(() => {
+    let mounted = true;
+    getLocalItem(ONBOARDING_COMPLETED_STORAGE_KEY)
+      .then((value) => {
+        if (!mounted) return;
+        setHasCompletedOnboarding(value === '1');
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setOnboardingHydrated(true);
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!session?.user?.id || !onboardingHydrated || hasCompletedOnboarding) return;
+    if (route === 'onboarding' || route === 'onboardingPetCreate') return;
+    setRoute('onboarding');
+  }, [hasCompletedOnboarding, onboardingHydrated, route, session?.user?.id]);
+
+  useEffect(() => {
+    if (route === 'addPet') {
+      console.log('WRONG FLOW TRIGGERED');
+    }
+  }, [route]);
+
+  useEffect(() => {
+    if (!hasCompletedOnboarding && route === 'addPet') {
+      setRoute('onboardingPetCreate');
+    }
+  }, [hasCompletedOnboarding, route]);
+
+  const completeOnboardingAndGoHome = () => {
+    setHasCompletedOnboarding(true);
+    setLocalItem(ONBOARDING_COMPLETED_STORAGE_KEY, '1').catch(() => {});
+    setRoute('home');
+  };
+
+  const openLightweightPetCreate = (origin: 'onboarding' | 'pets') => {
+    setPetCreateOrigin(origin);
+    setRoute('onboardingPetCreate');
+  };
+
+  const hasMissingCorePetInfo = (pet: PetProfile) => {
+    const hasName = pet.name.trim().length > 0;
+    const hasBreed = pet.breed.trim().length > 0;
+    const hasBirthDate = pet.birthDate.trim().length > 0;
+    const hasMicrochip = pet.microchip.trim().length > 0;
+    const hasPhoto = pet.image.trim().length > 0;
+    return !(hasName && hasBreed && hasBirthDate && hasMicrochip && hasPhoto);
+  };
+
+  const promptCompletePetProfile = (pet: PetProfile, backRoute: AppRoute) => {
+    if (!hasMissingCorePetInfo(pet)) return;
+    Alert.alert(
+      locale === 'tr' ? 'Profili tamamlayalım mı?' : 'Complete the profile now?',
+      locale === 'tr'
+        ? 'Bazı temel alanlar eksik görünüyor. Şimdi tamamlayarak daha doğru öneriler alabilirsin.'
+        : 'Some core details are missing. Completing them now improves reminders and insights.',
+      [
+        {
+          text: locale === 'tr' ? 'Daha sonra' : 'Later',
+          style: 'cancel',
+        },
+        {
+          text: locale === 'tr' ? 'Şimdi tamamla' : 'Complete now',
+          onPress: () => {
+            setActivePetWithPersist(pet.id);
+            setPetEditBackRoute(backRoute);
+            setRoute('petEdit');
+          },
+        },
+      ],
+    );
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -1372,6 +1460,7 @@ export default function AuthGate() {
     openPetProfile,
     openWeightTracking,
     openPassport,
+    openPremium,
     openDocuments,
     openNotifications,
   } = useRouteActions({
@@ -1381,23 +1470,20 @@ export default function AuthGate() {
     setPetProfileBackRoute,
     setWeightBackRoute,
     setPassportBackRoute,
+    setPremiumBackRoute,
     setDocumentsBackRoute,
     setNotificationsBackRoute,
-    setVetVisitCreatePreset,
     setActivePetWithPersist,
   });
 
   const {
     openHealthHubWithCategory,
     openHealthHubCreate,
-    openVetVisitWithPreset,
   } = useHealthHubActions({
     setPrimaryTab,
     setHealthHubInitialCategory,
     setHealthHubCategoryResetKey,
     setHealthHubCreatePreset,
-    setSubBackRoute,
-    setVetVisitCreatePreset,
     setRoute,
   });
 
@@ -1408,8 +1494,11 @@ export default function AuthGate() {
     setReminderCreateNonce,
     setPrimaryTab,
     setRoute,
-    openHealthHubCreate,
-    openVetVisitWithPreset,
+    openHealthHubCreateWithContext: (origin, type, category, successRoute) => {
+      setHealthCreateFlowContext({ origin, successRoute: successRoute ?? origin });
+      openHealthHubCreate(type, category);
+    },
+    onOpenVetVisitCreate: () => { setPrimaryAddSheetMode('vetVisit'); setPrimaryAddSheetOpen(true); },
     openWeightTracking,
   });
 
@@ -1566,6 +1655,44 @@ export default function AuthGate() {
     const eventDate = payload.date;
     const nowIso = new Date().toISOString();
 
+    // Vet visit: create a proper VetVisit object instead of a bare MedicalEvent
+    if (payload.visitReason) {
+      const reasonTitleMap: Record<VetVisitReasonCategory, string> = {
+        checkup: 'General Checkup',
+        vaccine: 'Vaccination Visit',
+        illness: 'Illness Visit',
+        injury: 'Injury Visit',
+        follow_up: 'Follow-up Visit',
+        other: 'Vet Visit',
+      };
+      const visitStatus = (payload.visitStatus as VetVisitStatus) ?? 'completed';
+      recordVetVisitWithOutcomes({
+        petId: activePetId,
+        visitDate: eventDate,
+        reasonCategory: payload.visitReason as VetVisitReasonCategory,
+        status: visitStatus,
+        clinicName: payload.clinicName,
+        vetName: payload.vetName,
+        followUpDate: payload.dueDate,
+        notes: payload.note,
+        amount: payload.fee,
+        currency: payload.feeCurrency,
+        outcomes: [
+          {
+            type: 'note',
+            title: reasonTitleMap[payload.visitReason as VetVisitReasonCategory] ?? 'Vet Visit',
+            eventDate,
+            note: payload.note,
+            subcategory: 'general_checkup',
+            metadataJson: { source: 'add_record_sheet' },
+          },
+        ],
+      });
+      setPetProfilesUpdatedAt((prev) => ({ ...prev, [activePetId]: nowIso }));
+      return;
+    }
+
+    // All other record types: create a MedicalEvent
     setMedicalEventsByPet((prev) =>
       addMvpMedicalEvent(prev, {
         petId: activePetId,
@@ -1573,13 +1700,12 @@ export default function AuthGate() {
         eventDate,
         title: payload.title,
         note: payload.note,
-        subcategory: payload.visitReason ?? payload.status ?? payload.type,
+        subcategory: payload.status ?? payload.type,
         dueDate: payload.dueDate,
         valueNumber: payload.valueNumber,
         valueUnit: payload.valueUnit,
         metadataJson: {
-          source: 'health_hub_form',
-          visitReason: payload.visitReason,
+          source: 'add_record_sheet',
           clinicName: payload.clinicName,
           vetName: payload.vetName,
           fee: payload.fee,
@@ -1619,34 +1745,18 @@ export default function AuthGate() {
     setPetProfilesUpdatedAt((prev) => ({ ...prev, [activePetId]: nowIso }));
   };
 
-  const openHealthHubCreateWithContext = (
-    origin: AppRoute,
-    type: AddHealthRecordType,
-    category: HealthHubCategory,
-    successRoute: AppRoute = origin,
-    options?: { title?: string; note?: string },
-  ) => {
-    setHealthCreateFlowContext({ origin, successRoute });
-    openHealthHubCreate(type, category, options);
-  };
-
   const resolveHealthCreateSuccessRoute = (payload?: AddHealthRecordPayload): AppRoute => {
     if (!payload) return 'healthHub';
-    if (payload.type === 'vaccine') return 'vaccinations';
-    if (payload.type === 'procedure') return payload.visitReason ? 'vetVisits' : 'healthRecords';
-    return 'healthRecords';
+    if (payload.visitReason) return 'vetVisits';
+    return 'healthHub';
   };
 
   const buildHealthCreateToast = (targetRoute: AppRoute) => {
     if (locale === 'tr') {
       if (targetRoute === 'vetVisits') return 'Kayıt eklendi • Veteriner Ziyaretleri';
-      if (targetRoute === 'vaccinations') return 'Kayıt eklendi • Aşılar';
-      if (targetRoute === 'healthRecords') return 'Kayıt eklendi • Sağlık Kayıtları';
       return 'Kayıt eklendi';
     }
     if (targetRoute === 'vetVisits') return 'Saved • Vet Visits';
-    if (targetRoute === 'vaccinations') return 'Saved • Vaccinations';
-    if (targetRoute === 'healthRecords') return 'Saved • Health Records';
     return 'Saved';
   };
 
@@ -1655,7 +1765,7 @@ export default function AuthGate() {
       const targetRoute = healthCreateFlowContext?.successRoute ?? resolveHealthCreateSuccessRoute(payload);
       showRouteToast(buildHealthCreateToast(targetRoute));
       setHealthCreateFlowContext(null);
-      if (targetRoute === 'vaccinations' || targetRoute === 'vetVisits' || targetRoute === 'healthRecords') {
+      if (targetRoute === 'vetVisits') {
         setSubBackRoute('healthHub');
       }
       setRoute(targetRoute);
@@ -2421,6 +2531,29 @@ export default function AuthGate() {
     return { latestWeight, vaccineStatus, lastVetVisit, totalExpenses };
   }, [activePetId, healthEventsByPet, locale, medicalEventsByPet, petProfiles, vetVisitsByPet, vetVisitsBridge, weightsByPet]);
 
+  const insightsBreedCard = useMemo(() => {
+    const activePet = petProfiles[activePetId];
+    if (!activePet?.breed) return undefined;
+
+    const entry = getBreedHealthEntry(activePet.breed, activePet.petType, { useFallback: true });
+    if (!entry) return undefined;
+
+    const insight = generateBreedInsight({
+      entry,
+      timeline: healthHubTimeline,
+      summary: healthHubSummary,
+      weightGoal: weightGoalsByPet[activePetId],
+      locale,
+    });
+
+    return {
+      title: locale === 'tr' ? 'Irk İçgörüsü' : 'Breed Insight',
+      breed: entry.breed,
+      text: insight.text,
+      meta: `${entry.weightRangeKg[0]}-${entry.weightRangeKg[1]} kg · ${entry.lifespanYears[0]}-${entry.lifespanYears[1]} ${locale === 'tr' ? 'yıl' : 'yrs'}`,
+    };
+  }, [activePetId, healthHubSummary, healthHubTimeline, locale, petProfiles, weightGoalsByPet]);
+
   const healthHubDomainOverview = useMemo<HealthHubDomainOverview>(() => {
     const nowMs = Date.now();
     const medical = medicalEventsByPet[activePetId] ?? [];
@@ -2478,10 +2611,12 @@ export default function AuthGate() {
       if (locale === 'tr') return `${count} kayıt`;
       return `${count} ${count === 1 ? 'record' : 'records'}`;
     };
-    const statusUpToDate = locale === 'tr' ? 'Güncel' : 'Up to date';
-    const statusActionNeeded = locale === 'tr' ? 'Aksiyon gerekli' : 'Action needed';
-    const statusLogged = locale === 'tr' ? 'Kayıtlı' : 'Logged';
-    const statusNoData = locale === 'tr' ? 'Veri yok' : 'No Data';
+    const statusLogged = 'Logged';
+    const statusUpToDate = 'Up to date';
+    const statusDueSoon = 'Due soon';
+    const statusNoData = 'No data';
+    const labelLastEntry = 'Last entry';
+    const labelNextDue = 'Next due';
     const formatShortDate = (raw?: string | null) => {
       const ms = raw ? parseUpdatedAtMs(raw) : null;
       if (ms == null) return null;
@@ -2561,23 +2696,21 @@ export default function AuthGate() {
         statusText: visits.length === 0
           ? statusNoData
           : (missedVisits > 0 || upcomingVisits > 0)
-            ? statusActionNeeded
+            ? statusDueSoon
             : statusLogged,
         infoText: visits.length === 0
           ? statusNoData
           : nextVisit
-            ? (locale === 'tr'
-              ? `Siradaki ziyaret ${formatShortDate(nextVisit.visitDate)}`
-              : `Next visit ${formatShortDate(nextVisit.visitDate)}`)
+            ? `${labelNextDue} · ${formatShortDate(nextVisit.visitDate) ?? '--'}`
             : latestVisit
-              ? `${formatVisitLabel(latestVisit)}${formatShortDate(latestVisit.visitDate) ? ` • ${formatShortDate(latestVisit.visitDate)}` : ''}`
+              ? `${labelLastEntry} · ${formatVisitLabel(latestVisit)}${formatShortDate(latestVisit.visitDate) ? ` • ${formatShortDate(latestVisit.visitDate)}` : ''}`
               : statusNoData,
       },
       records: {
         countText: countText(records.length),
         statusText: records.length === 0 ? statusNoData : statusLogged,
         infoText: latestRecord
-          ? `${formatRecordLabel(latestRecord)}${formatShortDate(latestRecord.eventDate) ? ` • ${formatShortDate(latestRecord.eventDate)}` : ''}`
+          ? `${labelLastEntry} · ${formatRecordLabel(latestRecord)}${formatShortDate(latestRecord.eventDate) ? ` • ${formatShortDate(latestRecord.eventDate)}` : ''}`
           : statusNoData,
       },
       vaccines: {
@@ -2585,16 +2718,14 @@ export default function AuthGate() {
         statusText: vaccines.length === 0
           ? statusNoData
           : (overdueVaccines > 0 || dueSoonVaccines > 0)
-            ? statusActionNeeded
+            ? statusDueSoon
             : statusUpToDate,
         infoText: vaccines.length === 0
           ? statusNoData
           : nextVaccine
-            ? (locale === 'tr'
-              ? `Siradaki asi ${formatShortDate(nextVaccine.dueDate)}`
-              : `Next vaccine ${formatShortDate(nextVaccine.dueDate)}`)
+            ? `${labelNextDue} · ${formatVaccineLabel(nextVaccine)}${formatShortDate(nextVaccine.dueDate) ? ` • ${formatShortDate(nextVaccine.dueDate)}` : ''}`
             : latestVaccine
-              ? `${formatVaccineLabel(latestVaccine)}${formatShortDate(latestVaccine.eventDate ?? latestVaccine.dueDate) ? ` • ${formatShortDate(latestVaccine.eventDate ?? latestVaccine.dueDate)}` : ''}`
+              ? `${labelLastEntry} · ${formatVaccineLabel(latestVaccine)}${formatShortDate(latestVaccine.eventDate ?? latestVaccine.dueDate) ? ` • ${formatShortDate(latestVaccine.eventDate ?? latestVaccine.dueDate)}` : ''}`
               : statusUpToDate,
       },
       reminders: {
@@ -2611,17 +2742,17 @@ export default function AuthGate() {
         statusText: weightDays == null
           ? statusNoData
           : weightDays > 14
-            ? statusActionNeeded
-            : statusLogged,
+            ? statusDueSoon
+            : statusUpToDate,
         infoText: weightDays == null
           ? statusNoData
-          : `${formatWeightValue(latestWeight?.value)}${formatShortDate(latestWeight?.date) ? ` • ${formatShortDate(latestWeight?.date)}` : ''}`,
+          : `${labelLastEntry} · ${formatWeightValue(latestWeight?.value)}${formatShortDate(latestWeight?.date) ? ` • ${formatShortDate(latestWeight?.date)}` : ''}`,
       },
       documents: {
         countText: countText(documentsCount),
         statusText: latestDocument ? statusLogged : statusNoData,
         infoText: latestDocument
-          ? `${formatDocumentLabel(latestDocument)}${formatShortDate(latestDocument.date) ? ` • ${formatShortDate(latestDocument.date)}` : ''}`
+          ? `${labelLastEntry} · ${formatDocumentLabel(latestDocument)}${formatShortDate(latestDocument.date) ? ` • ${formatShortDate(latestDocument.date)}` : ''}`
           : statusNoData,
       },
     };
@@ -2734,13 +2865,13 @@ export default function AuthGate() {
         title: locale === 'tr' ? 'Veteriner Ziyaretleri' : 'Vet Visits',
         subtitle: '',
         countText: countText(visits.length),
-        statusText: nextVisit ? (locale === 'tr' ? 'Yaklaşan' : 'Upcoming') : (visits.length > 0 ? (locale === 'tr' ? 'Kayıtlı' : 'Logged') : (locale === 'tr' ? 'Veri yok' : 'No data')),
+        statusText: nextVisit ? 'Due soon' : (visits.length > 0 ? 'Logged' : 'No data'),
         highlight: nextVisit
           ? {
               kind: 'date',
               primary: formatDay(nextVisit.visitDate),
               secondary: formatMonth(nextVisit.visitDate),
-              detail: visitReasonShort(nextVisit),
+              detail: `Next due · ${visitReasonShort(nextVisit)}`,
               attention: true,
             }
           : latestVisit
@@ -2748,11 +2879,11 @@ export default function AuthGate() {
                 kind: 'date',
                 primary: formatDay(latestVisit.visitDate),
                 secondary: formatMonth(latestVisit.visitDate),
-                detail: visitReasonShort(latestVisit),
+                detail: `Last entry · ${visitReasonShort(latestVisit)}`,
               }
             : {
                 kind: 'text',
-                primary: locale === 'tr' ? 'Kayıt yok' : 'No records',
+                primary: 'No data',
               },
       },
       {
@@ -2760,13 +2891,13 @@ export default function AuthGate() {
         title: locale === 'tr' ? 'Aşılar' : 'Vaccines',
         subtitle: '',
         countText: countText(vaccines.length),
-        statusText: nextVaccine ? (locale === 'tr' ? 'Yaklaşan' : 'Upcoming') : (vaccines.length > 0 ? (locale === 'tr' ? 'Güncel' : 'Up to date') : (locale === 'tr' ? 'Veri yok' : 'No data')),
+        statusText: nextVaccine ? 'Due soon' : (vaccines.length > 0 ? 'Up to date' : 'No data'),
         highlight: nextVaccine
           ? {
               kind: 'date',
               primary: formatDay(nextVaccine.dueDate),
               secondary: formatMonth(nextVaccine.dueDate),
-              detail: nextVaccine.title,
+              detail: `Next due · ${nextVaccine.title}`,
               attention: true,
             }
           : latestVaccine
@@ -2774,11 +2905,11 @@ export default function AuthGate() {
                 kind: 'date',
                 primary: formatDay(latestVaccine.eventDate ?? latestVaccine.dueDate),
                 secondary: formatMonth(latestVaccine.eventDate ?? latestVaccine.dueDate),
-                detail: latestVaccine.title,
+                detail: `Last entry · ${latestVaccine.title}`,
               }
             : {
                 kind: 'text',
-                primary: locale === 'tr' ? 'Kayıt yok' : 'No records',
+                primary: 'No data',
               },
       },
       {
@@ -2787,16 +2918,17 @@ export default function AuthGate() {
         subtitle: '',
         countText: countText(weights.length),
         statusText: weightDays == null
-          ? (locale === 'tr' ? 'Veri yok' : 'No data')
+          ? 'No data'
           : weightDays > 21
-            ? (locale === 'tr' ? 'Uyarı' : 'Attention')
-            : (locale === 'tr' ? 'Normal' : 'Normal'),
+            ? 'Due soon'
+            : 'Up to date',
         highlight: {
           kind: 'metric',
-          primary: latestWeight ? `${latestWeight.value.toFixed(1)} kg` : (locale === 'tr' ? 'Kayıt yok' : 'No data'),
+          label: 'Last entry',
+          primary: latestWeight ? `${latestWeight.value.toFixed(1)} kg` : 'No data',
           secondary: latestWeight ? formatShortDate(latestWeight.date) : undefined,
           detail: weightDays != null && weightDays > 21
-            ? (locale === 'tr' ? `${weightDays} gündür yeni ağırlık girilmedi` : `No weight logged for ${weightDays} days`)
+            ? `Next due · ${weightDays} days since last log`
             : undefined,
           attention: weightDays != null && weightDays > 21,
         },
@@ -2806,10 +2938,11 @@ export default function AuthGate() {
         title: locale === 'tr' ? 'Sağlık Kayıtları' : 'Health Records',
         subtitle: '',
         countText: countText(records.length),
-        statusText: records.length > 0 ? (locale === 'tr' ? 'Kayıtlı' : 'Logged') : (locale === 'tr' ? 'Veri yok' : 'No data'),
+        statusText: records.length > 0 ? 'Logged' : 'No data',
         highlight: {
           kind: 'text',
-          primary: latestRecord?.title ?? (locale === 'tr' ? 'Kayıt yok' : 'No records'),
+          label: 'Last entry',
+          primary: latestRecord?.title ?? 'No data',
           secondary: latestRecord ? formatShortDate(latestRecord.eventDate) : undefined,
         },
       },
@@ -2818,11 +2951,11 @@ export default function AuthGate() {
         title: locale === 'tr' ? 'Belgeler' : 'Documents',
         subtitle: '',
         countText: countText(documentsVaultForActivePet.length),
-        statusText: latestDocument ? (locale === 'tr' ? 'Kayıtlı' : 'Logged') : (locale === 'tr' ? 'Veri yok' : 'No data'),
+        statusText: latestDocument ? 'Logged' : 'No data',
         highlight: {
           kind: 'text',
-          label: locale === 'tr' ? 'Son belge' : 'Latest file',
-          primary: latestDocument?.title ?? (locale === 'tr' ? 'Belge yok' : 'No documents'),
+          label: 'Last entry',
+          primary: latestDocument?.title ?? 'No data',
           secondary: latestDocument ? formatShortDate(latestDocument.date) : undefined,
           detail: documentsVaultPreview[0]?.contextLine,
         },
@@ -3250,26 +3383,36 @@ export default function AuthGate() {
     const rounded = Number(value.toFixed(1));
     const label = formatShortLabel(entryDate, locale);
     const date = entryDate.toISOString();
-
-    let nextChange = 'Stable';
+    const normalizeWeightSeries = (items: WeightPoint[]) =>
+      [...items]
+        .sort((a, b) => {
+          const da = new Date(a.date).getTime();
+          const db = new Date(b.date).getTime();
+          const sa = Number.isFinite(da) ? da : Number.MAX_SAFE_INTEGER;
+          const sb = Number.isFinite(db) ? db : Number.MAX_SAFE_INTEGER;
+          return sa - sb;
+        })
+        .map((entry, idx, arr) => {
+          const prevEntry = arr[idx - 1];
+          const delta = prevEntry ? entry.value - prevEntry.value : 0;
+          const change = Math.abs(delta) < 0.01 ? 'Stable' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)} kg`;
+          return { ...entry, change };
+        });
 
     setWeightsByPet((prev) => {
       const current = prev[activePetId] ?? [];
-      const last = current[current.length - 1];
-      const delta = last ? rounded - last.value : 0;
-      nextChange = Math.abs(delta) < 0.01 ? 'Stable' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)} kg`;
-
       const nextEntry: WeightPoint = {
         label,
         value: rounded,
         date,
-        change: nextChange,
+        change: 'Stable',
         note: options?.note?.trim() || undefined,
       };
+      const normalized = normalizeWeightSeries([...current, nextEntry]);
 
       return {
         ...prev,
-        [activePetId]: [...current, nextEntry],
+        [activePetId]: normalized,
       };
     });
 
@@ -3294,12 +3437,23 @@ export default function AuthGate() {
       const current = prev[activePetId] ?? [];
       if (!current.length || sortedIndex < 0) return prev;
 
-      const decorated = current.map((entry, originalIndex) => ({
-        ...entry,
-        originalIndex,
-      }));
+      const normalizeWeightSeries = (items: WeightPoint[]) =>
+        [...items]
+          .sort((a, b) => {
+            const da = new Date(a.date).getTime();
+            const db = new Date(b.date).getTime();
+            const sa = Number.isFinite(da) ? da : Number.MAX_SAFE_INTEGER;
+            const sb = Number.isFinite(db) ? db : Number.MAX_SAFE_INTEGER;
+            return sa - sb;
+          })
+          .map((entry, idx, arr) => {
+            const prevEntry = arr[idx - 1];
+            const delta = prevEntry ? entry.value - prevEntry.value : 0;
+            const change = Math.abs(delta) < 0.01 ? 'Stable' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)} kg`;
+            return { ...entry, change };
+          });
 
-      const sorted = [...decorated].sort((a, b) => {
+      const sorted = [...current].sort((a, b) => {
         const da = new Date(a.date).getTime();
         const db = new Date(b.date).getTime();
         const sa = Number.isFinite(da) ? da : Number.MAX_SAFE_INTEGER;
@@ -3326,36 +3480,11 @@ export default function AuthGate() {
             }
           : entry,
       );
-
-      const recalculated = [...updated]
-        .sort((a, b) => {
-          const da = new Date(a.date).getTime();
-          const db = new Date(b.date).getTime();
-          const sa = Number.isFinite(da) ? da : Number.MAX_SAFE_INTEGER;
-          const sb = Number.isFinite(db) ? db : Number.MAX_SAFE_INTEGER;
-          return sa - sb;
-        })
-        .map((entry, idx, arr) => {
-          const prevEntry = arr[idx - 1];
-          const delta = prevEntry ? entry.value - prevEntry.value : 0;
-          const change = Math.abs(delta) < 0.01 ? 'Stable' : `${delta > 0 ? '+' : ''}${delta.toFixed(1)} kg`;
-          return { ...entry, change };
-        });
-
-      const byOriginalIndex = new Map<number, WeightPoint>();
-      recalculated.forEach((entry) => {
-        byOriginalIndex.set(entry.originalIndex, {
-          label: entry.label,
-          value: entry.value,
-          date: entry.date,
-          change: entry.change,
-          note: entry.note,
-        });
-      });
+      const normalized = normalizeWeightSeries(updated);
 
       return {
         ...prev,
-        [activePetId]: current.map((entry, idx) => byOriginalIndex.get(idx) ?? entry),
+        [activePetId]: normalized,
       };
     });
 
@@ -3534,9 +3663,20 @@ export default function AuthGate() {
 
       <SuccessOverlay ref={successOverlayRef} />
       {renderRouteToastOverlay()}
+
+      <AddRecordSheet
+        visible={primaryAddSheetOpen}
+        mode={primaryAddSheetMode}
+        locale={locale}
+        onClose={() => setPrimaryAddSheetOpen(false)}
+        onSave={(payload) => {
+          handleAddHealthRecord(payload);
+          setPrimaryAddSheetOpen(false);
+        }}
+      />
     </View>
   );
-  if (loading || !petHydrated || !petLockHydrated) {
+  if (loading || !petHydrated || !petLockHydrated || !onboardingHydrated) {
     return (
       <View style={styles.loadingWrap}>
         <ActivityIndicator size="large" color="#2d2d2d" />
@@ -3545,35 +3685,85 @@ export default function AuthGate() {
     );
   }
 
-  if (!session) {
-    return <LoginScreen onSignedIn={() => setRoute('home')} />;
+  const allowDevOnboardingWithoutSession =
+    __DEV__ && (route === 'onboarding' || route === 'onboardingPetCreate');
+
+  if (!session && !allowDevOnboardingWithoutSession) {
+    return (
+      <LoginScreen
+        onSignedIn={() => setRoute('home')}
+        onTestOnboarding={__DEV__ ? () => setRoute('onboarding') : undefined}
+      />
+    );
+  }
+
+  if (route === 'onboarding') {
+    return (
+      <OnboardingScreen
+        locale={locale}
+        onAddPet={() => {
+          openLightweightPetCreate('onboarding');
+        }}
+      />
+    );
+  }
+
+  if (route === 'onboardingPetCreate') {
+    return (
+      <OnboardingPetCreateScreen
+        locale={locale}
+        onBack={() => {
+          setRoute(petCreateOrigin === 'onboarding' ? 'onboarding' : 'pets');
+        }}
+        onSkip={() => {
+          if (petCreateOrigin === 'onboarding') {
+            completeOnboardingAndGoHome();
+            return;
+          }
+          setRoute('pets');
+        }}
+        onContinue={({ name, breed, petType, birthDate }) => {
+          const id = `pet-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const createdPet: PetProfile = {
+            id,
+            name: name.trim(),
+            petType,
+            gender: 'male',
+            breed: breed.trim(),
+            coatPattern: 'Solid',
+            birthDate: birthDate?.trim() ?? '',
+            ageYears: 0,
+            microchip: '',
+            image: '',
+            vaccines: '',
+            surgeries: '',
+            vaccinations: [],
+            surgeriesLog: [],
+            allergiesLog: [],
+            diabetesLog: [],
+            routineCare: DEFAULT_ROUTINE_CARE,
+            chronicConditions: { allergies: false, diabetes: false },
+          };
+          addPet(createdPet);
+          setActivePetWithPersist(createdPet.id);
+          if (petCreateOrigin === 'onboarding') {
+            completeOnboardingAndGoHome();
+            setTimeout(() => {
+              promptCompletePetProfile(createdPet, 'home');
+            }, 220);
+            return;
+          }
+          openPetProfile(createdPet.id, 'pets');
+          setTimeout(() => {
+            promptCompletePetProfile(createdPet, 'petProfile');
+          }, 220);
+        }}
+      />
+    );
   }
 
   if (route === 'profileEdit') {
     return <ProfileEditScreen onBack={() => setRoute('profile')} onSaved={() => setRoute('profile')} />;
-  }
-
-  if (route === 'vaccinations') {
-    const vaccinationsScreenStatus: 'ready' | 'loading' | 'empty' = !petHydrated
-      ? 'loading'
-      : (vaccinationsBridge?.historyItems?.length ?? 0) > 0
-        ? 'ready'
-        : 'empty';
-    return (
-      <>
-        <VaccinationsScreen
-          onBack={() => setRoute(subBackRoute)}
-          backPreview={resolveBackPreview(subBackRoute)}
-          onAddVaccination={() => openHealthHubCreateWithContext('vaccinations', 'vaccine', 'vaccine', 'vaccinations')}
-          onResolve={() => openHealthHubCreateWithContext('vaccinations', 'vaccine', 'vaccine', 'vaccinations')}
-          status={vaccinationsScreenStatus}
-          historyItems={vaccinationsBridge?.historyItems}
-          attentionCounts={vaccinationsBridge?.attentionCounts}
-          nextUpData={vaccinationsBridge?.nextUpData}
-        />
-        {renderRouteToastOverlay()}
-      </>
-    );
   }
 
   if (route === 'vetVisits') {
@@ -3587,86 +3777,10 @@ export default function AuthGate() {
         <VetVisitsScreen
           onBack={() => setRoute(subBackRoute)}
           backPreview={resolveBackPreview(subBackRoute)}
-          createPreset={vetVisitCreatePreset}
           status={vetVisitsScreenStatus}
           visits={vetVisitsBridge ?? undefined}
           onOpenDocuments={() => openDocuments('vetVisits')}
-          onCreateVisit={(payload: CreateVetVisitPayload) => {
-          const reasonTitleMap: Record<VetVisitReasonCategory, string> = {
-            checkup: 'General Checkup',
-            vaccine: 'Vaccination Visit',
-            illness: 'Illness Visit',
-            injury: 'Injury Visit',
-            follow_up: 'Follow-up Visit',
-            other: 'Vet Visit',
-          };
-
-          const outcomes: VetVisitOutcomeInput[] = payload.actions.map((action) => {
-            const eventTypeMap: Record<typeof action.type, MedicalEventType> = {
-              vaccine: 'vaccine',
-              diagnosis: 'diagnosis',
-              procedure: 'procedure',
-              test: 'test',
-              prescription: 'prescription',
-            };
-
-            const outcome: VetVisitOutcomeInput = {
-              type: eventTypeMap[action.type],
-              title: action.title,
-              eventDate: payload.date,
-              note: action.note,
-              subcategory: action.type,
-              metadataJson: { source: 'vet_visit_form' },
-            };
-
-            if (payload.reminderEnabled && payload.reminderDate) {
-              outcome.reminder = {
-                type: 'medical',
-                subtype: action.type === 'vaccine' ? 'vaccine' : action.type === 'prescription' ? 'medication' : 'vet_visit',
-                title: action.title,
-                frequency: 'once',
-                scheduledAt: payload.reminderDate,
-                kind: action.type === 'vaccine' ? 'vaccine_due' : action.type === 'prescription' ? 'medication' : 'medical_followup',
-                note: action.note,
-              };
-            }
-
-            if (action.type === 'prescription') {
-              outcome.medication = {
-                name: action.title,
-                startDate: payload.date,
-                isOngoing: true,
-                status: 'active',
-                instructions: action.note,
-              };
-            }
-
-            return outcome;
-          });
-
-          if (outcomes.length === 0) {
-            outcomes.push({
-              type: 'note',
-              title: reasonTitleMap[payload.reason] ?? 'Vet Visit',
-              eventDate: payload.date,
-              note: payload.note,
-              subcategory: 'general_checkup',
-              metadataJson: { source: 'vet_visit_form', kind: 'general_checkup' },
-            });
-          }
-
-          recordVetVisitWithOutcomes({
-            petId: activePetId,
-            visitDate: payload.date,
-            reasonCategory: payload.reason,
-            status: 'completed',
-            clinicName: payload.clinic,
-            notes: payload.note,
-            amount: payload.amount,
-            currency: payload.currency,
-            outcomes,
-          });
-          }}
+          onAddVisit={() => { setPrimaryAddSheetMode('vetVisit'); setPrimaryAddSheetOpen(true); }}
         />
         {renderRouteToastOverlay()}
       </>
@@ -3690,9 +3804,9 @@ export default function AuthGate() {
           setRoute('petEdit');
         }}
         onOpenWeightTracking={() => openWeightTracking(activePetId, 'petProfile')}
-        onOpenHealthRecords={() => openSubRoute('healthRecords', 'petProfile')}
+        onOpenHealthRecords={() => openHealthHubWithCategory('record')}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'petProfile')}
-        onOpenVaccinations={() => openSubRoute('vaccinations', 'petProfile')}
+        onOpenVaccinations={() => openHealthHubWithCategory('vaccine')}
       />,
     );
   }
@@ -3705,7 +3819,7 @@ export default function AuthGate() {
           onBack={() => { setWeightQuickAdd(false); setRoute(weightBackRoute); }}
           backPreview={resolveBackPreview(weightBackRoute)}
           initialShowAdd={weightQuickAdd}
-          onOpenHealthRecords={() => openSubRoute('healthRecords', weightBackRoute)}
+          onOpenHealthRecords={() => openHealthHubWithCategory('record')}
           onOpenVetVisits={() => openSubRoute('vetVisits', weightBackRoute)}
           petName={activePet.name}
           petType={activePet.petType}
@@ -3903,11 +4017,11 @@ export default function AuthGate() {
         weightEntries={weightsByPet[activePetId] ?? []}
         isPremiumPlan={isPremium}
         healthCardSummary={healthCardSummary}
-        onOpenVaccinations={() => openSubRoute('vaccinations', 'passport')}
+        onOpenVaccinations={() => openHealthHubWithCategory('vaccine')}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'passport')}
-        onOpenHealthRecords={() => openSubRoute('healthRecords', 'home')}
+        onOpenHealthRecords={() => openHealthHubWithCategory('record')}
         onOpenWeight={() => openPetProfile(activePetId, 'passport')}
-        onOpenPremium={() => setRoute('premium')}
+        onOpenPremium={() => openPremium('passport')}
         onExportPdf={handleExportPetPassportPdf}
       />
     );
@@ -3951,13 +4065,13 @@ export default function AuthGate() {
         domainOverview={healthHubDomainOverview}
         areaCards={healthHubAreaCards}
         locale={locale}
-        onPrimaryCta={() => openVetVisitWithPreset('healthHub', { source: 'other', reason: 'checkup', actions: [] })}
+        onPrimaryCta={() => { setPrimaryAddSheetMode('vetVisit'); setPrimaryAddSheetOpen(true); }}
         onAddRecord={handleAddHealthRecord}
         onCreateFlowClosed={handleHealthHubCreateFlowClosed}
         onDeleteRecord={handleDeleteHealthRecord}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'healthHub')}
-        onOpenHealthRecords={() => openSubRoute('healthRecords', 'healthHub')}
-        onOpenVaccines={() => openSubRoute('vaccinations', 'healthHub')}
+        onOpenHealthRecords={() => openHealthHubWithCategory('record')}
+        onOpenVaccines={() => openHealthHubWithCategory('vaccine')}
         onOpenWeightTracking={() => openWeightTracking(activePetId, 'healthHub')}
         onAddWeightEntry={() => { setWeightQuickAdd(true); openWeightTracking(activePetId, 'healthHub'); }}
         onOpenDocuments={() => openDocuments('healthHub')}
@@ -3976,29 +4090,12 @@ export default function AuthGate() {
         petName={petProfiles[activePetId]?.name}
         petAvatarUri={petProfiles[activePetId]?.image || undefined}
         isPremium={isPremium}
-        onUpgradePremium={() => setRoute('premium')}
+        onUpgradePremium={() => openPremium('healthHub')}
+        vaccineHistoryItems={vaccinationsBridge?.historyItems}
+        vaccineAttentionCounts={vaccinationsBridge?.attentionCounts}
+        vaccineNextUpData={vaccinationsBridge?.nextUpData}
+        healthRecordsData={healthRecordsForUI ?? undefined}
       />,
-    );
-  }
-
-  if (route === 'healthRecords') {
-    const healthRecordsScreenStatus: 'ready' | 'loading' | 'empty' = !petHydrated
-      ? 'loading'
-      : healthRecordsForUI
-        ? 'ready'
-        : 'empty';
-    return (
-      <>
-        <HealthRecordsScreen
-          onBack={() => setRoute(subBackRoute ?? 'healthHub')}
-          backPreview={resolveBackPreview(subBackRoute ?? 'healthHub')}
-          status={healthRecordsScreenStatus}
-          recordsData={healthRecordsForUI ?? undefined}
-          onAddRecord={() => openHealthHubCreateWithContext('healthRecords', 'diagnosis', 'record', 'healthRecords')}
-          onOpenVetVisitSource={() => openSubRoute('vetVisits', 'healthRecords')}
-        />
-        {renderRouteToastOverlay()}
-      </>
     );
   }
 
@@ -4069,6 +4166,7 @@ export default function AuthGate() {
       <InsightsScreen
         scrollToTopSignal={tabScrollTopSignals.insights}
         locale={locale}
+        breedCard={insightsBreedCard}
         items={[
           {
             label: locale === 'tr' ? 'Son Ziyaret' : 'Last Visit',
@@ -4093,7 +4191,7 @@ export default function AuthGate() {
         ]}
         insights={aiInsights}
         onInsightAction={handleInsightAction}
-        onEmptyCta={() => openPetProfile(activePetId, 'insights')}
+        onEmptyCta={() => openHealthHubCreate('diagnosis', 'record')}
       />,
     );
   }
@@ -4103,7 +4201,7 @@ export default function AuthGate() {
       <ProfileScreen
         onSaveSuccess={() => setRoute('home')}
         onBackHome={() => setRoute('home')}
-        onOpenPremium={() => setRoute('premium')}
+        onOpenPremium={() => openPremium('profile')}
         onOpenProfileEdit={() => setRoute('profileEdit')}
         onOpenPetProfiles={() => setRoute('pets')}
         onOpenNotifications={() => openNotifications('profile')}
@@ -4130,8 +4228,8 @@ export default function AuthGate() {
         onOpenProfile={() => setRoute('profile')}
         userAvatarUri={userAvatarUri}
         userName={userDisplayName}
-        onOpenPet={(petId) => openPetProfile(petId, 'pets')}
-        onAddPet={openAddPet}
+        onOpenPet={() => undefined}
+        onAddPet={() => openLightweightPetCreate('pets')}
         onRefresh={refreshPetsFromCloud}
       />,
     );
@@ -4140,7 +4238,7 @@ export default function AuthGate() {
   if (route === 'premium') {
     return (
       <PremiumScreen
-        onBack={() => setRoute('profile')}
+        onBack={() => setRoute(premiumBackRoute)}
         onUpgrade={() => {
           // TODO: integrate payment provider (RevenueCat / App Store IAP)
           Alert.alert('Coming Soon', 'Premium upgrade will be available soon.');
@@ -4173,11 +4271,11 @@ export default function AuthGate() {
       onOpenPetProfile={(petId) => openPetProfile(petId || activePetId, 'home')}
       onOpenVaccinations={(petId) => {
         if (petId) setActivePetWithPersist(petId);
-        openSubRoute('vaccinations', 'home');
+        openHealthHubWithCategory('vaccine');
       }}
       onOpenHealthRecords={(petId) => {
         if (petId) setActivePetWithPersist(petId);
-        openSubRoute('healthRecords', 'home');
+        openHealthHubWithCategory('record');
       }}
       onOpenVetVisits={(petId) => {
         if (petId) setActivePetWithPersist(petId);
@@ -4188,8 +4286,7 @@ export default function AuthGate() {
         openPetProfile(petId || activePetId, 'home');
       }}
       onOpenPetPassport={(petId) => {
-        if (petId) setActivePetWithPersist(petId);
-        setRoute('passport');
+        openPassport(petId || activePetId, 'home');
       }}
       petProfiles={petProfiles}
       weightsByPet={weightsByPet}
@@ -4237,6 +4334,8 @@ export default function AuthGate() {
       healthJourneyEvents={homeHealthJourneyEvents}
       summaryCard={homeSummaryCard}
       expenseBreakdown={healthHubSummary.totalExpenses}
+      onQuickAdd={() => { setPrimaryAddSheetMode('typeSelect'); setPrimaryAddSheetOpen(true); }}
+      onTestOnboarding={__DEV__ ? () => setRoute('onboarding') : undefined}
     />
   );
 }
