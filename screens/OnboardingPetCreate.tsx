@@ -5,6 +5,7 @@ import {
   Easing,
   Image,
   Modal,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -13,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Check, ChevronDown } from 'lucide-react-native';
 import { hap } from '../lib/haptics';
@@ -59,26 +61,25 @@ type OnboardingPetCreateScreenProps = {
   onContinue: (payload: OnboardingPetCreatePayload) => void;
 };
 
-type BirthParts = { year: number; month: number; day: number };
-
-function daysInMonth(year: number, month: number) {
-  return new Date(year, month, 0).getDate();
-}
-
-function clampBirth(parts: BirthParts): BirthParts {
-  const maxDay = daysInMonth(parts.year, parts.month);
-  return { ...parts, day: Math.min(parts.day, maxDay) };
-}
-
-function toBirthIso(parts: BirthParts) {
-  const yyyy = String(parts.year);
-  const mm = String(parts.month).padStart(2, '0');
-  const dd = String(parts.day).padStart(2, '0');
+function toBirthIso(date: Date) {
+  const yyyy = String(date.getFullYear());
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
 }
 
-function toBirthLabel(parts: BirthParts) {
-  return `${String(parts.day).padStart(2, '0')} ${MONTH_LABELS[parts.month - 1]} ${parts.year}`;
+function parseBirthDate(value: string) {
+  const now = new Date();
+  if (!value.trim()) return new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  const parts = value.split('-').map((v) => Number(v));
+  if (parts.length !== 3 || parts.some((v) => !Number.isFinite(v))) {
+    return new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+  }
+  return new Date(parts[0], Math.max(0, parts[1] - 1), Math.max(1, parts[2]));
+}
+
+function toBirthLabel(date: Date) {
+  return `${String(date.getDate()).padStart(2, '0')} ${MONTH_LABELS[date.getMonth()]} ${date.getFullYear()}`;
 }
 
 export default function OnboardingPetCreateScreen({
@@ -96,10 +97,7 @@ export default function OnboardingPetCreateScreen({
   const [isNameFocused, setIsNameFocused] = useState(false);
   const [birthModalOpen, setBirthModalOpen] = useState(false);
   const [breedModalOpen, setBreedModalOpen] = useState(false);
-  const [birthDraft, setBirthDraft] = useState<BirthParts>(() => {
-    const now = new Date();
-    return { year: now.getFullYear() - 1, month: now.getMonth() + 1, day: Math.max(1, now.getDate()) };
-  });
+  const [birthPickerDate, setBirthPickerDate] = useState<Date>(() => parseBirthDate(''));
 
   const mountOpacity = useRef(new Animated.Value(0)).current;
   const mountTranslateY = useRef(new Animated.Value(18)).current;
@@ -150,8 +148,8 @@ export default function OnboardingPetCreateScreen({
   );
   const birthLabel = useMemo(() => {
     if (!birthDate.trim()) return isTr ? 'Tarih sec' : 'Select date';
-    return toBirthLabel(birthDraft);
-  }, [birthDate, birthDraft, isTr]);
+    return toBirthLabel(parseBirthDate(birthDate));
+  }, [birthDate, isTr]);
 
   React.useEffect(() => {
     if (breed.trim().length === 0) return;
@@ -167,25 +165,28 @@ export default function OnboardingPetCreateScreen({
   };
 
   const openBirthModal = () => {
-    const now = new Date();
-    const base = birthDate.trim()
-      ? (() => {
-          const parts = birthDate.split('-').map((v) => Number(v));
-          if (parts.length !== 3 || parts.some((v) => !Number.isFinite(v))) {
-            return { year: now.getFullYear() - 1, month: now.getMonth() + 1, day: now.getDate() };
-          }
-          return { year: parts[0], month: parts[1], day: parts[2] };
-        })()
-      : { year: now.getFullYear() - 1, month: now.getMonth() + 1, day: now.getDate() };
-    setBirthDraft(clampBirth(base));
+    setBirthPickerDate(parseBirthDate(birthDate));
     setBirthModalOpen(true);
   };
 
   const applyBirthDate = () => {
-    const next = clampBirth(birthDraft);
-    setBirthDraft(next);
-    setBirthDate(toBirthIso(next));
+    setBirthDate(toBirthIso(birthPickerDate));
     setBirthModalOpen(false);
+  };
+
+  const handleBirthPickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      setBirthModalOpen(false);
+      if (event.type === 'set' && selectedDate) {
+        setBirthPickerDate(selectedDate);
+        setBirthDate(toBirthIso(selectedDate));
+      }
+      return;
+    }
+
+    if (selectedDate) {
+      setBirthPickerDate(selectedDate);
+    }
   };
 
   const handleContinue = async () => {
@@ -321,55 +322,33 @@ export default function OnboardingPetCreateScreen({
         </View>
       </Animated.View>
 
-      <Modal transparent visible={birthModalOpen} animationType="fade" onRequestClose={() => setBirthModalOpen(false)}>
+      {birthModalOpen && Platform.OS === 'android' ? (
+        <DateTimePicker
+          value={birthPickerDate}
+          mode="date"
+          display="default"
+          maximumDate={new Date()}
+          onChange={handleBirthPickerChange}
+        />
+      ) : null}
+
+      <Modal
+        transparent
+        visible={Platform.OS === 'ios' && birthModalOpen}
+        animationType="fade"
+        onRequestClose={() => setBirthModalOpen(false)}
+      >
         <Pressable style={styles.modalBackdrop} onPress={() => setBirthModalOpen(false)}>
           <Pressable style={styles.modalCard} onPress={() => {}}>
             <Text style={styles.modalTitle}>{isTr ? 'Dogum Tarihi' : 'Birthdate'}</Text>
-            <View style={styles.dateHeaderRow}>
-              <Text style={styles.dateHeaderLabel}>{isTr ? 'Gun' : 'Day'}</Text>
-              <Text style={styles.dateHeaderLabel}>{isTr ? 'Ay' : 'Month'}</Text>
-              <Text style={styles.dateHeaderLabel}>{isTr ? 'Yil' : 'Year'}</Text>
-            </View>
-
-            <View style={styles.datePickerRow}>
-              <ScrollView style={styles.dateColumn} showsVerticalScrollIndicator={false}>
-                {Array.from({ length: daysInMonth(birthDraft.year, birthDraft.month) }, (_, i) => i + 1).map((day) => (
-                  <Pressable
-                    key={`day-${day}`}
-                    style={[styles.dateItem, birthDraft.day === day ? styles.dateItemActive : null]}
-                    onPress={() => setBirthDraft((prev) => ({ ...prev, day }))}
-                  >
-                    <Text style={[styles.dateItemText, birthDraft.day === day ? styles.dateItemTextActive : null]}>{day}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-
-              <ScrollView style={styles.dateColumn} showsVerticalScrollIndicator={false}>
-                {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                  <Pressable
-                    key={`month-${month}`}
-                    style={[styles.dateItem, birthDraft.month === month ? styles.dateItemActive : null]}
-                    onPress={() => setBirthDraft((prev) => clampBirth({ ...prev, month }))}
-                  >
-                    <Text style={[styles.dateItemText, birthDraft.month === month ? styles.dateItemTextActive : null]}>
-                      {MONTH_LABELS[month - 1]}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-
-              <ScrollView style={styles.dateColumn} showsVerticalScrollIndicator={false}>
-                {Array.from({ length: 26 }, (_, i) => new Date().getFullYear() - i).map((year) => (
-                  <Pressable
-                    key={`year-${year}`}
-                    style={[styles.dateItem, birthDraft.year === year ? styles.dateItemActive : null]}
-                    onPress={() => setBirthDraft((prev) => clampBirth({ ...prev, year }))}
-                  >
-                    <Text style={[styles.dateItemText, birthDraft.year === year ? styles.dateItemTextActive : null]}>{year}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
+            <DateTimePicker
+              value={birthPickerDate}
+              mode="date"
+              display="spinner"
+              maximumDate={new Date()}
+              onChange={handleBirthPickerChange}
+              style={styles.nativeDatePicker}
+            />
 
             <Pressable style={styles.applyDateBtn} onPress={applyBirthDate}>
               <Check size={16} color="#fff" strokeWidth={2.4} />
@@ -380,10 +359,20 @@ export default function OnboardingPetCreateScreen({
       </Modal>
 
       <Modal transparent visible={breedModalOpen} animationType="fade" onRequestClose={() => setBreedModalOpen(false)}>
-        <Pressable style={styles.modalBackdrop} onPress={() => setBreedModalOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={() => {}}>
-            <Text style={styles.modalTitle}>{isTr ? 'Irk Secimi' : 'Breed Selection'}</Text>
-            <ScrollView style={styles.breedScroll} showsVerticalScrollIndicator={false}>
+        <Pressable style={styles.breedSheetBackdrop} onPress={() => setBreedModalOpen(false)}>
+          <Pressable style={styles.breedSheetCard} onPress={() => {}}>
+            <View style={styles.breedSheetHeader}>
+              <View style={styles.breedSheetTitleWrap}>
+                <Text style={styles.breedSheetTitle}>{isTr ? 'Irk sec' : 'Select breed'}</Text>
+                <Text style={styles.breedSheetSubtitle}>
+                  {petType === 'Cat' ? (isTr ? 'Kedi irklari' : 'Cat breeds') : (isTr ? 'Kopek irklari' : 'Dog breeds')}
+                </Text>
+              </View>
+              <Pressable style={styles.breedSheetClose} onPress={() => setBreedModalOpen(false)}>
+                <Text style={styles.breedSheetCloseText}>{isTr ? 'Kapat' : 'Close'}</Text>
+              </Pressable>
+            </View>
+            <ScrollView style={styles.breedScroll} contentContainerStyle={styles.breedScrollContent} showsVerticalScrollIndicator={false}>
               {breedOptions.map((item) => {
                 const selected = item === breed;
                 return (
@@ -395,8 +384,13 @@ export default function OnboardingPetCreateScreen({
                       setBreedModalOpen(false);
                     }}
                   >
-                    <Text style={[styles.breedRowText, selected ? styles.breedRowTextSelected : null]}>{item}</Text>
-                    {selected ? <Check size={16} color="#547658" strokeWidth={2.5} /> : null}
+                    <View style={styles.breedRowMain}>
+                      <Text style={[styles.breedRowText, selected ? styles.breedRowTextSelected : null]}>{item}</Text>
+                      {item === 'Other' ? (
+                        <Text style={styles.breedRowMeta}>{isTr ? 'Ozel' : 'Custom'}</Text>
+                      ) : null}
+                    </View>
+                    {selected ? <Check size={16} color="#355b47" strokeWidth={2.4} /> : null}
                   </Pressable>
                 );
               })}
@@ -702,6 +696,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 8,
   },
+  nativeDatePicker: {
+    marginBottom: 10,
+    alignSelf: 'stretch',
+  },
   dateHeaderRow: {
     flexDirection: 'row',
     marginBottom: 6,
@@ -763,27 +761,103 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   breedScroll: {
-    maxHeight: 360,
+    maxHeight: 400,
   },
-  breedRow: {
-    minHeight: 44,
-    borderRadius: 12,
+  breedScrollContent: {
+    paddingBottom: 8,
+  },
+  breedSheetBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(19, 24, 22, 0.2)',
+    justifyContent: 'flex-end',
     paddingHorizontal: 12,
+    paddingBottom: 12,
+  },
+  breedSheetCard: {
+    backgroundColor: '#fcfcfa',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(25, 31, 28, 0.08)',
+    paddingTop: 8,
+    paddingBottom: 6,
+    overflow: 'hidden',
+    shadowColor: '#101514',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  breedSheetHeader: {
+    minHeight: 52,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(25, 31, 28, 0.08)',
+  },
+  breedSheetTitleWrap: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  breedSheetTitle: {
+    fontSize: 16,
+    lineHeight: 20,
+    color: '#17201c',
+    fontWeight: '700',
+  },
+  breedSheetSubtitle: {
+    marginTop: 2,
+    fontSize: 13,
+    lineHeight: 17,
+    color: '#66706b',
+    fontWeight: '500',
+  },
+  breedSheetClose: {
+    minHeight: 32,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  breedSheetCloseText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#355b47',
+    fontWeight: '600',
+  },
+  breedRow: {
+    minHeight: 50,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(25, 31, 28, 0.06)',
   },
   breedRowSelected: {
-    backgroundColor: '#eef4e8',
+    backgroundColor: '#f0f5f1',
+  },
+  breedRowMain: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 12,
   },
   breedRowText: {
     fontSize: 14,
     lineHeight: 18,
-    color: '#334154',
+    color: '#1e2a24',
     fontWeight: '500',
   },
   breedRowTextSelected: {
-    color: '#2f4835',
+    color: '#173624',
     fontWeight: '700',
+  },
+  breedRowMeta: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 16,
+    color: '#7a847f',
+    fontWeight: '500',
   },
 });

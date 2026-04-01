@@ -267,6 +267,8 @@ export default function AddRecordSheet({
   const [vaccineClinic, setVaccineClinic] = useState('');
   const [vaccineVet, setVaccineVet] = useState('');
   const [batchNumber, setBatchNumber] = useState('');
+  const vaccineNameInputRef = useRef<TextInput>(null);
+  const vaccineDateInputRef = useRef<TextInput>(null);
 
   // Health Record
   const [recType, setRecType] = useState<AddHealthRecordType>(initialType);
@@ -446,9 +448,17 @@ export default function AddRecordSheet({
     onChange: (v: string) => void,
     placeholder: string,
     fieldKey: string,
-    opts?: { multiline?: boolean; numeric?: boolean; noCapitalize?: boolean },
+    opts?: {
+      multiline?: boolean;
+      numeric?: boolean;
+      noCapitalize?: boolean;
+      inputRef?: React.RefObject<TextInput | null>;
+      returnKeyType?: 'done' | 'next';
+      onSubmitEditing?: () => void;
+    },
   ) => (
     <TextInput
+      ref={opts?.inputRef}
       style={[
         st.input,
         opts?.multiline && st.inputMultiline,
@@ -462,6 +472,8 @@ export default function AddRecordSheet({
       numberOfLines={opts?.multiline ? 4 : 1}
       keyboardType={opts?.numeric ? 'decimal-pad' : 'default'}
       autoCapitalize={opts?.noCapitalize ? 'none' : 'sentences'}
+      returnKeyType={opts?.returnKeyType}
+      onSubmitEditing={opts?.onSubmitEditing}
       onFocus={() => setFocusedField(fieldKey)}
       onBlur={() => setFocusedField(null)}
     />
@@ -584,24 +596,39 @@ export default function AddRecordSheet({
 
   const renderVaccineForm = () => {
     const suggestions = isTr ? VACCINES_TR : VACCINES_EN;
+    const normalizedName = vaccineName.trim().toLocaleLowerCase(locale);
+    const applyVaccineSuggestion = (suggestion: string) => {
+      setVaccineName(suggestion);
+      setFormError('');
+      requestAnimationFrame(() => {
+        vaccineDateInputRef.current?.focus();
+      });
+    };
     return (
       <>
         {renderLabel(isTr ? 'AŞI ADI' : 'VACCINE NAME', true)}
-        {renderInput(vaccineName, setVaccineName, isTr ? 'Aşı adı' : 'Vaccine name', 'vaccineName')}
+        {renderInput(vaccineName, setVaccineName, isTr ? 'A�� ad�' : 'Vaccine name', 'vaccineName', {
+          inputRef: vaccineNameInputRef,
+          returnKeyType: 'next',
+          onSubmitEditing: () => vaccineDateInputRef.current?.focus(),
+        })}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={st.suggestRow}>
           {suggestions.map((s) => (
             <Pressable
               key={s}
-              style={[st.suggest, vaccineName === s && st.suggestActive]}
-              onPress={() => setVaccineName(s)}
+              style={[st.suggest, normalizedName === s.toLocaleLowerCase(locale) && st.suggestActive]}
+              onPress={() => applyVaccineSuggestion(s)}
             >
-              <Text style={[st.suggestText, vaccineName === s && st.suggestTextActive]}>{s}</Text>
+              <Text style={[st.suggestText, normalizedName === s.toLocaleLowerCase(locale) && st.suggestTextActive]}>{s}</Text>
             </Pressable>
           ))}
         </ScrollView>
 
         {renderLabel(isTr ? 'AŞI TARİHİ' : 'VACCINE DATE', true)}
-        {renderInput(formDate, setFormDate, 'YYYY-MM-DD', 'date', { noCapitalize: true })}
+        {renderInput(formDate, setFormDate, 'YYYY-MM-DD', 'date', {
+          noCapitalize: true,
+          inputRef: vaccineDateInputRef,
+        })}
 
         {renderLabel(isTr ? 'SONRAKİ HATIRLATMA TARİHİ' : 'NEXT DUE DATE')}
         {renderInput(nextDueDate, setNextDueDate, 'YYYY-MM-DD', 'nextDue', { noCapitalize: true })}
@@ -853,7 +880,7 @@ const st = StyleSheet.create({
   },
   pickerList: {
     backgroundColor: C.surface,
-    borderRadius: 14,
+    borderRadius: 10,
     overflow: 'hidden',
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: C.separator,
@@ -877,7 +904,7 @@ const st = StyleSheet.create({
   pickerIconBox: {
     width: 36,
     height: 36,
-    borderRadius: 10,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -952,9 +979,9 @@ const st = StyleSheet.create({
     paddingBottom: 2,
   },
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
     backgroundColor: C.surfaceContainer,
     borderWidth: 1,
     borderColor: 'transparent',
@@ -981,9 +1008,9 @@ const st = StyleSheet.create({
     paddingBottom: 2,
   },
   suggest: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
     backgroundColor: C.surfaceLow,
     borderWidth: 1,
     borderColor: C.outlineVariant,
@@ -1073,3 +1100,5 @@ const st = StyleSheet.create({
     lineHeight: 18,
   },
 });
+
+

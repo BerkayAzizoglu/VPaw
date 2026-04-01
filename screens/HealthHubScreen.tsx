@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+﻿import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Image,
@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Text,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
@@ -19,7 +18,7 @@ import { getBreedHealthEntry, type BreedHealthEntry, type DailyCareCategory } fr
 import { generateBreedInsight } from '../lib/breedInsightsEngine';
 import type { AiInsight } from '../lib/insightsEngine';
 import AddRecordSheet, { type AddRecordMode } from '../components/AddRecordSheet';
-import type { VaccinationsHistoryItem, VaccinationsAttentionCounts, VaccinationsNextUpData, HealthRecordsData } from '../lib/healthMvpModel';
+import type { VaccinationsAttentionCounts } from '../lib/healthMvpModel';
 import {
   ChevronRight,
   FileText,
@@ -35,7 +34,7 @@ import {
 } from 'lucide-react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
-// ─── Colour palette (matches reference design system) ────────────────────────
+// â”€â”€â”€ Colour palette (matches reference design system) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const C = {
   bg: '#f6f4f0',
   surface: '#ffffff',
@@ -70,7 +69,7 @@ const C = {
   urgentBg: '#fde8e3',
 };
 
-// ─── Exported types ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Exported types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export type HealthHubCategory = 'all' | 'vaccine' | 'vet' | 'record' | 'weight';
 export type AddHealthRecordType = 'vaccine' | 'diagnosis' | 'procedure' | 'prescription' | 'test';
 export type AddHealthRecordPayload = {
@@ -152,8 +151,6 @@ type HealthHubScreenProps = {
   scrollToTopSignal?: number;
   summary: HealthHubSummary;
   timeline: HealthHubTimelineItem[];
-  initialCategory?: HealthHubCategory;
-  categoryResetKey?: string | number;
   createPreset?: {
     type?: AddHealthRecordType;
     title?: string;
@@ -187,10 +184,7 @@ type HealthHubScreenProps = {
   petAvatarUri?: string;
   isPremium?: boolean;
   onUpgradePremium?: () => void;
-  vaccineHistoryItems?: VaccinationsHistoryItem[];
   vaccineAttentionCounts?: VaccinationsAttentionCounts;
-  vaccineNextUpData?: VaccinationsNextUpData;
-  healthRecordsData?: HealthRecordsData;
 };
 type HealthHubIconKind = 'vet' | 'records' | 'vaccines' | 'weight' | 'documents';
 type AreaRowKey = HealthHubIconKind;
@@ -332,25 +326,18 @@ const HEALTH_MODULE_CARD_THEMES: Record<AreaRowKey, {
   },
 };
 
-// ─── Helpers ───────────────────────────────────────────────────────────────────
-function categoryLabel(c: HealthHubCategory, isTr: boolean) {
-  if (c === 'all') return isTr ? 'Tümü' : 'All';
-  if (c === 'vaccine') return isTr ? 'Aşılar' : 'Vaccines';
-  if (c === 'vet') return isTr ? 'Veteriner' : 'Vet Visits';
-  if (c === 'record') return isTr ? 'Kayıtlar' : 'Records';
-  return isTr ? 'Kilo' : 'Weight';
-}
+// â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function typeTag(type: Exclude<HealthHubCategory, 'all'>, isTr: boolean) {
-  if (type === 'vaccine') return isTr ? 'Aşı' : 'Vaccine';
+  if (type === 'vaccine') return isTr ? 'AÅŸÄ±' : 'Vaccine';
   if (type === 'vet') return isTr ? 'Veteriner' : 'Vet Visit';
-  if (type === 'record') return isTr ? 'Kayıt' : 'Record';
+  if (type === 'record') return isTr ? 'KayÄ±t' : 'Record';
   return isTr ? 'Kilo' : 'Weight';
 }
 function recordTypeLabel(t: AddHealthRecordType, isTr: boolean) {
-  if (t === 'vaccine') return isTr ? 'Aşı' : 'Vaccine';
-  if (t === 'diagnosis') return isTr ? 'Teşhis' : 'Diagnosis';
-  if (t === 'procedure') return isTr ? 'Prosedür' : 'Procedure';
-  if (t === 'prescription') return isTr ? 'İlaç' : 'Prescription';
+  if (t === 'vaccine') return isTr ? 'AÅŸÄ±' : 'Vaccine';
+  if (t === 'diagnosis') return isTr ? 'TeÅŸhis' : 'Diagnosis';
+  if (t === 'procedure') return isTr ? 'ProsedÃ¼r' : 'Procedure';
+  if (t === 'prescription') return isTr ? 'Ä°laÃ§' : 'Prescription';
   return isTr ? 'Test' : 'Test';
 }
 function isValidDate(v: string) {
@@ -369,16 +356,21 @@ function timelineTypeAccent(type: Exclude<HealthHubCategory, 'all'>) {
   return C.accentRecord;
 }
 
-function categoryToAreaKey(category: HealthHubCategory): AreaRowKey | null {
-  if (category === 'vet') return 'vet';
-  if (category === 'vaccine') return 'vaccines';
-  if (category === 'record') return 'records';
-  if (category === 'weight') return 'weight';
-  return null;
+function timelineFilterIcon(type: HealthHubCategory, active: boolean) {
+  const strokeWidth = active ? 2.35 : 2.15;
+  if (type === 'all') return <Home size={14} color={active ? C.primary : C.onSurfaceVariant} strokeWidth={strokeWidth} />;
+  if (type === 'vaccine') return <Syringe size={14} color={active ? C.accentVaccine : C.onSurfaceVariant} strokeWidth={strokeWidth} />;
+  if (type === 'weight') return <TrendingUp size={14} color={active ? C.accentWeight : C.onSurfaceVariant} strokeWidth={strokeWidth} />;
+  if (type === 'vet') return <Stethoscope size={14} color={active ? C.accentVet : C.onSurfaceVariant} strokeWidth={strokeWidth} />;
+  return <FileText size={14} color={active ? C.accentRecord : C.onSurfaceVariant} strokeWidth={strokeWidth} />;
 }
+
 
 function statusTone(status: string | undefined) {
   const value = status?.toLowerCase() ?? '';
+  if (value.includes('needs attention') || value.includes('dikkat')) {
+    return { bg: '#fde8e3', text: '#a73b21', border: 'rgba(167,59,33,0.14)' };
+  }
   if (value.includes('overdue') || value.includes('gecik')) {
     return { bg: '#fde8e3', text: '#a73b21', border: 'rgba(167,59,33,0.14)' };
   }
@@ -400,10 +392,45 @@ function statusTone(status: string | undefined) {
   return { bg: '#f1f3ef', text: '#5d605a', border: 'rgba(93,96,90,0.12)' };
 }
 
-function insightPriorityTone(priority: AiInsight['priority']) {
-  if (priority === 'high') return { bg: '#fde8e3', text: '#a73b21' };
-  if (priority === 'medium') return { bg: '#fdf2dd', text: '#9b6400' };
-  return { bg: '#eaf4ec', text: '#416d49' };
+function healthAreaStatusMeta(
+  rawStatus: string | undefined,
+  key: AreaRowKey,
+  overdueCount: number,
+  isTr: boolean,
+) {
+  const value = rawStatus?.toLowerCase() ?? '';
+  if (key === 'vaccines' && overdueCount > 0) {
+    return { kind: 'attention' as const, label: isTr ? 'Dikkat gerekli' : 'Needs attention' };
+  }
+  if (value.includes('needs attention') || value.includes('dikkat')) {
+    return { kind: 'attention' as const, label: isTr ? 'Dikkat gerekli' : 'Needs attention' };
+  }
+  if (value.includes('overdue') || value.includes('gecik')) {
+    return { kind: 'attention' as const, label: isTr ? 'Dikkat gerekli' : 'Needs attention' };
+  }
+  if (value.includes('due soon') || value.includes('yaklas')) {
+    return { kind: 'soon' as const, label: isTr ? 'Yaklasiyor' : 'Due soon' };
+  }
+  if (value.includes('no data') || value.includes('veri yok')) {
+    return { kind: 'empty' as const, label: isTr ? 'Veri yok' : 'No data' };
+  }
+  return { kind: 'ok' as const, label: isTr ? 'Guncel' : 'Up to date' };
+}
+
+function emptyAreaGuidance(key: AreaRowKey, isTr: boolean) {
+  if (key === 'vet') return isTr ? 'Ilk veteriner ziyaretini ekleyin.' : 'Add first vet visit.';
+  if (key === 'vaccines') return isTr ? 'Ilk asiyi girip takip baslatin.' : 'Log first vaccine to start tracking.';
+  if (key === 'weight') return isTr ? 'Trend icin ilk kiloyu ekleyin.' : 'Add first weight to start trends.';
+  if (key === 'records') return isTr ? 'Ilk saglik kaydini ekleyin.' : 'Add first health record.';
+  return isTr ? 'Ilk belgeyi yukleyin.' : 'Upload first record.';
+}
+
+function actionLabelForArea(key: AreaRowKey, isTr: boolean) {
+  if (key === 'vet') return isTr ? 'Veteriner ziyareti ekle' : 'Add Vet Visit';
+  if (key === 'vaccines') return isTr ? 'Asi kaydi ekle' : 'Log Vaccine';
+  if (key === 'weight') return isTr ? 'Ilk kiloyu ekle' : 'Add first weight';
+  if (key === 'records') return isTr ? 'Saglik kaydi ekle' : 'Add first record';
+  return isTr ? 'Ilk belgeyi yukle' : 'Upload first record';
 }
 
 function FolderHeartIcon({ size = 21, color = '#7aa2b8' }: { size?: number; color?: string }) {
@@ -489,10 +516,10 @@ function fmtShort(n: number): string {
 }
 
 const MONTHS_SHORT_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const MONTHS_SHORT_TR = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
+const MONTHS_SHORT_TR = ['Oca','Åub','Mar','Nis','May','Haz','Tem','AÄŸu','Eyl','Eki','Kas','Ara'];
 
 function fmtVisitDate(raw: string, isTr: boolean): string {
-  // Handles ISO date "2025-02-21" → "Feb 21" / "Şub 21"
+  // Handles ISO date "2025-02-21" â†’ "Feb 21" / "Åub 21"
   // Also handles already-formatted strings by returning them as-is
   const parts = raw.split('-');
   if (parts.length === 3) {
@@ -505,7 +532,7 @@ function fmtVisitDate(raw: string, isTr: boolean): string {
   return raw;
 }
 
-// ─── Breed Insights helpers ───────────────────────────────────────────────────
+// â”€â”€â”€ Breed Insights helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function DailyCareIcon({ category, size = 16, color = '#7fc4b8' }: { category: DailyCareCategory; size?: number; color?: string }) {
   const sw = 1.85;
   if (category === 'grooming') return <CombIcon size={size} color={color} />;
@@ -556,19 +583,19 @@ function BreedTeaserRow({
   insightText?: string;
   petName?: string;
 }) {
-  const typeLabel = entry.petType === 'Dog' ? (isTr ? 'Köpek' : 'Dog') : (isTr ? 'Kedi' : 'Cat');
-  const weightLabel = `${entry.weightRangeKg[0]}–${entry.weightRangeKg[1]} kg`;
-  const lifespanLabel = `${entry.lifespanYears[0]}–${entry.lifespanYears[1]} ${isTr ? 'yıl' : 'yrs'}`;
+  const typeLabel = entry.petType === 'Dog' ? (isTr ? 'KÃ¶pek' : 'Dog') : (isTr ? 'Kedi' : 'Cat');
+  const weightLabel = `${entry.weightRangeKg[0]}â€“${entry.weightRangeKg[1]} kg`;
+  const lifespanLabel = `${entry.lifespanYears[0]}â€“${entry.lifespanYears[1]} ${isTr ? 'yÄ±l' : 'yrs'}`;
   const topRisks = entry.healthRisks.slice(0, 3);
   const pressScale = useRef(new Animated.Value(1)).current;
 
-  // When the avatar is the pet's photo, the header reads as the pet — not breed data.
+  // When the avatar is the pet's photo, the header reads as the pet â€” not breed data.
   // Primary = pet name, secondary = breed label. When no pet name, fall back to breed.
   const hasPetIdentity = !!avatarUri && !!petName;
   const primaryLabel = hasPetIdentity ? petName! : entry.breed;
   const secondaryLabel = hasPetIdentity
     ? `${isTr ? 'Irk' : 'Breed'}: ${entry.breed}`
-    : `${typeLabel}  ·  ${weightLabel}  ·  ${lifespanLabel}`;
+    : `${typeLabel}  Â·  ${weightLabel}  Â·  ${lifespanLabel}`;
 
   return (
     <Animated.View style={{ transform: [{ scale: pressScale }] }}>
@@ -602,10 +629,10 @@ function BreedTeaserRow({
 
       {/* Bottom row */}
       <View style={bs.teaserBottomRow}>
-        {/* Breed-standard stats — clearly separate from pet identity above */}
+        {/* Breed-standard stats â€” clearly separate from pet identity above */}
         {hasPetIdentity ? (
           <Text style={bs.teaserStandardLine} numberOfLines={1}>
-            {typeLabel}  ·  {weightLabel}  ·  {lifespanLabel}
+            {typeLabel}  Â·  {weightLabel}  Â·  {lifespanLabel}
           </Text>
         ) : null}
 
@@ -631,7 +658,7 @@ function BreedTeaserRow({
               <Text style={bs.teaserLockText}>Pro</Text>
             </View>
             <Text style={bs.teaserLockHint} numberOfLines={1}>
-              {isTr ? 'Irk sağlık profilini kilidi aç' : 'Unlock breed health profile'}
+              {isTr ? 'Irk saÄŸlÄ±k profilini kilidi aÃ§' : 'Unlock breed health profile'}
             </Text>
           </View>
         )}
@@ -642,7 +669,7 @@ function BreedTeaserRow({
 }
 
 const bs = StyleSheet.create({
-  // ── Breed teaser card (in scroll) ──────────────────────────────────────────
+  // â”€â”€ Breed teaser card (in scroll) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   teaserRow: {
     marginHorizontal: 0,
     borderRadius: 20,
@@ -775,7 +802,7 @@ const bs = StyleSheet.create({
     flex: 1,
   },
 
-  // ── Bottom sheet ───────────────────────────────────────────────────────────
+  // â”€â”€ Bottom sheet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   sheet: {
     backgroundColor: '#0b1f2b',
     borderTopLeftRadius: 28,
@@ -1045,146 +1072,14 @@ const bs = StyleSheet.create({
   },
 });
 
-// ─── Vaccine category sub-components ─────────────────────────────────────────
-const HUB_SEGMENT_ACCENTS = {
-  allergies:  { accent: '#a63050', accentBg: '#fdf0f3', label: 'Allergies', labelTr: 'Alerjiler' },
-  diagnoses:  { accent: '#1e6b85', accentBg: '#edf6fa', label: 'Diagnoses', labelTr: 'Tanılar' },
-  labResults: { accent: '#5242a0', accentBg: '#f0eef8', label: 'Lab Results', labelTr: 'Lab Sonuçları' },
-} as const;
 
-function HubFeaturedVaccineCard({ data, isTr }: { data: VaccinationsNextUpData; isTr: boolean }) {
-  const dayStr = data.date.split(/[.\-\/\s]/)[0] ?? '—';
-  return (
-    <View style={hvs.featuredCard}>
-      <View style={hvs.featuredBlob} />
-      <View style={hvs.featuredTop}>
-        <View style={hvs.featuredLeft}>
-          <View style={hvs.glassTag}>
-            <Text style={hvs.glassTagText}>{isTr ? 'YAKLAŞAN' : 'UPCOMING'}</Text>
-          </View>
-          <Text style={hvs.featuredTitle}>{data.name}</Text>
-          <Text style={hvs.featuredSub}>{data.subtitle}</Text>
-        </View>
-        <View style={hvs.featuredDateBox}>
-          <Text style={hvs.featuredDateNum}>{dayStr}</Text>
-          <Text style={hvs.featuredDateSub}>{data.inWeeks}</Text>
-        </View>
-      </View>
-      <View style={hvs.featuredMeta}>
-        <Syringe size={14} color="rgba(255,255,255,0.8)" />
-        <Text style={hvs.featuredMetaText}>{data.date}</Text>
-      </View>
-    </View>
-  );
-}
 
-function HubVaccineCard({ item, isTr: _isTr }: { item: VaccinationsHistoryItem; isTr: boolean }) {
-  const isOverdue = item.status === 'overdue';
-  const isDueSoon = item.status === 'dueSoon';
-  const iconBg = isOverdue ? '#fdf0f0' : isDueSoon ? '#fef6ea' : '#eaf2f4';
-  const iconColor = isOverdue ? '#c96a6a' : isDueSoon ? '#c48d42' : '#56757c';
-  const pillBg = iconBg;
-  const pillBorder = isOverdue ? '#f5dede' : isDueSoon ? '#f5e9d1' : '#c0d8de';
-  const pillLabel = isOverdue ? (_isTr ? 'Gecikmiş' : 'Overdue') : isDueSoon ? (_isTr ? 'Yaklaşan' : 'Due soon') : (_isTr ? 'Güncel' : 'Up to date');
-  return (
-    <View style={hvs.vaccineCard}>
-      <View style={[hvs.vaccineIconBox, { backgroundColor: iconBg }]}>
-        {isOverdue
-          ? <Svg width={22} height={22} viewBox="0 0 24 24"><Path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke={iconColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" /></Svg>
-          : isDueSoon
-            ? <Svg width={22} height={22} viewBox="0 0 24 24"><Circle cx={12} cy={12} r={10} stroke={iconColor} strokeWidth={2} fill="none" /><Path d="M12 6v6l4 2" stroke={iconColor} strokeWidth={2} strokeLinecap="round" fill="none" /></Svg>
-            : <Svg width={22} height={22} viewBox="0 0 24 24"><Path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke={iconColor} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" /></Svg>
-        }
-      </View>
-      <View style={hvs.vaccineMain}>
-        <Text style={hvs.vaccineName}>{item.name}</Text>
-        <View style={hvs.vaccineMetaRow}>
-          <Text style={hvs.vaccineSub}>{item.subtitle}</Text>
-          <View style={hvs.vaccineDot} />
-          <Text style={hvs.vaccineDueText}>{item.dueDate}</Text>
-        </View>
-      </View>
-      <View style={[hvs.vaccinePill, { backgroundColor: pillBg, borderColor: pillBorder }]}>
-        <Text style={[hvs.vaccinePillText, { color: iconColor }]}>{pillLabel}</Text>
-      </View>
-    </View>
-  );
-}
 
-const hvs = StyleSheet.create({
-  featuredCard: {
-    backgroundColor: '#1e5c6e',
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 8,
-    overflow: 'hidden',
-  },
-  featuredBlob: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    top: -30,
-    right: -20,
-  },
-  featuredTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  featuredLeft: { flex: 1, marginRight: 12 },
-  glassTag: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    marginBottom: 8,
-  },
-  glassTagText: { color: 'rgba(255,255,255,0.7)', fontSize: 10, fontWeight: '700', letterSpacing: 0.8 },
-  featuredTitle: { color: '#fff', fontSize: 17, fontWeight: '700', marginBottom: 4 },
-  featuredSub: { color: 'rgba(255,255,255,0.65)', fontSize: 13 },
-  featuredDateBox: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    alignItems: 'center',
-    minWidth: 60,
-  },
-  featuredDateNum: { color: '#fff', fontSize: 22, fontWeight: '700' },
-  featuredDateSub: { color: 'rgba(255,255,255,0.65)', fontSize: 11, marginTop: 2 },
-  featuredMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 14 },
-  featuredMetaText: { color: 'rgba(255,255,255,0.7)', fontSize: 12 },
-  vaccineCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 8,
-    gap: 12,
-  },
-  vaccineIconBox: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  vaccineMain: { flex: 1 },
-  vaccineName: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  vaccineMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 3, gap: 6 },
-  vaccineSub: { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
-  vaccineDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.3)' },
-  vaccineDueText: { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
-  vaccinePill: {
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  vaccinePillText: { fontSize: 11, fontWeight: '600' },
-});
-
-// ─── Main screen ──────────────────────────────────────────────────────────────
+// â”€â”€â”€ Main screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function HealthHubScreen({
   scrollToTopSignal = 0,
   summary,
   timeline,
-  initialCategory = 'all',
-  categoryResetKey,
   createPreset,
   onPrimaryCta,
   onAddRecord,
@@ -1212,23 +1107,19 @@ export default function HealthHubScreen({
   petAvatarUri,
   isPremium = false,
   onUpgradePremium,
-  vaccineHistoryItems,
   vaccineAttentionCounts,
-  vaccineNextUpData,
-  healthRecordsData,
 }: HealthHubScreenProps) {
   const isTr = locale === 'tr';
   const insets = useSafeAreaInsets();
 
-  // ── local state ──
-  const [category, setCategory] = useState<HealthHubCategory>(initialCategory);
+  // â”€â”€ local state â”€â”€
   const [selectedItem, setSelectedItem] = useState<HealthHubTimelineItem | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [addSheetMode, setAddSheetMode] = useState<AddRecordMode>('typeSelect');
-  const [recordsSegment, setRecordsSegment] = useState<'allergies' | 'diagnoses' | 'labResults'>('allergies');
   const [addSheetPresetTitle, setAddSheetPresetTitle] = useState('');
   const [addSheetPresetType, setAddSheetPresetType] = useState<AddHealthRecordType>('diagnosis');
+  const [timelineFilter, setTimelineFilter] = useState<HealthHubCategory>('all');
   const scrollY = useRef(new Animated.Value(0)).current;
   const mainScrollRef = useRef<ScrollView | null>(null);
   const [breedSheetOpen, setBreedSheetOpen] = useState(false);
@@ -1279,7 +1170,7 @@ export default function HealthHubScreen({
     ]).start(() => setBreedSheetOpen(false));
   }
 
-  // ── breed insights (memoised) ──
+  // â”€â”€ breed insights (memoised) â”€â”€
   const breedEntry = useMemo(
     () => (petBreed ? getBreedHealthEntry(petBreed, petType, { useFallback: true }) : undefined),
     [petBreed, petType],
@@ -1292,13 +1183,22 @@ export default function HealthHubScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [breedEntry, timeline, summary, weightGoal, locale],
   );
-  const iconAnimByKeyRef = useRef<Record<string, Animated.Value>>({});
-  const cardScaleByKeyRef = useRef<Record<string, Animated.Value>>({});
+  const timelineFilterOptions = useMemo(
+    () => ([
+      { key: 'all' as const, label: isTr ? 'Tum' : 'All' },
+      { key: 'vaccine' as const, label: isTr ? 'Asi' : 'Vaccines' },
+      { key: 'weight' as const, label: isTr ? 'Kilo' : 'Weight' },
+      { key: 'vet' as const, label: 'Vet' },
+      { key: 'record' as const, label: isTr ? 'Kayit' : 'Records' },
+    ]),
+    [isTr],
+  );
+  const filteredTimelinePreview = useMemo(
+    () => (timelineFilter === 'all' ? timeline : timeline.filter((item) => item.type === timelineFilter)),
+    [timeline, timelineFilter],
+  );
   const createSavedPayloadRef = useRef<AddHealthRecordPayload | null>(null);
   const headerBtnScale = useRef(new Animated.Value(1)).current;
-  const { width } = useWindowDimensions();
-
-  useEffect(() => { setCategory(initialCategory); }, [initialCategory, categoryResetKey]);
 
   useEffect(() => {
     if (!createPreset?.openCreate) return;
@@ -1310,93 +1210,111 @@ export default function HealthHubScreen({
     mainScrollRef.current?.scrollTo?.({ y: 0, animated: true });
   }, [scrollToTopSignal]);
 
-  // ── derived ──
-  const filteredTimeline = useMemo(
-    () => (category === 'all' ? timeline : timeline.filter((i) => i.type === category)),
-    [category, timeline],
-  );
-  const categoryCounts = useMemo(() => {
-    const c: Partial<Record<HealthHubCategory, number>> = { all: timeline.length };
-    for (const item of timeline) c[item.type] = (c[item.type] ?? 0) + 1;
-    return c;
-  }, [timeline]);
-
-  // ── hub entries ──
-  const hubEntries = useMemo(
-    () => [
+  const healthAreas = useMemo(() => {
+    const areaCardMap = new Map<AreaRowKey, HealthHubAreaCard>((areaCards ?? []).map((card) => [card.key, card]));
+    const definitions: Array<{ key: AreaRowKey; title: string; fallbackSubtitle: string; onPress?: () => void }> = [
       {
         key: 'vet',
         title: isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits',
-        subtitle: isTr ? 'Klinik görüşmeleri ve randevular' : 'Clinic visits & appointments',
-        icon: <HealthHubCategoryIcon kind="vet" colorOverride={AREA_ROW_THEMES.vet.iconTint} />,
-        iconBg: AREA_ROW_THEMES.vet.iconBg,
+        fallbackSubtitle: isTr ? 'Klinik gecmisi ve randevular' : 'Visits, checkups, and scheduled care',
         onPress: onOpenVetVisits,
-        overview: domainOverview?.vet,
       },
-      
       {
         key: 'vaccines',
-        title: isTr ? 'Aşılar' : 'Vaccines',
-        subtitle: isTr ? 'Yapılan ve planlanan aşılar' : 'Administered & upcoming vaccines',
-        icon: <HealthHubCategoryIcon kind="vaccines" colorOverride={AREA_ROW_THEMES.vaccines.iconTint} />,
-        iconBg: AREA_ROW_THEMES.vaccines.iconBg,
+        title: isTr ? 'Asilar' : 'Vaccines',
+        fallbackSubtitle: isTr ? 'Son durum ve sonraki dozlar' : 'Coverage and upcoming doses',
         onPress: onOpenVaccines,
-        overview: domainOverview?.vaccines,
       },
       {
         key: 'weight',
-        title: isTr ? 'Ağırlık Profili' : 'Weight Profile',
-        subtitle: isTr ? 'Trend ve değişim analizi' : 'Trends & body condition',
-        icon: <HealthHubCategoryIcon kind="weight" colorOverride={AREA_ROW_THEMES.weight.iconTint} />,
-        iconBg: AREA_ROW_THEMES.weight.iconBg,
+        title: isTr ? 'Agirlik Profili' : 'Weight Profile',
+        fallbackSubtitle: isTr ? 'Trend ve son olcumler' : 'Trends and recent weigh-ins',
         onPress: onOpenWeightTracking,
-        overview: domainOverview?.weight,
       },
       {
         key: 'records',
-        title: isTr ? 'Sağlık Kayıtları' : 'Health Records',
-        subtitle: isTr ? 'Tanı, prosedür, test sonuçları' : 'Diagnosis, procedures & tests',
-        icon: <HealthHubCategoryIcon kind="records" colorOverride={AREA_ROW_THEMES.records.iconTint} />,
-        iconBg: AREA_ROW_THEMES.records.iconBg,
-        onPress: onOpenHealthRecords ?? (() => setCategory('record')),
-        overview: domainOverview?.records,
+        title: isTr ? 'Saglik Kayitlari' : 'Health Records',
+        fallbackSubtitle: isTr ? 'Tani, test ve tedavi gecmisi' : 'Diagnoses, tests, and treatment history',
+        onPress: onOpenHealthRecords,
       },
-    ],
-    [domainOverview, isTr, onOpenHealthRecords, onOpenVaccines, onOpenVetVisits, onOpenWeightTracking],
-  );
-  const moduleCards = useMemo(
-    () => areaCards?.filter((item) => item.key !== 'documents') ?? [],
-    [areaCards],
-  );
-  const documentCard = useMemo(
-    () => areaCards?.find((item) => item.key === 'documents'),
-    [areaCards],
-  );
-  const hasDocumentsPreview = !!documentsPreview?.[0]?.title;
-  const documentCountValue = Number.parseInt(documentCard?.countText ?? '', 10);
-  const documentPrimaryText = !hasDocumentsPreview && (Number.isNaN(documentCountValue) ? false : documentCountValue <= 0)
-    ? (isTr ? 'Veri yok' : 'No data')
-    : (documentCard?.highlight.primary ?? '');
-  const focusedAreaKey = categoryToAreaKey(category);
+      {
+        key: 'documents',
+        title: isTr ? 'Belgeler' : 'Documents',
+        fallbackSubtitle: isTr ? 'Raporlar, faturalar ve dosyalar' : 'Reports, invoices, and uploaded files',
+        onPress: onOpenDocuments,
+      },
+    ];
+
+    return definitions.map((definition) => {
+      const overview = domainOverview?.[definition.key === 'vet' ? 'vet' : definition.key];
+      const card = areaCardMap.get(definition.key);
+      const statusMeta = healthAreaStatusMeta(
+        card?.statusText ?? overview?.statusText,
+        definition.key,
+        vaccineAttentionCounts?.overdueCount ?? 0,
+        isTr,
+      );
+      const helperText = statusMeta.kind === 'empty'
+        ? emptyAreaGuidance(definition.key, isTr)
+        : overview?.infoText
+          ?? card?.highlight.detail
+          ?? card?.highlight.secondary
+          ?? definition.fallbackSubtitle;
+
+      return {
+        key: definition.key,
+        title: definition.title,
+        onPress: definition.onPress,
+        countText: card?.countText ?? overview?.countText ?? (isTr ? '0 kayit' : '0 records'),
+        statusLabel: statusMeta.label,
+        statusKind: statusMeta.kind,
+        helperText,
+        actionLabel: statusMeta.kind === 'empty' ? actionLabelForArea(definition.key, isTr) : null,
+      };
+    });
+  }, [areaCards, domainOverview, isTr, onOpenDocuments, onOpenHealthRecords, onOpenVaccines, onOpenVetVisits, onOpenWeightTracking, vaccineAttentionCounts?.overdueCount]);
+
+  const healthSummaryData = useMemo(() => {
+    const overdueItems = vaccineAttentionCounts?.overdueCount ?? 0;
+    const dueSoonItems = healthAreas.filter((item) => item.statusKind === 'soon').length;
+    const missingDataAreas = healthAreas.filter((item) => item.statusKind === 'empty').length;
+    const nextRecommendedArea = healthAreas.find((item) => item.statusKind === 'attention')
+      ?? healthAreas.find((item) => item.statusKind === 'soon')
+      ?? healthAreas.find((item) => item.statusKind === 'empty')
+      ?? null;
+    const summaryMessage = overdueItems > 0
+      ? (isTr ? 'Bugun dikkat isteyen saglik girdileri var.' : 'There are health items that need attention today.')
+      : dueSoonItems > 0
+        ? (isTr ? 'Yaklasan saglik aksiyonlari hazir bekliyor.' : 'Upcoming health actions are ready to review.')
+        : missingDataAreas > 0
+          ? (isTr ? 'Eksik alanlari tamamlayarak daha guclu bir saglik kaydi kurun.' : 'Fill missing areas to build a stronger health record.')
+          : (isTr ? 'Kayitlar duzenli gorunuyor.' : 'Your health records look well organized.');
+    const recommendedLabel = nextRecommendedArea
+      ? (isTr ? 'Sonraki en iyi adim' : 'Recommended next step')
+      : (isTr ? 'Saglik ozeti' : 'Health snapshot');
+    const recommendedAction = nextRecommendedArea
+      ? (nextRecommendedArea.actionLabel ?? nextRecommendedArea.title)
+      : (isTr ? 'Kayitlari guncel tutmaya devam edin.' : 'Keep your records up to date.');
+
+    return { overdueItems, dueSoonItems, missingDataAreas, summaryMessage, recommendedLabel, recommendedAction };
+  }, [healthAreas, isTr, vaccineAttentionCounts?.overdueCount]);
+  const handleOpenTimelineHistory = () => {
+    if (timelineFilter === 'vaccine') {
+      onOpenVaccines?.();
+      return;
+    }
+    if (timelineFilter === 'weight') {
+      onOpenWeightTracking?.();
+      return;
+    }
+    if (timelineFilter === 'vet') {
+      onOpenVetVisits?.();
+      return;
+    }
+    onOpenHealthRecords?.();
+  };
+
   const primaryInsight = topInsights?.[0] ?? null;
-  const secondaryInsight = topInsights?.[1] ?? null;
-  const moduleCardWidth = Math.max(148, Math.floor((width - 22 * 2 - 14) / 2));
-  const moduleCardHeight = moduleCardWidth;
-  const documentsCardHeight = Math.max(118, Math.min(134, Math.round(moduleCardHeight * 0.66)));
-  const compactDateLayout = moduleCardWidth < 182;
-  const adaptiveCardTitleSize = moduleCardWidth < 160 ? 13 : moduleCardWidth < 172 ? 14 : 15;
-  const adaptiveCardTitleLineHeight = adaptiveCardTitleSize + 3;
-  const adaptivePrimarySize = moduleCardWidth < 160 ? 17 : 19;
-  const adaptivePrimaryLineHeight = adaptivePrimarySize + 4;
-  const adaptiveDateDetailSize = moduleCardWidth < 160 ? 14 : 15;
-  const adaptiveCardPadding = moduleCardWidth < 160 ? 14 : 16;
-  const adaptiveIconWrapSize = moduleCardWidth < 160 ? 34 : 38;
-  const adaptiveIconGlyph = moduleCardWidth < 160 ? 16 : 18;
-  const adaptiveDateBadgeSize = moduleCardWidth < 160 ? 58 : 64;
-  const adaptiveWatermarkSize = moduleCardWidth < 160 ? 74 : 84;
-  const adaptiveCountPillPaddingH = moduleCardWidth < 160 ? 8 : 9;
-  const adaptiveCountPillPaddingV = moduleCardWidth < 160 ? 4 : 5;
-  const adaptiveCountFontSize = moduleCardWidth < 160 ? 10 : 11;
   const topInset = Math.max(insets.top, 14);
   const topBarHeight = topInset + 56;
   const topChromeHeight = topInset + 58;
@@ -1420,13 +1338,7 @@ export default function HealthHubScreen({
     outputRange: [3, 0],
     extrapolate: 'clamp',
   });
-  const headerColorBlendOpacity = scrollY.interpolate({
-    inputRange: [4, 56, 170],
-    outputRange: [0, 0.46, 0.74],
-    extrapolate: 'clamp',
-  });
-
-  // ── form helpers ──
+  // â”€â”€ form helpers â”€â”€
   const openCreate = (presetType: AddHealthRecordType = 'diagnosis', presetTitle = '') => {
     const mode: AddRecordMode =
       presetType === 'procedure' ? 'vetVisit' :
@@ -1443,42 +1355,68 @@ export default function HealthHubScreen({
     setAddSheetOpen(true);
   };
 
-  const getIconAnim = (key: string) => {
-    if (!iconAnimByKeyRef.current[key]) iconAnimByKeyRef.current[key] = new Animated.Value(0);
-    return iconAnimByKeyRef.current[key];
-  };
+  const quickActionItems = useMemo(() => ([
+    {
+      key: 'vet' as const,
+      title: isTr ? 'Veteriner ziyareti ekle' : 'Add Vet Visit',
+      subtitle: isTr ? 'Kontrol, hastalik ve takip gorusmelerini kaydedin' : 'Capture checkups, consultations, and follow-ups',
+      shortHint: isTr ? 'Ziyaret kaydi' : 'Visit entry',
+      onPress: () => openCreate('procedure'),
+      icon: <Stethoscope size={18} color="#365a3f" strokeWidth={2.2} />,
+      tone: 'vet' as const,
+    },
+    {
+      key: 'vaccine' as const,
+      title: isTr ? 'Asi kaydi ekle' : 'Log Vaccine',
+      subtitle: isTr ? 'Dozlari ve sonraki tarihleri duzenleyin' : 'Track doses and next due dates',
+      shortHint: isTr ? 'Immunizasyon' : 'Immunization',
+      onPress: () => openCreate('vaccine'),
+      icon: <Syringe size={18} color="#41688c" strokeWidth={2.2} />,
+      tone: 'vaccine' as const,
+    },
+    {
+      key: 'weight' as const,
+      title: isTr ? 'Kilo ekle' : 'Add Weight',
+      subtitle: isTr ? 'Trend takibi icin yeni olcum ekleyin' : 'Log a fresh weigh-in for trend tracking',
+      shortHint: isTr ? 'Olcum girişi' : 'Measurement',
+      onPress: onAddWeightEntry,
+      icon: <TrendingUp size={18} color="#5f4f93" strokeWidth={2.2} />,
+      tone: 'weight' as const,
+    },
+    {
+      key: 'document' as const,
+      title: isTr ? 'Belge yukle' : 'Upload Document',
+      subtitle: isTr ? 'Raporlari ve dosyalari tek yerde tutun' : 'Keep reports and files ready in one place',
+      shortHint: isTr ? 'Dosya eki' : 'Attachment',
+      onPress: onOpenDocuments,
+      icon: <Files size={18} color="#7a5a3a" strokeWidth={2.2} />,
+      tone: 'document' as const,
+    },
+  ]), [isTr, onAddWeightEntry, onOpenDocuments]);
 
-  const getCardScale = (key: string) => {
-    if (!cardScaleByKeyRef.current[key]) cardScaleByKeyRef.current[key] = new Animated.Value(1);
-    return cardScaleByKeyRef.current[key];
-  };
+  const primaryQuickActionKey = useMemo(() => {
+    const vaccinesStatus = healthAreas.find((item) => item.key === 'vaccines')?.statusKind;
+    if (vaccinesStatus === 'attention' || vaccinesStatus === 'soon') return 'vaccine';
+    const vetStatus = healthAreas.find((item) => item.key === 'vet')?.statusKind;
+    if (vetStatus === 'empty') return 'vet';
+    return 'vet';
+  }, [healthAreas]);
+
+  const primaryQuickAction = useMemo(
+    () => quickActionItems.find((item) => item.key === primaryQuickActionKey) ?? quickActionItems[0],
+    [primaryQuickActionKey, quickActionItems],
+  );
+  const secondaryQuickActions = useMemo(
+    () => quickActionItems.filter((item) => item.key !== primaryQuickAction.key),
+    [primaryQuickAction.key, quickActionItems],
+  );
 
   const springDown = (v: Animated.Value, toValue = 0.96) =>
     () => Animated.spring(v, { toValue, useNativeDriver: true, speed: 60, bounciness: 0 }).start();
   const springUp = (v: Animated.Value) =>
     () => Animated.spring(v, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 7 }).start();
 
-
-  useEffect(() => {
-    const keys: AreaRowKey[] = ['vet', 'vaccines', 'weight', 'records', 'documents'];
-    const loops = keys.map((key, idx) => {
-      const v = getIconAnim(key);
-      v.setValue(0);
-      return Animated.loop(
-        Animated.sequence([
-          Animated.delay(idx * 180),
-          Animated.timing(v, { toValue: 1, duration: 2200, useNativeDriver: true }),
-          Animated.timing(v, { toValue: 0, duration: 2200, useNativeDriver: true }),
-        ]),
-      );
-    });
-    loops.forEach((loop) => loop.start());
-    return () => {
-      loops.forEach((loop) => loop.stop());
-    };
-  }, []);
-
-  // ─────────────────────────────────────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
     <ExpoLinearGradient
       colors={['#FFFFFF', '#ECE9E6']}
@@ -1494,402 +1432,221 @@ export default function HealthHubScreen({
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
         scrollEventThrottle={16}
       >
-        <View style={s.heroBlock}>
-          {category !== 'all' ? (
-            <Pressable style={s.focusChip} onPress={() => setCategory('all')}>
-              <Text style={s.focusChipText}>
-                {isTr ? `${categoryLabel(category, isTr)} odagi` : `${categoryLabel(category, isTr)} focus`}
-              </Text>
-            </Pressable>
-          ) : null}
+        <View style={s.sectionHeaderRow}>
+          <View>
+            <Text style={s.sectionEyebrow}>{isTr ? 'Genel Durum' : 'Health Summary'}</Text>
+            <Text style={s.sectionLead}>{healthSummaryData.summaryMessage}</Text>
+          </View>
+        </View>
+        <View style={s.summaryRecommendationRow}>
+          <Text style={s.summaryRecommendationLabel}>{healthSummaryData.recommendedLabel}</Text>
+          <Text style={s.summaryRecommendationValue}>{healthSummaryData.recommendedAction}</Text>
+        </View>
+        <View style={s.summaryOverviewCard}>
+          <View style={s.summaryMetricRow}>
+            <View style={[s.summaryMetricItem, s.summaryMetricUrgent]}>
+              <View style={s.summaryMetricLabelRow}>
+                <View style={[s.summaryMetricDot, s.summaryMetricDotUrgent]} />
+                <Text style={s.summaryMetricLabel}>{isTr ? 'Geciken oge' : 'Overdue items'}</Text>
+              </View>
+              <Text style={[s.summaryMetricValue, s.summaryMetricValueUrgent]}>{healthSummaryData.overdueItems}</Text>
+            </View>
+            <View style={s.summaryMetricDivider} />
+            <View style={s.summaryMetricItem}>
+              <View style={s.summaryMetricLabelRow}>
+                <View style={[s.summaryMetricDot, s.summaryMetricDotSoon]} />
+                <Text style={s.summaryMetricLabel}>{isTr ? 'Yaklasan alan' : 'Due soon areas'}</Text>
+              </View>
+              <Text style={[s.summaryMetricValue, s.summaryMetricValueSoon]}>{healthSummaryData.dueSoonItems}</Text>
+            </View>
+            <View style={s.summaryMetricDivider} />
+            <View style={s.summaryMetricItem}>
+              <View style={s.summaryMetricLabelRow}>
+                <View style={[s.summaryMetricDot, s.summaryMetricDotMissing]} />
+                <Text style={s.summaryMetricLabel}>{isTr ? 'Eksik veri alani' : 'Missing data areas'}</Text>
+              </View>
+              <Text style={[s.summaryMetricValue, s.summaryMetricValueMissing]}>{healthSummaryData.missingDataAreas}</Text>
+            </View>
+          </View>
         </View>
 
-        {/* ── Health Status Banner ─────────────────────────────────────── */}
-        {category === 'all' && (
-          <View style={s.statusBannerRow}>
-            {(vaccineAttentionCounts?.overdueCount ?? 0) > 0 && (
-              <View style={[s.statusPillItem, s.statusPillRed]}>
-                <Text style={[s.statusPillItemText, s.statusPillRedText]}>
-                  {vaccineAttentionCounts!.overdueCount} {isTr ? 'Gecikmiş' : 'Overdue'}
-                </Text>
-              </View>
-            )}
-            {(vaccineAttentionCounts?.dueSoonCount ?? 0) > 0 && (
-              <View style={[s.statusPillItem, s.statusPillAmber]}>
-                <Text style={[s.statusPillItemText, s.statusPillAmberText]}>
-                  {vaccineAttentionCounts!.dueSoonCount} {isTr ? 'Yaklaşan' : 'Due Soon'}
-                </Text>
-              </View>
-            )}
-            {(vaccineAttentionCounts?.overdueCount ?? 0) === 0 && (vaccineAttentionCounts?.dueSoonCount ?? 0) === 0 && (
-              <View style={[s.statusPillItem, s.statusPillGreen]}>
-                <Text style={[s.statusPillItemText, s.statusPillGreenText]}>
-                  {isTr ? 'Tümü güncel' : 'All up to date'}
-                </Text>
-              </View>
-            )}
+        <View style={s.sectionHeaderRow}>
+          <View>
+            <Text style={s.sectionEyebrow}>{isTr ? 'Hizli Islemler' : 'Quick Actions'}</Text>
+            <Text style={s.sectionLeadSecondary}>{isTr ? 'Veri girisini net aksiyonlarla baslatin.' : 'Start structured input with clear actions.'}</Text>
           </View>
-        )}
+        </View>
+        <View style={s.quickActionZone}>
+          <Pressable
+            style={[s.quickActionPrimaryCard, primaryQuickAction.tone === 'vaccine' ? s.quickActionPrimaryVaccine : s.quickActionPrimaryVet]}
+            onPress={primaryQuickAction.onPress}
+            disabled={!primaryQuickAction.onPress}
+          >
+            <View style={s.quickActionPrimaryHead}>
+              <View style={[
+                s.quickActionPrimaryIconWrap,
+                primaryQuickAction.tone === 'vaccine'
+                  ? s.quickActionIconVaccine
+                  : s.quickActionIconVet,
+              ]}>
+                {primaryQuickAction.icon}
+              </View>
+              <View style={s.quickActionPrimaryBadge}>
+                <Text style={s.quickActionPrimaryBadgeText}>{isTr ? 'Onerilen' : 'Recommended'}</Text>
+              </View>
+            </View>
+            <Text style={s.quickActionPrimaryTitle}>{primaryQuickAction.title}</Text>
+            <Text style={s.quickActionPrimarySub}>{primaryQuickAction.subtitle}</Text>
+          </Pressable>
 
-        {/* ── Quick Actions ─────────────────────────────────────────────── */}
-        {category === 'all' && (
-          <View style={s.quickActionsRow}>
-            <Pressable style={s.quickActionChip} onPress={openTypeSelect}>
-              <Plus size={14} color={C.primary} strokeWidth={2.4} />
-              <Text style={s.quickActionChipText}>{isTr ? 'Kayıt Ekle' : 'Add Record'}</Text>
-            </Pressable>
-            {(vaccineAttentionCounts?.overdueCount ?? 0) > 0 ? (
+          <View style={s.quickActionSecondaryList}>
+            {secondaryQuickActions.map((action, index) => (
               <Pressable
-                style={[s.quickActionChip, s.quickActionChipUrgent]}
-                onPress={() => { setAddSheetMode('vaccine'); setAddSheetOpen(true); }}
+                key={action.key}
+                style={[s.quickActionSecondaryRow, index === secondaryQuickActions.length - 1 ? s.quickActionSecondaryRowLast : null]}
+                onPress={action.onPress}
+                disabled={!action.onPress}
               >
-                <Syringe size={14} color="#a73b21" strokeWidth={2.1} />
-                <Text style={[s.quickActionChipText, s.quickActionChipUrgentText]}>{isTr ? 'Aşı Ekle' : 'Log Vaccine'}</Text>
-              </Pressable>
-            ) : (
-              <Pressable style={s.quickActionChip} onPress={onAddWeightEntry}>
-                <TrendingUp size={14} color={C.primary} strokeWidth={2.1} />
-                <Text style={s.quickActionChipText}>{isTr ? 'Kilo Ekle' : 'Log Weight'}</Text>
-              </Pressable>
-            )}
-          </View>
-        )}
-
-        <View style={[s.moduleCardsGrid, { minHeight: Math.max(moduleCardHeight, 206) * 2 + 14 }]}>
-          {moduleCards.map((card) => {
-            const entry = hubEntries.find((item) => item.key === card.key);
-            if (!entry) return null;
-            const active = focusedAreaKey === entry.key;
-            const theme = HEALTH_MODULE_CARD_THEMES[entry.key as Exclude<AreaRowKey, 'documents'>];
-            const isLightCard = entry.key === 'records';
-            const showAttention = !!card.highlight.attention;
-            const dateCategoryLabel =
-              entry.key === 'vet'
-                ? (isTr ? 'Ziyaret' : 'Visit')
-                : entry.key === 'vaccines'
-                  ? (isTr ? 'Aşı' : 'Vaccine')
-                  : '';
-            return (
-              <Animated.View key={entry.key} style={[s.moduleCardGridItem, { width: moduleCardWidth, transform: [{ scale: getCardScale(entry.key) }] }]}>
-                <Pressable
+                <View
                   style={[
-                    s.moduleCard,
-                    {
-                      backgroundColor: theme.background,
-                      shadowColor: theme.shadow,
-                      height: moduleCardHeight,
-                      paddingHorizontal: adaptiveCardPadding,
-                      paddingTop: adaptiveCardPadding,
-                      paddingBottom: adaptiveCardPadding,
-                    },
-                    active && s.moduleCardActive,
+                    s.quickActionSecondaryIconWrap,
+                    action.tone === 'weight'
+                      ? s.quickActionIconWeight
+                      : action.tone === 'document'
+                        ? s.quickActionIconDocument
+                        : action.tone === 'vaccine'
+                          ? s.quickActionIconVaccine
+                          : s.quickActionIconVet,
                   ]}
-                  onPressIn={springDown(getCardScale(entry.key), 0.985)}
-                  onPressOut={springUp(getCardScale(entry.key))}
-                  onPress={() => entry.onPress?.()}
                 >
-                  <View style={s.moduleCardWatermark}>
-                    <HealthHubCategoryIcon kind={entry.key as Exclude<AreaRowKey, 'documents'>} size={adaptiveWatermarkSize} colorOverride={theme.watermark} />
-                  </View>
+                  {action.icon}
+                </View>
+                <View style={s.quickActionSecondaryTextWrap}>
+                  <Text style={s.quickActionSecondaryTitle}>{action.title}</Text>
+                  <Text style={s.quickActionSecondarySub} numberOfLines={1}>{action.shortHint}</Text>
+                </View>
+                <ChevronRight size={14} color={C.primary} strokeWidth={2.2} />
+              </Pressable>
+            ))}
+          </View>
+        </View>
 
-                  <View style={s.moduleCardContent}>
-                    <View style={s.moduleCardHeaderRow}>
-                      <View
-                        style={[
-                          s.moduleCardIcon,
-                          {
-                            backgroundColor: theme.iconBg,
-                            width: adaptiveIconWrapSize,
-                            height: adaptiveIconWrapSize,
-                            borderRadius: adaptiveIconWrapSize / 2,
-                          },
-                        ]}
-                      >
-                        <HealthHubCategoryIcon kind={entry.key as Exclude<AreaRowKey, 'documents'>} size={adaptiveIconGlyph} colorOverride={theme.iconColor} />
-                      </View>
-                      <View style={s.moduleCardHeaderText}>
-                        <Text
-                          style={[s.moduleCardTitle, { fontSize: adaptiveCardTitleSize, lineHeight: adaptiveCardTitleLineHeight }, isLightCard && s.moduleCardTitleDark]}
-                          numberOfLines={2}
-                        >
-                          {card.title}
-                        </Text>
-                      </View>
+        <View style={s.sectionHeaderRow}>
+          <View>
+            <Text style={s.sectionEyebrow}>{isTr ? 'Saglik Alanlari' : 'Health Areas'}</Text>
+            <Text style={s.sectionLeadSecondary}>{isTr ? 'Her alanin durumunu ve sonraki dogru adimi gorun.' : 'See each area status and the next right action.'}</Text>
+          </View>
+        </View>
+        <View style={s.healthAreaList}>
+          {healthAreas.map((item) => {
+            const statusPillTone = item.statusKind === 'attention'
+              ? s.healthAreaStatusAttention
+              : item.statusKind === 'soon'
+                ? s.healthAreaStatusSoon
+                : item.statusKind === 'empty'
+                  ? s.healthAreaStatusEmpty
+                  : s.healthAreaStatusOk;
+            const statusTextTone = item.statusKind === 'attention'
+              ? s.healthAreaStatusTextAttention
+              : item.statusKind === 'soon'
+                ? s.healthAreaStatusTextSoon
+                : item.statusKind === 'empty'
+                  ? s.healthAreaStatusTextEmpty
+                  : s.healthAreaStatusTextOk;
+            const iconTone = item.key === 'vet'
+              ? s.healthAreaIconVet
+              : item.key === 'vaccines'
+                ? s.healthAreaIconVaccine
+                : item.key === 'weight'
+                  ? s.healthAreaIconWeight
+                  : item.key === 'documents'
+                    ? s.healthAreaIconDocument
+                    : s.healthAreaIconRecord;
+            return (
+              <Pressable key={item.key} style={s.healthAreaCard} onPress={() => item.onPress?.()}>
+                <View style={s.healthAreaCardTop}>
+                  <View style={s.healthAreaIdentity}>
+                    <View style={[s.healthAreaIconWrap, iconTone]}>
+                      <HealthHubCategoryIcon kind={item.key} size={20} />
                     </View>
-
-                    {card.highlight.kind === 'date' ? (
-                      <View style={[s.moduleDateBlock, showAttention && s.moduleHighlightAttentionPanel]}>
-                        <View style={[s.moduleDateRow, compactDateLayout && s.moduleDateRowCompact]}>
-                          <View
-                            style={[
-                              s.moduleDateBadge,
-                              {
-                                width: adaptiveDateBadgeSize,
-                                minHeight: adaptiveDateBadgeSize,
-                                borderRadius: Math.round(adaptiveDateBadgeSize * 0.22),
-                                paddingVertical: moduleCardWidth < 160 ? 8 : 9,
-                              },
-                              isLightCard && s.moduleDateBadgeLight,
-                            ]}
-                          >
-                            <Text style={[s.moduleDatePrimary, s.moduleDatePrimaryCompact, isLightCard && s.moduleDatePrimaryDark, showAttention && s.moduleDatePrimaryAttention]}>
-                              {card.highlight.primary}
-                            </Text>
-                            <Text style={[s.moduleDateSecondary, s.moduleDateSecondaryCompact, isLightCard && s.moduleDateSecondaryDark]}>
-                              {card.highlight.secondary}
-                            </Text>
-                          </View>
-                          <View style={[s.moduleDateTextCol, compactDateLayout && s.moduleDateTextColCompact]}>
-                            {card.highlight.detail ? (
-                              <Text
-                                style={[s.moduleMetricPrimary, s.moduleMetricPrimaryCompact, { fontSize: adaptiveDateDetailSize, lineHeight: adaptiveDateDetailSize + 4 }, s.moduleDateDetailText, isLightCard && s.moduleMetricPrimaryDark, showAttention && s.moduleMetricPrimaryAttention]}
-                                numberOfLines={compactDateLayout ? 1 : 2}
-                              >
-                                {card.highlight.detail}
-                              </Text>
-                            ) : null}
-                          </View>
-                        </View>
-                      </View>
-                    ) : (
-                      <View style={[s.moduleMetricBlock, showAttention && s.moduleHighlightAttentionPanel]}>
-                        <Text
-                          style={[s.moduleMetricPrimary, { fontSize: adaptivePrimarySize, lineHeight: adaptivePrimaryLineHeight }, isLightCard && s.moduleMetricPrimaryDark, showAttention && s.moduleMetricPrimaryAttention]}
-                          numberOfLines={2}
-                        >
-                          {card.highlight.primary}
-                        </Text>
-                        {card.highlight.secondary ? (
-                          <Text style={[s.moduleMetricSecondary, isLightCard && s.moduleMetricSecondaryDark]} numberOfLines={2}>
-                            {card.highlight.secondary}
-                          </Text>
-                        ) : null}
-                        {card.highlight.detail ? (
-                          <Text style={[s.moduleHighlightDetail, isLightCard && s.moduleHighlightDetailDark]} numberOfLines={2}>
-                            {card.highlight.detail}
-                          </Text>
-                        ) : null}
-                      </View>
-                    )}
-
-                    <View style={s.moduleCardFooterAbsolute}>
-                      {card.countText ? (
-                        <View
-                          style={[
-                            s.moduleCardCountPill,
-                            {
-                              paddingHorizontal: adaptiveCountPillPaddingH,
-                              paddingVertical: adaptiveCountPillPaddingV,
-                            },
-                            isLightCard && s.moduleCardCountPillDark,
-                          ]}
-                        >
-                          <View style={[s.moduleCardCountDot, isLightCard && s.moduleCardCountDotDark]} />
-                          <Text style={[s.moduleCardCountText, { fontSize: adaptiveCountFontSize }, isLightCard && s.moduleCardCountTextDark]}>{card.countText}</Text>
-                        </View>
-                      ) : null}
+                    <View style={s.healthAreaTitleWrap}>
+                      <Text style={s.healthAreaTitle}>{item.title}</Text>
+                      <Text style={s.healthAreaCount}>{item.countText}</Text>
                     </View>
                   </View>
-                </Pressable>
-              </Animated.View>
+                  <View style={[s.healthAreaStatusPill, statusPillTone]}>
+                    <Text style={[s.healthAreaStatusText, statusTextTone]}>{item.statusLabel}</Text>
+                  </View>
+                </View>
+                <Text style={[s.healthAreaHelper, item.statusKind === 'empty' ? s.healthAreaHelperEmpty : null]}>{item.helperText}</Text>
+                {item.actionLabel ? (
+                  <View style={s.healthAreaActionHintWrap}>
+                    <Text style={s.healthAreaActionHint}>{item.actionLabel}</Text>
+                  </View>
+                ) : null}
+                <View style={s.healthAreaCardFooter}>
+                  <View style={s.healthAreaChevronCapsule}>
+                    <ChevronRight size={14} color={C.primary} strokeWidth={2.2} />
+                  </View>
+                </View>
+              </Pressable>
             );
           })}
         </View>
 
-        {/* ── Vaccine category detail section ─────────────────────────────── */}
-        {category === 'vaccine' && (
-          <View style={s.categoryDetailSection}>
-            {(vaccineAttentionCounts?.overdueCount ?? 0) + (vaccineAttentionCounts?.dueSoonCount ?? 0) > 0 && (
-              <View style={s.vaccineAttentionRow}>
-                {(vaccineAttentionCounts?.overdueCount ?? 0) > 0 && (
-                  <View style={[s.vaccineAttentionPill, { backgroundColor: '#fdf0f0', borderColor: '#f5dede' }]}>
-                    <Svg width={13} height={13} viewBox="0 0 24 24">
-                      <Path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="#c96a6a" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                    </Svg>
-                    <Text style={[s.vaccineAttentionText, { color: '#c96a6a' }]}>
-                      {vaccineAttentionCounts!.overdueCount} {isTr ? 'Gecikmiş' : 'Overdue'}
-                    </Text>
-                  </View>
-                )}
-                {(vaccineAttentionCounts?.dueSoonCount ?? 0) > 0 && (
-                  <View style={[s.vaccineAttentionPill, { backgroundColor: '#fef6ea', borderColor: '#f5e9d1' }]}>
-                    <Svg width={13} height={13} viewBox="0 0 24 24">
-                      <Circle cx={12} cy={12} r={10} stroke="#c48d42" strokeWidth={2} fill="none" />
-                      <Path d="M12 6v6l4 2" stroke="#c48d42" strokeWidth={2} strokeLinecap="round" fill="none" />
-                    </Svg>
-                    <Text style={[s.vaccineAttentionText, { color: '#c48d42' }]}>
-                      {vaccineAttentionCounts!.dueSoonCount} {isTr ? 'Yaklaşan' : 'Due Soon'}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            )}
-
-            {vaccineNextUpData && <HubFeaturedVaccineCard data={vaccineNextUpData} isTr={isTr} />}
-
-            {vaccineHistoryItems && vaccineHistoryItems.length > 0 ? (
-              <>
-                <Text style={s.categorySectionLabel}>{isTr ? 'AŞI GEÇMİŞİ' : 'VACCINE HISTORY'}</Text>
-                {vaccineHistoryItems.map((item) => (
-                  <HubVaccineCard key={`${item.name}-${item.dueDate}`} item={item} isTr={isTr} />
-                ))}
-              </>
-            ) : (
-              !vaccineNextUpData && (
-                <View>
-                  <Text style={s.categoryEmptyText}>{isTr ? 'Henüz aşı kaydı yok' : 'No vaccine data yet'}</Text>
-                  <Pressable style={s.emptyCta} onPress={() => openCreate('vaccine')}>
-                    <Text style={s.emptyCtaText}>{isTr ? 'Aşı Ekle' : 'Add Vaccine'}</Text>
-                  </Pressable>
-                </View>
-              )
-            )}
+        <View style={s.sectionHeaderRow}>
+          <View>
+            <Text style={s.sectionEyebrow}>{isTr ? 'Son Aktivite' : 'Recent Activity'}</Text>
+            <Text style={s.sectionLeadSecondary}>{isTr ? 'En son eklenen saglik guncellemeleri.' : 'A lightweight preview of the latest health updates.'}</Text>
           </View>
-        )}
-
-        {/* ── Record category detail section ──────────────────────────────── */}
-        {category === 'record' && (
-          <View style={s.categoryDetailSection}>
-            <View style={s.recordSegmentRow}>
-              {(['allergies', 'diagnoses', 'labResults'] as const).map((seg) => {
-                const accent = HUB_SEGMENT_ACCENTS[seg];
-                const isActive = recordsSegment === seg;
-                return (
-                  <Pressable
-                    key={seg}
-                    style={[s.recordSegmentChip, isActive && { backgroundColor: accent.accentBg, borderColor: accent.accent }]}
-                    onPress={() => setRecordsSegment(seg)}
-                  >
-                    <Text style={[s.recordSegmentText, isActive && { color: accent.accent }]}>
-                      {isTr ? accent.labelTr : accent.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {healthRecordsData?.bySegment?.[recordsSegment] ? (
-              <>
-                <Text style={s.categorySectionLabel}>{isTr ? 'AKTİF' : 'ACTIVE'}</Text>
-                <View style={s.recordCard}>
-                  <View style={[s.recordAccentStripe, { backgroundColor: HUB_SEGMENT_ACCENTS[recordsSegment].accent }]} />
-                  <View style={s.recordCardInner}>
-                    <Text style={s.recordCardTitle}>{healthRecordsData.bySegment[recordsSegment]!.activeTitle}</Text>
-                    <Text style={s.recordCardDate}>{healthRecordsData.bySegment[recordsSegment]!.activeDate}</Text>
-                    <Text style={s.recordCardBody} numberOfLines={2}>{healthRecordsData.bySegment[recordsSegment]!.activeBody}</Text>
-                  </View>
-                </View>
-
-                {!!healthRecordsData.bySegment[recordsSegment]!.historyTitle && (
-                  <>
-                    <Text style={s.categorySectionLabel}>{isTr ? 'GEÇMİŞ' : 'HISTORY'}</Text>
-                    <View style={[s.recordCard, s.recordCardMuted]}>
-                      <View style={[s.recordAccentStripe, { backgroundColor: 'rgba(255,255,255,0.2)' }]} />
-                      <View style={s.recordCardInner}>
-                        <Text style={s.recordCardTitleMuted}>{healthRecordsData.bySegment[recordsSegment]!.historyTitle}</Text>
-                        <Text style={s.recordCardDate}>{healthRecordsData.bySegment[recordsSegment]!.historyDate}</Text>
-                      </View>
-                    </View>
-                  </>
-                )}
-              </>
-            ) : (
-              <View>
-                <Text style={s.categoryEmptyText}>{isTr ? 'Henüz sağlık kaydı yok' : 'No record data yet'}</Text>
-                <Pressable style={s.emptyCta} onPress={() => openCreate('diagnosis')}>
-                  <Text style={s.emptyCtaText}>{isTr ? 'Kayıt Ekle' : 'Add Record'}</Text>
-                </Pressable>
-              </View>
-            )}
-          </View>
-        )}
-
-        <Animated.View style={[s.documentsFullWidthWrap, { transform: [{ scale: getCardScale('documents') }] }]}>
-          <Pressable
-            style={[s.moduleCard, s.documentCard, s.documentCardLight, { backgroundColor: HEALTH_MODULE_CARD_THEMES.documents.background, shadowColor: HEALTH_MODULE_CARD_THEMES.documents.shadow, height: documentsCardHeight }]}
-            onPressIn={springDown(getCardScale('documents'), 0.985)}
-            onPressOut={springUp(getCardScale('documents'))}
-            onPress={() => onOpenDocuments?.()}
-          >
-            <View style={[s.moduleCardContent, s.documentCardContent]}>
-              <View style={s.moduleCardHeaderRow}>
-                <View style={[s.moduleCardIcon, { backgroundColor: HEALTH_MODULE_CARD_THEMES.documents.iconBg }]}>
-                  <HealthHubCategoryIcon kind="documents" size={18} colorOverride={HEALTH_MODULE_CARD_THEMES.documents.iconColor} />
-                </View>
-                <View style={s.moduleCardHeaderText}>
-                  <Text style={[s.moduleCardTitle, { fontSize: adaptiveCardTitleSize, lineHeight: adaptiveCardTitleLineHeight }, s.moduleCardTitleDark, s.documentCardTitle]}>
-                    {documentCard?.title ?? (isTr ? 'Belgeler' : 'Documents')}
-                  </Text>
-                </View>
-              </View>
-
-              {documentPrimaryText ? (
-                <View style={s.documentMetricBlock}>
-                  {documentCard?.highlight.label ? (
-                    <Text style={[s.moduleHighlightLabel, s.moduleHighlightLabelDark]}>{documentCard.highlight.label}</Text>
-                  ) : null}
-                  <Text style={[s.moduleMetricPrimary, s.moduleMetricPrimaryDark]} numberOfLines={1}>
-                    {documentPrimaryText}
-                  </Text>
-                  {documentCard?.highlight.secondary ? (
-                    <Text style={[s.moduleMetricSecondary, s.moduleMetricSecondaryDark]} numberOfLines={1}>
-                      {documentCard.highlight.secondary}
-                    </Text>
-                  ) : null}
-                  {documentCard?.highlight.detail ? (
-                    <Text style={[s.moduleHighlightDetail, s.moduleHighlightDetailDark]} numberOfLines={2}>
-                      {documentCard.highlight.detail}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : documentsPreview?.[0]?.title ? (
-                <Text style={[s.documentCardPreview, s.documentCardPreviewDark]} numberOfLines={1}>
-                  {documentsPreview[0].title}
-                </Text>
-              ) : null}
-
-              <View style={s.documentCardFooter}>
-                {documentCard?.countText ? (
-                  <View style={[s.moduleCardCountPill, s.moduleCardCountPillDark]}>
-                    <View style={[s.moduleCardCountDot, s.moduleCardCountDotDark]} />
-                    <Text style={[s.moduleCardCountText, s.moduleCardCountTextDark]}>{documentCard.countText}</Text>
-                  </View>
-                ) : null}
-              </View>
-            </View>
+          <Pressable style={s.historyCta} onPress={handleOpenTimelineHistory}>
+            <Text style={s.historyCtaText}>{isTr ? 'Tum gecmisi gor' : 'View full history'}</Text>
+            <ChevronRight size={14} color={C.primary} strokeWidth={2.2} />
           </Pressable>
-        </Animated.View>
-
-        {/* ── Timeline Preview (last 5, all category) ──────────────────── */}
-        {category === 'all' && timeline.length > 0 && (
-          <View style={s.timelinePreviewBlock}>
-            <View style={s.sectionHeaderCompact}>
-              <View style={s.sectionTextWrap}>
-                <Text style={s.sectionTitle}>{isTr ? 'Son Aktivite' : 'Recent Activity'}</Text>
-              </View>
-            </View>
-            <View style={s.timelinePreviewList}>
-              {timeline.slice(0, 5).map((item, idx) => (
-                <View
-                  key={item.id}
-                  style={[s.timelinePreviewRow, idx < Math.min(timeline.length, 5) - 1 && s.timelinePreviewRowDivider]}
-                >
-                  <View style={[s.timelinePreviewDot, { backgroundColor: timelineTypeAccent(item.type) }]} />
-                  <View style={s.timelinePreviewBody}>
-                    <Text style={s.timelinePreviewTitle} numberOfLines={1}>{item.title}</Text>
-                    <Text style={s.timelinePreviewMeta}>{item.date} · {typeTag(item.type, isTr)}</Text>
-                  </View>
+        </View>
+        <View style={s.timelineFilterRowCompact}>
+          {timelineFilterOptions.map((option) => {
+            const active = option.key === timelineFilter;
+            return (
+              <Pressable
+                key={option.key}
+                style={[s.timelineTab, active ? s.timelineTabActive : null]}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setTimelineFilter(option.key);
+                }}
+              >
+                {timelineFilterIcon(option.key, active)}
+                <Text style={[s.timelineTabText, active ? s.timelineTabTextActive : null]}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <View style={s.timelinePreviewCard}>
+          {filteredTimelinePreview.length > 0 ? (
+            filteredTimelinePreview.slice(0, 3).map((item, idx) => (
+              <View key={item.id} style={[s.timelinePreviewRowModern, idx < Math.min(filteredTimelinePreview.length, 3) - 1 && s.timelinePreviewRowDividerModern]}>
+                <View style={[s.timelinePreviewIconWrapModern, { backgroundColor: `${timelineTypeAccent(item.type)}14` }]}>
+                  {timelineFilterIcon(item.type, true)}
                 </View>
-              ))}
+                <View style={s.timelinePreviewBodyModern}>
+                  <Text style={s.timelinePreviewTitleModern} numberOfLines={1}>{item.title}</Text>
+                  <Text style={s.timelinePreviewMetaModern} numberOfLines={1}>{item.date} · {typeTag(item.type, isTr)}</Text>
+                </View>
+              </View>
+            ))
+          ) : (
+            <View style={s.timelinePreviewEmptyModern}>
+              <Text style={s.timelinePreviewEmptyTitle}>{isTr ? 'Henuz aktivite yok' : 'No activity yet'}</Text>
+              <Text style={s.timelinePreviewEmptyTextModern}>{isTr ? 'Asi veya veteriner ziyareti ekleyerek gecmisi baslatin.' : 'Start with a vaccine or vet visit to build history.'}</Text>
             </View>
-          </View>
-        )}
-
+          )}
+        </View>
         {breedEntry ? (
           <View style={[s.sectionBlock, s.breedSectionBlock]}>
             <View style={s.sectionHeaderCompact}>
               <View style={s.sectionTextWrap}>
-                <Text style={s.sectionTitle}>{isTr ? 'Irk İçgörüleri' : 'Breed Insights'}</Text>
+                <Text style={s.sectionTitle}>{isTr ? 'Irk Ä°Ã§gÃ¶rÃ¼leri' : 'Breed Insights'}</Text>
               </View>
             </View>
             <BreedTeaserRow
@@ -1909,13 +1666,13 @@ export default function HealthHubScreen({
           <Text style={s.aiTextRowMessage} numberOfLines={2}>
             {primaryInsight?.message ?? (
               isTr
-                ? 'Daha derin analiz için Insights ekranını açın.'
+                ? 'Daha derin analiz iÃ§in Insights ekranÄ±nÄ± aÃ§Ä±n.'
                 : 'Open Insights for deeper AI analysis.'
             )}
           </Text>
           {onOpenInsights ? (
             <Pressable style={s.aiTextRowBtn} onPress={onOpenInsights}>
-              <Text style={s.aiTextRowBtnText}>{isTr ? 'Aç' : 'Open'}</Text>
+              <Text style={s.aiTextRowBtnText}>{isTr ? 'AÃ§' : 'Open'}</Text>
               <ChevronRight size={13} color={C.primary} strokeWidth={2.2} />
             </Pressable>
           ) : null}
@@ -1926,22 +1683,6 @@ export default function HealthHubScreen({
       <View pointerEvents="box-none" style={s.topChrome}>
         <Animated.View pointerEvents="none" style={[s.topChromeSurface, { height: topChromeHeight, opacity: topChromeOpacity }]}>
           <BlurView intensity={32} tint="light" style={StyleSheet.absoluteFillObject} />
-          <Animated.View style={[s.headerColorBlendWrap, { opacity: headerColorBlendOpacity }]}>
-            <ExpoLinearGradient
-              colors={['rgba(46,66,48,0.22)', 'rgba(86,117,124,0.18)', 'rgba(201,146,114,0.18)', 'rgba(216,195,165,0.15)']}
-              locations={[0, 0.35, 0.7, 1]}
-              start={{ x: 0, y: 0.5 }}
-              end={{ x: 1, y: 0.5 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-            <ExpoLinearGradient
-              colors={['rgba(86,117,124,0.14)', 'rgba(216,195,165,0.11)', 'rgba(46,66,48,0.12)', 'rgba(201,146,114,0.11)']}
-              locations={[0, 0.35, 0.65, 1]}
-              start={{ x: 0.1, y: 0 }}
-              end={{ x: 0.9, y: 1 }}
-              style={StyleSheet.absoluteFillObject}
-            />
-          </Animated.View>
           <ExpoLinearGradient
             colors={['rgba(255,255,255,0.96)', 'rgba(255,255,255,0.75)', 'rgba(255,255,255,0.24)', 'rgba(255,255,255,0)']}
             locations={[0, 0.45, 0.8, 1]}
@@ -1982,9 +1723,9 @@ export default function HealthHubScreen({
       </View>
 
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {/* BREED INSIGHTS BOTTOM SHEET                                           */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Modal
         visible={breedSheetOpen}
         transparent
@@ -2027,9 +1768,9 @@ export default function HealthHubScreen({
                       ) : null}
                       <Text style={bs.sheetBreedName} numberOfLines={1}>{breedEntry.breed}</Text>
                       <Text style={bs.sheetBreedSub}>
-                        {breedEntry.petType === 'Dog' ? (isTr ? 'Köpek' : 'Dog') : (isTr ? 'Kedi' : 'Cat')}
-                        {'  ·  '}{breedEntry.weightRangeKg[0]}–{breedEntry.weightRangeKg[1]} kg
-                        {'  ·  '}{breedEntry.lifespanYears[0]}–{breedEntry.lifespanYears[1]} {isTr ? 'yıl' : 'yrs'}
+                        {breedEntry.petType === 'Dog' ? (isTr ? 'KÃ¶pek' : 'Dog') : (isTr ? 'Kedi' : 'Cat')}
+                        {'  Â·  '}{breedEntry.weightRangeKg[0]}â€“{breedEntry.weightRangeKg[1]} kg
+                        {'  Â·  '}{breedEntry.lifespanYears[0]}â€“{breedEntry.lifespanYears[1]} {isTr ? 'yÄ±l' : 'yrs'}
                       </Text>
                     </View>
                   </View>
@@ -2054,14 +1795,14 @@ export default function HealthHubScreen({
                       </Svg>
                     </View>
                     <View style={bs.observationTextCol}>
-                      <Text style={bs.observationLabel}>{isTr ? 'SAĞLIK ANALİZİ' : 'HEALTH ANALYSIS'}</Text>
+                      <Text style={bs.observationLabel}>{isTr ? 'SAÄLIK ANALÄ°ZÄ°' : 'HEALTH ANALYSIS'}</Text>
                       <Text style={bs.observationText}>{breedInsight.text}</Text>
                     </View>
                   </View>
                 ) : null}
 
                 {/* Genetic Risks */}
-                <Text style={bs.miniLabel}>{isTr ? 'GENETİK RİSKLER' : 'GENETIC RISKS'}</Text>
+                <Text style={bs.miniLabel}>{isTr ? 'GENETÄ°K RÄ°SKLER' : 'GENETIC RISKS'}</Text>
                 <View style={bs.chipsRow}>
                   {breedEntry.healthRisks.map((r, i) => (
                     <View key={i} style={[bs.chip, breedInsight?.matchedRisks.includes(isTr ? r.label_tr : r.label) && { borderColor: 'rgba(240,120,70,0.45)', backgroundColor: 'rgba(163,67,33,0.30)' }]}>
@@ -2073,7 +1814,7 @@ export default function HealthHubScreen({
                 {/* Daily Care */}
                 {(breedEntry.dailyCare?.length ?? 0) > 0 ? (
                   <>
-                    <Text style={[bs.miniLabel, bs.miniLabelSpaced]}>{isTr ? 'GÜNLÜK BAKIM' : 'DAILY CARE'}</Text>
+                    <Text style={[bs.miniLabel, bs.miniLabelSpaced]}>{isTr ? 'GÃœNLÃœK BAKIM' : 'DAILY CARE'}</Text>
                     {breedEntry.dailyCare!.map((item, i) => (
                       <View key={i} style={bs.careItem}>
                         <View style={bs.careIconBox}>
@@ -2086,7 +1827,7 @@ export default function HealthHubScreen({
                 ) : null}
 
                 {/* Care Tips */}
-                <Text style={[bs.miniLabel, bs.miniLabelSpaced]}>{isTr ? 'VETERİNER ÖNERİLERİ' : 'VET RECOMMENDATIONS'}</Text>
+                <Text style={[bs.miniLabel, bs.miniLabelSpaced]}>{isTr ? 'VETERÄ°NER Ã–NERÄ°LERÄ°' : 'VET RECOMMENDATIONS'}</Text>
                 {breedEntry.careTips.map((tip, i) => (
                   <View key={i} style={bs.tipRow}>
                     <View style={bs.tipDot} />
@@ -2116,14 +1857,14 @@ export default function HealthHubScreen({
                   <View style={bs.lockIconRing}>
                     <LockIcon size={24} color="#c8ede8" />
                   </View>
-                  <Text style={bs.lockTitle}>{isTr ? 'Premium Özellik' : 'Premium Feature'}</Text>
+                  <Text style={bs.lockTitle}>{isTr ? 'Premium Ã–zellik' : 'Premium Feature'}</Text>
                   <Text style={bs.lockSub}>
                     {isTr
-                      ? 'Irk sağlık profili, günlük bakım rehberi ve AI analizini görmek için Pro\'ya geçin.'
+                      ? 'Irk saÄŸlÄ±k profili, gÃ¼nlÃ¼k bakÄ±m rehberi ve AI analizini gÃ¶rmek iÃ§in Pro\'ya geÃ§in.'
                       : 'Upgrade to Pro to unlock breed health profiles, daily care guides, and AI analysis.'}
                   </Text>
                   <View style={bs.lockBtn}>
-                    <Text style={bs.lockBtnText}>{isTr ? 'Pro\'ya Geç' : 'Upgrade to Pro'}</Text>
+                    <Text style={bs.lockBtnText}>{isTr ? 'Pro\'ya GeÃ§' : 'Upgrade to Pro'}</Text>
                   </View>
                 </View>
               </Pressable>
@@ -2132,9 +1873,9 @@ export default function HealthHubScreen({
         </View>
       </Modal>
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {/* DETAIL / DELETE BOTTOM SHEET                                          */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <Modal
         visible={!!selectedItem}
         transparent
@@ -2165,7 +1906,7 @@ export default function HealthHubScreen({
                 <View style={s.sheetActions}>
                   {onOpenDocuments && selectedItem.type !== 'weight' ? (
                     <Pressable style={s.sheetCloseBtn} onPress={onOpenDocuments}>
-                      <Text style={s.sheetCloseBtnText}>{isTr ? 'Belgeleri Gör' : 'View Documents'}</Text>
+                      <Text style={s.sheetCloseBtnText}>{isTr ? 'Belgeleri GÃ¶r' : 'View Documents'}</Text>
                     </Pressable>
                   ) : null}
                   <Pressable style={s.sheetCloseBtn} onPress={() => setSelectedItem(null)}>
@@ -2183,7 +1924,7 @@ export default function HealthHubScreen({
                         }}
                       >
                         <Text style={s.sheetDeleteConfirmText}>
-                          {isTr ? 'Sil — emin misin?' : 'Confirm Delete'}
+                          {isTr ? 'Sil â€” emin misin?' : 'Confirm Delete'}
                         </Text>
                       </Pressable>
                     ) : (
@@ -2199,9 +1940,9 @@ export default function HealthHubScreen({
         </Pressable>
       </Modal>
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {/* ADD RECORD SHEET                                                       */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
+      {/* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <AddRecordSheet
         visible={addSheetOpen}
         mode={addSheetMode}
@@ -2223,7 +1964,7 @@ export default function HealthHubScreen({
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const s = StyleSheet.create({
   screen: {
     flex: 1,
@@ -3435,18 +3176,26 @@ const s = StyleSheet.create({
     marginBottom: 12,
   },
   filterChip: {
-    height: 32,
-    borderRadius: 16,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 1,
-    borderColor: C.outlineVariant,
-    backgroundColor: C.surface,
-    paddingHorizontal: 14,
+    borderColor: 'rgba(71,102,74,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.78)',
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 7,
   },
   filterChipActive: {
-    borderColor: C.primary,
+    borderColor: 'rgba(71,102,74,0.18)',
     backgroundColor: '#edf5ea',
+  },
+  filterChipIconWrap: {
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   filterChipText: {
     color: C.onSurfaceVariant,
@@ -3667,102 +3416,7 @@ const s = StyleSheet.create({
     color: '#fff',
   },
 
-  // ── Category detail sections ──────────────────────────────────────────────
-  categoryDetailSection: {
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    paddingBottom: 8,
-  },
-  vaccineAttentionRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 16,
-    flexWrap: 'wrap',
-  },
-  vaccineAttentionPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-    borderWidth: 1,
-  },
-  vaccineAttentionText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  categorySectionLabel: {
-    color: 'rgba(255,255,255,0.45)',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    marginTop: 20,
-    marginBottom: 10,
-  },
-  categoryEmptyText: {
-    color: 'rgba(255,255,255,0.4)',
-    textAlign: 'center',
-    marginTop: 40,
-    fontSize: 14,
-  },
-  recordSegmentRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 4,
-  },
-  recordSegmentChip: {
-    flex: 1,
-    paddingVertical: 7,
-    alignItems: 'center',
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-  },
-  recordSegmentText: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  recordCard: {
-    flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginBottom: 8,
-  },
-  recordCardMuted: {
-    opacity: 0.6,
-  },
-  recordAccentStripe: {
-    width: 4,
-  },
-  recordCardInner: {
-    flex: 1,
-    padding: 12,
-  },
-  recordCardTitle: {
-    color: '#fff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  recordCardTitleMuted: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 14,
-  },
-  recordCardDate: {
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  recordCardBody: {
-    color: 'rgba(255,255,255,0.6)',
-    fontSize: 13,
-    marginTop: 4,
-  },
-
-  // ── Health Status Banner ──────────────────────────────────────────────────
+  // â”€â”€ Health Status Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   statusBannerRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -3775,9 +3429,9 @@ const s = StyleSheet.create({
   statusPillItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
     borderWidth: 1,
   },
   statusPillItemText: {
@@ -3806,13 +3460,13 @@ const s = StyleSheet.create({
     color: '#416d49',
   },
 
-  // ── Quick Actions ─────────────────────────────────────────────────────────
+  // â”€â”€ Quick Actions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   quickActionsRow: {
     flexDirection: 'row',
     gap: 8,
     paddingHorizontal: 22,
-    marginBottom: 16,
-    flexWrap: 'wrap',
+    marginBottom: 18,
+    paddingTop: 2,
   },
   quickActionChip: {
     flexDirection: 'row',
@@ -3820,7 +3474,7 @@ const s = StyleSheet.create({
     gap: 6,
     height: 36,
     paddingHorizontal: 14,
-    borderRadius: 999,
+    borderRadius: 8,
     backgroundColor: 'rgba(255,255,255,0.78)',
     borderWidth: 1,
     borderColor: 'rgba(71,102,74,0.14)',
@@ -3838,13 +3492,14 @@ const s = StyleSheet.create({
     color: '#a73b21',
   },
 
-  // ── Timeline Preview ──────────────────────────────────────────────────────
+  // â”€â”€ Timeline Preview â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ¦¦ Timeline Preview ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦
   timelinePreviewBlock: {
     marginBottom: 20,
   },
   timelinePreviewList: {
     backgroundColor: 'rgba(255,255,255,0.80)',
-    borderRadius: 22,
+    borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: 'rgba(71,102,74,0.08)',
@@ -3860,10 +3515,12 @@ const s = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(93,96,90,0.10)',
   },
-  timelinePreviewDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+  timelinePreviewIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
     flexShrink: 0,
   },
   timelinePreviewBody: {
@@ -3881,8 +3538,74 @@ const s = StyleSheet.create({
     fontWeight: '500',
     color: C.onSurfaceVariant,
   },
+  timelinePreviewEmpty: {
+    paddingHorizontal: 16,
+    paddingVertical: 18,
+  },
+  timelinePreviewEmptyText: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: C.onSurfaceVariant,
+    fontWeight: '500',
+  },
+  // â”€â”€ Area List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  areaListShell: {
+    backgroundColor: C.surface,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(93,96,90,0.10)',
+    marginBottom: 20,
+  },
+  areaListRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  areaListRowDivider: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(93,96,90,0.10)',
+  },
+  areaListIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#f4f4ee',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+  },
+  areaListBody: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
+  },
+  areaListTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.onSurface,
+    letterSpacing: -0.2,
+  },
+  areaListSub: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: C.onSurfaceVariant,
+  },
+  areaListStatusPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    flexShrink: 0,
+  },
+  areaListStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
 
-  // ── AI Text Row ───────────────────────────────────────────────────────────
+  // â”€â”€ AI Text Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   aiTextRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3915,4 +3638,534 @@ const s = StyleSheet.create({
     color: C.primary,
   },
 
-});
+  sectionHeaderRow: {
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  sectionEyebrow: {
+    fontSize: 13,
+    lineHeight: 16,
+    fontWeight: '700',
+    color: '#47664a',
+    letterSpacing: 0.1,
+  },
+  sectionLead: {
+    marginTop: 5,
+    fontSize: 17,
+    lineHeight: 24,
+    fontWeight: '600',
+    color: '#24342d',
+    maxWidth: 320,
+  },
+  sectionLeadSecondary: {
+    marginTop: 4,
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: '500',
+    color: '#6b736d',
+    maxWidth: 310,
+  },
+  summaryRecommendationRow: {
+    marginTop: -1,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.62)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+  },
+  summaryRecommendationLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+    color: '#6b736d',
+    textTransform: 'uppercase',
+    letterSpacing: 0.35,
+  },
+  summaryRecommendationValue: {
+    marginTop: 4,
+    fontSize: 15,
+    lineHeight: 21,
+    fontWeight: '700',
+    color: '#24342d',
+    letterSpacing: -0.2,
+  },
+  summaryOverviewCard: {
+    marginBottom: 24,
+    backgroundColor: 'rgba(255,255,255,0.90)',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    shadowColor: '#3e5145',
+    shadowOpacity: 0.10,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 3,
+  },
+  summaryMetricRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  summaryMetricItem: {
+    flex: 1,
+    gap: 6,
+  },
+  summaryMetricUrgent: {
+  },
+  summaryMetricLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  summaryMetricDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 999,
+  },
+  summaryMetricDotUrgent: {
+    backgroundColor: '#b13b2a',
+  },
+  summaryMetricDotSoon: {
+    backgroundColor: '#9b6400',
+  },
+  summaryMetricDotMissing: {
+    backgroundColor: '#5f665f',
+  },
+  summaryMetricValue: {
+    fontSize: 36,
+    lineHeight: 40,
+    fontWeight: '800',
+    color: '#24342d',
+    letterSpacing: -1.1,
+  },
+  summaryMetricValueUrgent: {
+    color: '#962f1f',
+  },
+  summaryMetricValueSoon: {
+    color: '#8b5a00',
+  },
+  summaryMetricValueMissing: {
+    color: '#4f5650',
+  },
+  summaryMetricLabel: {
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '600',
+    color: '#66706a',
+  },
+  summaryMetricDivider: {
+    width: 1,
+    marginHorizontal: 14,
+    backgroundColor: 'rgba(71,102,74,0.08)',
+  },
+  quickActionZone: {
+    marginBottom: 26,
+    gap: 10,
+  },
+  quickActionPrimaryCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#405248',
+    shadowOpacity: 0.10,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
+  },
+  quickActionPrimaryVet: {
+    backgroundColor: 'rgba(250,255,250,0.93)',
+  },
+  quickActionPrimaryVaccine: {
+    backgroundColor: 'rgba(248,252,255,0.93)',
+  },
+  quickActionPrimaryHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  quickActionPrimaryIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionPrimaryBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(71,102,74,0.10)',
+  },
+  quickActionPrimaryBadgeText: {
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: '700',
+    color: '#47664a',
+    letterSpacing: 0.1,
+  },
+  quickActionPrimaryTitle: {
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '800',
+    color: '#24342d',
+    letterSpacing: -0.2,
+  },
+  quickActionPrimarySub: {
+    marginTop: 4,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '500',
+    color: '#67716b',
+  },
+  quickActionSecondaryList: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    overflow: 'hidden',
+  },
+  quickActionSecondaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(93,96,90,0.10)',
+  },
+  quickActionSecondaryRowLast: {
+    borderBottomWidth: 0,
+  },
+  quickActionSecondaryIconWrap: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickActionSecondaryTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  quickActionSecondaryTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#24342d',
+  },
+  quickActionSecondarySub: {
+    marginTop: 2,
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '500',
+    color: '#6f7872',
+  },
+  quickActionIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 14,
+  },
+  quickActionIconVet: {
+    backgroundColor: '#eaf5eb',
+  },
+  quickActionIconVaccine: {
+    backgroundColor: '#edf4fa',
+  },
+  quickActionIconWeight: {
+    backgroundColor: '#f2edfb',
+  },
+  quickActionIconDocument: {
+    backgroundColor: '#f7efe6',
+  },
+  healthAreaList: {
+    gap: 14,
+    marginBottom: 28,
+  },
+  healthAreaCard: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+    paddingHorizontal: 18,
+    paddingVertical: 18,
+    shadowColor: '#405248',
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 3,
+  },
+  healthAreaCardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  healthAreaIdentity: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+  healthAreaIconWrap: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#f4f4ee',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  healthAreaIconVet: {
+    backgroundColor: '#eaf5ec',
+    borderColor: 'rgba(78,121,90,0.20)',
+  },
+  healthAreaIconVaccine: {
+    backgroundColor: '#e9f0fa',
+    borderColor: 'rgba(65,104,140,0.20)',
+  },
+  healthAreaIconWeight: {
+    backgroundColor: '#f2edfb',
+    borderColor: 'rgba(95,79,147,0.20)',
+  },
+  healthAreaIconRecord: {
+    backgroundColor: '#eeeaf8',
+    borderColor: 'rgba(90,74,122,0.20)',
+  },
+  healthAreaIconDocument: {
+    backgroundColor: '#f8efe4',
+    borderColor: 'rgba(122,90,58,0.20)',
+  },
+  healthAreaTitleWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  healthAreaTitle: {
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '700',
+    color: '#24342d',
+    letterSpacing: -0.2,
+  },
+  healthAreaCount: {
+    marginTop: 3,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: '#6b736d',
+  },
+  healthAreaStatusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    minWidth: 96,
+    alignItems: 'center',
+  },
+  healthAreaStatusAttention: {
+    backgroundColor: '#fde8e3',
+    borderColor: 'rgba(167,59,33,0.18)',
+  },
+  healthAreaStatusSoon: {
+    backgroundColor: '#fdf2dd',
+    borderColor: 'rgba(155,100,0,0.18)',
+  },
+  healthAreaStatusEmpty: {
+    backgroundColor: '#eef1ee',
+    borderColor: 'rgba(95,102,95,0.16)',
+  },
+  healthAreaStatusOk: {
+    backgroundColor: '#eaf4ec',
+    borderColor: 'rgba(65,109,73,0.16)',
+  },
+  healthAreaStatusText: {
+    fontSize: 12,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
+  healthAreaStatusTextAttention: {
+    color: '#a73b21',
+  },
+  healthAreaStatusTextSoon: {
+    color: '#9b6400',
+  },
+  healthAreaStatusTextEmpty: {
+    color: '#5f665f',
+  },
+  healthAreaStatusTextOk: {
+    color: '#416d49',
+  },
+  healthAreaHelper: {
+    marginTop: 13,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
+    color: '#5f6762',
+  },
+  healthAreaHelperEmpty: {
+    color: '#56605a',
+    fontWeight: '600',
+  },
+  healthAreaActionHintWrap: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(71,102,74,0.09)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.14)',
+  },
+  healthAreaActionHint: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    color: '#47664a',
+  },
+  healthAreaCardFooter: {
+    marginTop: 10,
+    alignItems: 'flex-end',
+  },
+  healthAreaChevronCapsule: {
+    width: 30,
+    height: 30,
+    borderRadius: 999,
+    backgroundColor: 'rgba(71,102,74,0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  historyCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+  },
+  historyCtaText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    color: '#47664a',
+  },
+  timelineFilterRowCompact: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  timelineTab: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.56)',
+  },
+  timelineTabActive: {
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+  },
+  timelineTabText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: '#727972',
+  },
+  timelineTabTextActive: {
+    color: '#24342d',
+  },
+  timelinePreviewCard: {
+    marginBottom: 24,
+    backgroundColor: 'rgba(255,255,255,0.72)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+    overflow: 'hidden',
+  },
+  timelinePreviewRowModern: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  timelinePreviewRowDividerModern: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(93,96,90,0.10)',
+  },
+  timelinePreviewIconWrapModern: {
+    width: 30,
+    height: 30,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelinePreviewBodyModern: {
+    flex: 1,
+    gap: 2,
+  },
+  timelinePreviewTitleModern: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#24342d',
+  },
+  timelinePreviewMetaModern: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
+    color: '#6b736d',
+  },
+  timelinePreviewEmptyModern: {
+    paddingHorizontal: 18,
+    paddingVertical: 20,
+  },
+  timelinePreviewEmptyTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '700',
+    color: '#24342d',
+  },
+  timelinePreviewEmptyTextModern: {
+    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '500',
+    color: '#6b736d',
+  },});
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

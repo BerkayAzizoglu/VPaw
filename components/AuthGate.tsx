@@ -15,6 +15,8 @@ import PremiumScreen from '../screens/PremiumScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
 import WeightTrackingScreen from '../screens/WeightTrackingScreen';
 import VetVisitsScreen from '../screens/VetVisitsScreen';
+import VaccinationsScreen from '../screens/VaccinationsScreen';
+import HealthRecordsScreen from '../screens/HealthRecordsScreen';
 import PetEditScreen from '../screens/PetEditScreen';
 import PetDetailScreen from '../screens/PetDetailScreen';
 import PetsScreen from '../screens/PetsScreen';
@@ -59,6 +61,11 @@ import { cancelReminderNotification, reconcileReminderNotifications } from '../l
 import { hap } from '../lib/haptics';
 import { buildAiInsights, type AiInsight } from '../lib/insightsEngine';
 import { buildUnifiedHealthEventsForPet, summarizeUnifiedHealthEvents } from '../lib/unifiedHealthEvents';
+import {
+  buildHomeTimelinePreview,
+  buildHubTimelinePreview,
+  dedupeJourneyEventsBySource,
+} from '../lib/healthTimelineAdapter';
 import { getBreedHealthEntry } from '../lib/breedHealthData';
 import { generateBreedInsight } from '../lib/breedInsightsEngine';
 import { buildPetHealthPassportData, generatePetPassportPDF, type PetPassportExportSelection } from '../lib/petHealthPassportPdf';
@@ -146,7 +153,9 @@ type AppRoute =
   | 'passport'
   | 'documents'
   | 'notifications'
-  | 'weightTracking';
+  | 'weightTracking'
+  | 'vaccinations'
+  | 'healthRecords';
 
 type PrimaryTab = 'home' | 'healthHub' | 'reminders' | 'insights' | 'profile';
 
@@ -223,6 +232,8 @@ export default function AuthGate() {
   const [premiumBackRoute, setPremiumBackRoute] = useState<AppRoute>('profile');
   const [documentsBackRoute, setDocumentsBackRoute] = useState<AppRoute>('healthHub');
   const [notificationsBackRoute, setNotificationsBackRoute] = useState<AppRoute>('reminders');
+  const [vaccinationsBackRoute, setVaccinationsBackRoute] = useState<AppRoute>('healthHub');
+  const [healthRecordsBackRoute, setHealthRecordsBackRoute] = useState<AppRoute>('healthHub');
   const [weightQuickAdd, setWeightQuickAdd] = useState(false);
   const [petList, setPetList] = useState<string[]>([]);
   const [newPetTemplate, setNewPetTemplate] = useState<PetProfile | null>(null);
@@ -1463,6 +1474,8 @@ export default function AuthGate() {
     openPremium,
     openDocuments,
     openNotifications,
+    openVaccinations,
+    openHealthRecords,
   } = useRouteActions({
     activePetId,
     setRoute,
@@ -1473,6 +1486,8 @@ export default function AuthGate() {
     setPremiumBackRoute,
     setDocumentsBackRoute,
     setNotificationsBackRoute,
+    setVaccinationsBackRoute,
+    setHealthRecordsBackRoute,
     setActivePetWithPersist,
   });
 
@@ -2407,82 +2422,8 @@ export default function AuthGate() {
     });
   };
 
-  const healthHubTimeline = useMemo(() => {
-    const nowMs = Date.now();
-    const base = buildUnifiedHealthEventsForPet(
-      activePetId,
-      medicalEventsByPet,
-      vetVisitsByPet,
-      weightsByPet,
-      healthEventsByPet,
-      petProfiles[activePetId],
-    );
-    const formatRecordKind = (rawType?: unknown) => {
-      if (rawType === 'diagnosis') return locale === 'tr' ? 'Teshis' : 'Diagnosis';
-      if (rawType === 'procedure') return locale === 'tr' ? 'Procedure' : 'Procedure';
-      if (rawType === 'test') return locale === 'tr' ? 'Lab sonucu' : 'Lab result';
-      if (rawType === 'prescription') return locale === 'tr' ? 'Treatment' : 'Treatment';
-      if (rawType === 'note') return locale === 'tr' ? 'Klinik not' : 'Clinical note';
-      return locale === 'tr' ? 'Saglik kaydi' : 'Health record';
-    };
-    const formatShortDate = (raw?: unknown) => {
-      if (typeof raw !== 'string') return null;
-      const ms = parseUpdatedAtMs(raw);
-      if (ms == null) return null;
-      return new Intl.DateTimeFormat(locale === 'tr' ? 'tr-TR' : 'en-US', {
-        month: 'short',
-        day: 'numeric',
-      }).format(new Date(ms));
-    };
-    return base.slice(0, 60).map((item) => ({
-      id: item.id,
-      type: item.type,
-      date: formatReminderDateLabel(item.date, locale),
-      title: item.title || (locale === 'tr' ? 'Saglik olayi' : 'Health event'),
-      notes: item.notes,
-      metaLine:
-        item.type === 'vet'
-          ? [
-              typeof item.metadata?.clinicName === 'string' ? item.metadata.clinicName : null,
-              formatShortDate(item.metadata?.followUpDate),
-            ].filter(Boolean).join(' · ')
-          : item.type === 'vaccine'
-            ? (() => {
-                const dueDate = typeof item.metadata?.dueDate === 'string' ? item.metadata.dueDate : undefined;
-                return dueDate
-                  ? `${locale === 'tr' ? 'Sonraki doz' : 'Next due'} · ${formatShortDate(dueDate) ?? dueDate}`
-                  : (locale === 'tr' ? 'Asi takibi' : 'Vaccination log');
-              })()
-            : item.type === 'weight'
-              ? [
-                  typeof item.metadata?.value === 'number' ? `${(item.metadata.value as number).toFixed(1)} kg` : null,
-                  typeof item.metadata?.change === 'string' ? item.metadata.change : null,
-                ].filter(Boolean).join(' · ')
-              : formatRecordKind(item.metadata?.originalType),
-      statusLabel:
-        item.type === 'vaccine'
-          ? (() => {
-              const dueMs = typeof item.metadata?.dueDate === 'string' ? parseUpdatedAtMs(item.metadata.dueDate) : null;
-              if (dueMs != null && dueMs < nowMs) return locale === 'tr' ? 'Gecikmis' : 'Overdue';
-              if (dueMs != null && dueMs - nowMs <= 14 * 24 * 60 * 60 * 1000) return locale === 'tr' ? 'Yaklasiyor' : 'Due soon';
-              return locale === 'tr' ? 'Guncel' : 'Up to date';
-            })()
-          : item.type === 'vet'
-            ? (item.metadata?.status === 'planned'
-              ? (locale === 'tr' ? 'Planlandi' : 'Planned')
-              : (locale === 'tr' ? 'Logged' : 'Logged'))
-            : item.type === 'record'
-              ? (item.metadata?.status === 'resolved' || item.metadata?.status === 'completed'
-                ? (locale === 'tr' ? 'Resolved' : 'Resolved')
-                : item.metadata?.status === 'abnormal' || item.metadata?.status === 'active'
-                  ? (locale === 'tr' ? 'Monitoring' : 'Monitoring')
-                  : (locale === 'tr' ? 'Logged' : 'Logged'))
-              : (locale === 'tr' ? 'Logged' : 'Logged'),
-    }));
-  }, [activePetId, healthEventsByPet, locale, medicalEventsByPet, petProfiles, vetVisitsByPet, weightsByPet]);
-
-  const healthHubSummary = useMemo(() => {
-    const summary = summarizeUnifiedHealthEvents(
+  const unifiedEventsForActivePet = useMemo(
+    () =>
       buildUnifiedHealthEventsForPet(
         activePetId,
         medicalEventsByPet,
@@ -2491,7 +2432,22 @@ export default function AuthGate() {
         healthEventsByPet,
         petProfiles[activePetId],
       ),
-    );
+    [activePetId, healthEventsByPet, medicalEventsByPet, petProfiles, vetVisitsByPet, weightsByPet],
+  );
+
+  const healthHubTimeline = useMemo(
+    () =>
+      buildHubTimelinePreview({
+        events: unifiedEventsForActivePet,
+        locale,
+        limit: 60,
+        formatDateLabel: formatReminderDateLabel,
+      }),
+    [locale, unifiedEventsForActivePet],
+  );
+
+  const healthHubSummary = useMemo(() => {
+    const summary = summarizeUnifiedHealthEvents(unifiedEventsForActivePet);
     const latestWeight =
       summary.latestWeight && typeof summary.latestWeight.metadata?.value === 'number'
         ? `${(summary.latestWeight.metadata.value as number).toFixed(1)} kg`
@@ -2529,7 +2485,7 @@ export default function AuthGate() {
       : undefined;
 
     return { latestWeight, vaccineStatus, lastVetVisit, totalExpenses };
-  }, [activePetId, healthEventsByPet, locale, medicalEventsByPet, petProfiles, vetVisitsByPet, vetVisitsBridge, weightsByPet]);
+  }, [activePetId, locale, medicalEventsByPet, unifiedEventsForActivePet, vetVisitsByPet, vetVisitsBridge]);
 
   const insightsBreedCard = useMemo(() => {
     const activePet = petProfiles[activePetId];
@@ -2611,7 +2567,7 @@ export default function AuthGate() {
       if (locale === 'tr') return `${count} kayıt`;
       return `${count} ${count === 1 ? 'record' : 'records'}`;
     };
-    const statusLogged = 'Logged';
+    const statusNeedsAttention = 'Needs attention';
     const statusUpToDate = 'Up to date';
     const statusDueSoon = 'Due soon';
     const statusNoData = 'No data';
@@ -2695,9 +2651,11 @@ export default function AuthGate() {
         countText: countText(visits.length),
         statusText: visits.length === 0
           ? statusNoData
-          : (missedVisits > 0 || upcomingVisits > 0)
+          : missedVisits > 0
+            ? statusNeedsAttention
+            : upcomingVisits > 0
             ? statusDueSoon
-            : statusLogged,
+            : statusUpToDate,
         infoText: visits.length === 0
           ? statusNoData
           : nextVisit
@@ -2708,7 +2666,11 @@ export default function AuthGate() {
       },
       records: {
         countText: countText(records.length),
-        statusText: records.length === 0 ? statusNoData : statusLogged,
+        statusText: records.length === 0
+          ? statusNoData
+          : records.some((event) => event.status === 'active' || event.status === 'abnormal')
+            ? statusNeedsAttention
+            : statusUpToDate,
         infoText: latestRecord
           ? `${labelLastEntry} · ${formatRecordLabel(latestRecord)}${formatShortDate(latestRecord.eventDate) ? ` • ${formatShortDate(latestRecord.eventDate)}` : ''}`
           : statusNoData,
@@ -2750,7 +2712,7 @@ export default function AuthGate() {
       },
       documents: {
         countText: countText(documentsCount),
-        statusText: latestDocument ? statusLogged : statusNoData,
+        statusText: latestDocument ? statusUpToDate : statusNoData,
         infoText: latestDocument
           ? `${labelLastEntry} · ${formatDocumentLabel(latestDocument)}${formatShortDate(latestDocument.date) ? ` • ${formatShortDate(latestDocument.date)}` : ''}`
           : statusNoData,
@@ -2842,6 +2804,9 @@ export default function AuthGate() {
     const nextVisit = [...visits]
       .filter((visit) => visit.status === 'planned' && (parseUpdatedAtMs(visit.visitDate) ?? Number.MAX_SAFE_INTEGER) >= nowMs)
       .sort((a, b) => (parseUpdatedAtMs(a.visitDate) ?? Number.MAX_SAFE_INTEGER) - (parseUpdatedAtMs(b.visitDate) ?? Number.MAX_SAFE_INTEGER))[0];
+    const overdueVisit = [...visits]
+      .filter((visit) => visit.status === 'planned' && (parseUpdatedAtMs(visit.visitDate) ?? Number.MAX_SAFE_INTEGER) < nowMs)
+      .sort((a, b) => (parseUpdatedAtMs(a.visitDate) ?? Number.MAX_SAFE_INTEGER) - (parseUpdatedAtMs(b.visitDate) ?? Number.MAX_SAFE_INTEGER))[0];
     const latestVisit = [...visits]
       .filter((visit) => parseUpdatedAtMs(visit.visitDate) != null)
       .sort((a, b) => (parseUpdatedAtMs(b.visitDate) ?? 0) - (parseUpdatedAtMs(a.visitDate) ?? 0))[0];
@@ -2854,9 +2819,18 @@ export default function AuthGate() {
     const latestVaccine = [...vaccines]
       .filter((event) => parseUpdatedAtMs(event.eventDate ?? event.dueDate) != null)
       .sort((a, b) => (parseUpdatedAtMs(b.eventDate ?? b.dueDate) ?? 0) - (parseUpdatedAtMs(a.eventDate ?? a.dueDate) ?? 0))[0];
+    const overdueVaccine = [...vaccines]
+      .filter((event) => {
+        const dueMs = parseUpdatedAtMs(event.dueDate);
+        return dueMs != null && dueMs < nowMs;
+      })
+      .sort((a, b) => (parseUpdatedAtMs(a.dueDate) ?? Number.MAX_SAFE_INTEGER) - (parseUpdatedAtMs(b.dueDate) ?? Number.MAX_SAFE_INTEGER))[0];
     const latestWeight = weights[weights.length - 1];
     const weightDays = daysSince(latestWeight?.date);
     const latestRecord = [...records]
+      .sort((a, b) => (parseUpdatedAtMs(b.eventDate) ?? 0) - (parseUpdatedAtMs(a.eventDate) ?? 0))[0];
+    const activeRecord = [...records]
+      .filter((event) => event.status === 'active' || event.status === 'abnormal')
       .sort((a, b) => (parseUpdatedAtMs(b.eventDate) ?? 0) - (parseUpdatedAtMs(a.eventDate) ?? 0))[0];
 
     return [
@@ -2865,8 +2839,16 @@ export default function AuthGate() {
         title: locale === 'tr' ? 'Veteriner Ziyaretleri' : 'Vet Visits',
         subtitle: '',
         countText: countText(visits.length),
-        statusText: nextVisit ? 'Due soon' : (visits.length > 0 ? 'Logged' : 'No data'),
-        highlight: nextVisit
+        statusText: overdueVisit ? 'Needs attention' : (nextVisit ? 'Due soon' : (visits.length > 0 ? 'Up to date' : 'No data')),
+        highlight: overdueVisit
+          ? {
+              kind: 'date',
+              primary: formatDay(overdueVisit.visitDate),
+              secondary: formatMonth(overdueVisit.visitDate),
+              detail: `Needs attention · ${visitReasonShort(overdueVisit)}`,
+              attention: true,
+            }
+          : nextVisit
           ? {
               kind: 'date',
               primary: formatDay(nextVisit.visitDate),
@@ -2891,8 +2873,16 @@ export default function AuthGate() {
         title: locale === 'tr' ? 'Aşılar' : 'Vaccines',
         subtitle: '',
         countText: countText(vaccines.length),
-        statusText: nextVaccine ? 'Due soon' : (vaccines.length > 0 ? 'Up to date' : 'No data'),
-        highlight: nextVaccine
+        statusText: overdueVaccine ? 'Needs attention' : (nextVaccine ? 'Due soon' : (vaccines.length > 0 ? 'Up to date' : 'No data')),
+        highlight: overdueVaccine
+          ? {
+              kind: 'date',
+              primary: formatDay(overdueVaccine.dueDate),
+              secondary: formatMonth(overdueVaccine.dueDate),
+              detail: `Needs attention · ${overdueVaccine.title}`,
+              attention: true,
+            }
+          : nextVaccine
           ? {
               kind: 'date',
               primary: formatDay(nextVaccine.dueDate),
@@ -2938,12 +2928,14 @@ export default function AuthGate() {
         title: locale === 'tr' ? 'Sağlık Kayıtları' : 'Health Records',
         subtitle: '',
         countText: countText(records.length),
-        statusText: records.length > 0 ? 'Logged' : 'No data',
+        statusText: records.length === 0 ? 'No data' : (activeRecord ? 'Needs attention' : 'Up to date'),
         highlight: {
           kind: 'text',
           label: 'Last entry',
-          primary: latestRecord?.title ?? 'No data',
-          secondary: latestRecord ? formatShortDate(latestRecord.eventDate) : undefined,
+          primary: (activeRecord ?? latestRecord)?.title ?? 'No data',
+          secondary: (activeRecord ?? latestRecord) ? formatShortDate((activeRecord ?? latestRecord)?.eventDate) : undefined,
+          detail: activeRecord ? 'Needs attention' : undefined,
+          attention: !!activeRecord,
         },
       },
       {
@@ -2951,7 +2943,7 @@ export default function AuthGate() {
         title: locale === 'tr' ? 'Belgeler' : 'Documents',
         subtitle: '',
         countText: countText(documentsVaultForActivePet.length),
-        statusText: latestDocument ? 'Logged' : 'No data',
+        statusText: latestDocument ? 'Up to date' : 'No data',
         highlight: {
           kind: 'text',
           label: 'Last entry',
@@ -3082,7 +3074,7 @@ export default function AuthGate() {
         date: dueLabel,
         urgent: true,
         ctaLabel: locale === 'tr' ? 'Aşıyı Yönet' : 'Manage Vaccine',
-        onPress: () => openHealthHubWithCategory('vaccine'),
+        onPress: () => openVaccinations('healthHub' as AppRoute),
         priority: 2,
         dateMs: overdueVaccine.dueMs,
       });
@@ -3127,7 +3119,7 @@ export default function AuthGate() {
         subtitle: dueLabel,
         date: dueLabel,
         ctaLabel: locale === 'tr' ? 'Aşı Planla' : 'Plan Vaccine',
-        onPress: () => openHealthHubWithCategory('vaccine'),
+        onPress: () => openVaccinations('healthHub' as AppRoute),
         priority: 4,
         dateMs: dueSoonVaccine.dueMs,
       });
@@ -3227,42 +3219,12 @@ export default function AuthGate() {
     const medicalEvents = medicalEventsByPet[activePetId] ?? [];
     const vetVisits = vetVisitsByPet[activePetId] ?? [];
 
-    const mapRecordSubtype = (value?: string) => {
-      if (!value) return undefined;
-      if (locale === 'tr') {
-        if (value === 'diagnosis') return 'Teşhis';
-        if (value === 'procedure') return 'Prosedür';
-        if (value === 'test') return 'Test / Görüntüleme';
-        if (value === 'prescription') return 'İlaç';
-      } else {
-        if (value === 'diagnosis') return 'Diagnosis';
-        if (value === 'procedure') return 'Procedure';
-        if (value === 'test') return 'Test / Imaging';
-        if (value === 'prescription') return 'Medication';
-      }
-      return undefined;
-    };
-
-    const unified = buildUnifiedHealthEventsForPet(
-      activePetId,
-      medicalEventsByPet,
-      vetVisitsByPet,
-      weightsByPet,
-      healthEventsByPet,
-      petProfiles[activePetId],
-    )
-      .filter((event) => event.type !== 'weight')
-      .slice(0, 12)
-      .map((event) => ({
-        id: event.id,
-        eventType: event.type === 'vaccine' ? 'vaccine' : event.type === 'vet' ? 'vet' : 'record',
-        title: event.title || (locale === 'tr' ? 'Sağlık kaydı' : 'Health record'),
-        subtitle:
-          event.type === 'record'
-            ? mapRecordSubtype(typeof event.metadata?.originalType === 'string' ? event.metadata.originalType : undefined)
-            : undefined,
-        date: formatReminderDateLabel(event.date, locale),
-      } satisfies HomeJourneyEventItem));
+    const unified = buildHomeTimelinePreview({
+      events: unifiedEventsForActivePet,
+      locale,
+      limit: 12,
+      formatDateLabel: formatReminderDateLabel,
+    });
 
     const overduePlannedVisit = [...vetVisits]
       .filter((visit) => visit.status === 'planned' && (parseUpdatedAtMs(visit.visitDate) ?? Number.MAX_SAFE_INTEGER) < nowMs)
@@ -3285,6 +3247,7 @@ export default function AuthGate() {
         urgent: true,
         actionLabel: locale === 'tr' ? 'Ziyarete Git' : 'Open Visit',
         onAction: () => openSubRoute('vetVisits', 'home'),
+        sourceEventId: `visit-${overduePlannedVisit.id}`,
       });
     }
     if (overdueVaccine) {
@@ -3296,7 +3259,8 @@ export default function AuthGate() {
         date: formatReminderDateLabel(overdueVaccine.dueDate ?? overdueVaccine.eventDate, locale),
         urgent: true,
         actionLabel: locale === 'tr' ? 'Aşıları Aç' : 'Open Vaccines',
-        onAction: () => openHealthHubWithCategory('vaccine'),
+        onAction: () => openVaccinations('healthHub' as AppRoute),
+        sourceEventId: `med-${overdueVaccine.id}`,
       });
     }
     if (upcomingMedicalReminder) {
@@ -3310,20 +3274,12 @@ export default function AuthGate() {
           setPrimaryTab('reminders');
           setRoute('reminders');
         },
+        sourceEventId: `reminder-${upcomingMedicalReminder.id}`,
       });
     }
 
-    const all = [...overlays, ...unified];
-    const unique: HomeJourneyEventItem[] = [];
-    const seen = new Set<string>();
-    for (const item of all) {
-      if (seen.has(item.id)) continue;
-      seen.add(item.id);
-      unique.push(item);
-      if (unique.length >= 4) break;
-    }
-    return unique;
-  }, [activePetId, healthEventsByPet, locale, medicalEventsByPet, openHealthHubWithCategory, openSubRoute, petProfiles, remindersByPet, vetVisitsByPet, weightsByPet]);
+    return dedupeJourneyEventsBySource<HomeJourneyEventItem>([...overlays, ...unified], 4);
+  }, [activePetId, locale, medicalEventsByPet, openSubRoute, remindersByPet, unifiedEventsForActivePet, vetVisitsByPet, weightsByPet]);
 
   const homeSummaryCard = useMemo(() => {
     if (homeNextImportantEvent?.urgent) {
@@ -3788,6 +3744,37 @@ export default function AuthGate() {
     );
   }
 
+  if (route === 'vaccinations') {
+    return (
+      <>
+        <VaccinationsScreen
+          onBack={() => setRoute(vaccinationsBackRoute)}
+          backPreview={resolveBackPreview(vaccinationsBackRoute)}
+          historyItems={vaccinationsBridge?.historyItems}
+          attentionCounts={vaccinationsBridge?.attentionCounts}
+          nextUpData={vaccinationsBridge?.nextUpData}
+          onAddVaccination={() => { setPrimaryAddSheetMode('vaccine'); setPrimaryAddSheetOpen(true); }}
+        />
+        {renderRouteToastOverlay()}
+      </>
+    );
+  }
+
+  if (route === 'healthRecords') {
+    return (
+      <>
+        <HealthRecordsScreen
+          onBack={() => setRoute(healthRecordsBackRoute)}
+          backPreview={resolveBackPreview(healthRecordsBackRoute)}
+          recordsData={healthRecordsForUI ?? undefined}
+          onAddRecord={() => { setPrimaryAddSheetMode('record'); setPrimaryAddSheetOpen(true); }}
+          onOpenVetVisitSource={() => openSubRoute('vetVisits', 'healthRecords' as AppRoute)}
+        />
+        {renderRouteToastOverlay()}
+      </>
+    );
+  }
+
   if (route === 'petProfile') {
     const activePet = petProfiles[activePetId];
     if (!activePet) return null;
@@ -3805,7 +3792,7 @@ export default function AuthGate() {
           setRoute('petEdit');
         }}
         onOpenWeightTracking={() => openWeightTracking(activePetId, 'petProfile')}
-        onOpenVaccinations={() => openHealthHubWithCategory('vaccine')}
+        onOpenVaccinations={() => openVaccinations('healthHub' as AppRoute)}
         onOpenHealthHub={() => openHealthHubWithCategory('all')}
       />,
     );
@@ -3819,7 +3806,7 @@ export default function AuthGate() {
           onBack={() => { setWeightQuickAdd(false); setRoute(weightBackRoute); }}
           backPreview={resolveBackPreview(weightBackRoute)}
           initialShowAdd={weightQuickAdd}
-          onOpenHealthRecords={() => openHealthHubWithCategory('record')}
+          onOpenHealthRecords={() => openHealthRecords(weightBackRoute)}
           onOpenVetVisits={() => openSubRoute('vetVisits', weightBackRoute)}
           petName={activePet.name}
           petType={activePet.petType}
@@ -4017,9 +4004,9 @@ export default function AuthGate() {
         weightEntries={weightsByPet[activePetId] ?? []}
         isPremiumPlan={isPremium}
         healthCardSummary={healthCardSummary}
-        onOpenVaccinations={() => openHealthHubWithCategory('vaccine')}
+        onOpenVaccinations={() => openVaccinations('healthHub' as AppRoute)}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'passport')}
-        onOpenHealthRecords={() => openHealthHubWithCategory('record')}
+        onOpenHealthRecords={() => openHealthRecords('healthHub' as AppRoute)}
         onOpenWeight={() => openPetProfile(activePetId, 'passport')}
         onOpenPremium={() => openPremium('passport')}
         onExportPdf={handleExportPetPassportPdf}
@@ -4059,19 +4046,17 @@ export default function AuthGate() {
         scrollToTopSignal={tabScrollTopSignals.healthHub}
         summary={healthHubSummary}
         timeline={healthHubTimeline}
-        initialCategory={healthHubInitialCategory}
-        categoryResetKey={healthHubCategoryResetKey}
         createPreset={healthHubCreatePreset}
         domainOverview={healthHubDomainOverview}
         areaCards={healthHubAreaCards}
         locale={locale}
-        onPrimaryCta={() => { setPrimaryAddSheetMode('vetVisit'); setPrimaryAddSheetOpen(true); }}
+        onPrimaryCta={() => { setPrimaryAddSheetMode('typeSelect'); setPrimaryAddSheetOpen(true); }}
         onAddRecord={handleAddHealthRecord}
         onCreateFlowClosed={handleHealthHubCreateFlowClosed}
         onDeleteRecord={handleDeleteHealthRecord}
         onOpenVetVisits={() => openSubRoute('vetVisits', 'healthHub')}
-        onOpenHealthRecords={() => openHealthHubWithCategory('record')}
-        onOpenVaccines={() => openHealthHubWithCategory('vaccine')}
+        onOpenHealthRecords={() => openHealthRecords('healthHub' as AppRoute)}
+        onOpenVaccines={() => openVaccinations('healthHub' as AppRoute)}
         onOpenWeightTracking={() => openWeightTracking(activePetId, 'healthHub')}
         onAddWeightEntry={() => { setWeightQuickAdd(true); openWeightTracking(activePetId, 'healthHub'); }}
         onOpenDocuments={() => openDocuments('healthHub')}
@@ -4091,10 +4076,7 @@ export default function AuthGate() {
         petAvatarUri={petProfiles[activePetId]?.image || undefined}
         isPremium={isPremium}
         onUpgradePremium={() => openPremium('healthHub')}
-        vaccineHistoryItems={vaccinationsBridge?.historyItems}
         vaccineAttentionCounts={vaccinationsBridge?.attentionCounts}
-        vaccineNextUpData={vaccinationsBridge?.nextUpData}
-        healthRecordsData={healthRecordsForUI ?? undefined}
       />,
     );
   }
@@ -4271,11 +4253,11 @@ export default function AuthGate() {
       onOpenPetProfile={(petId) => openPetProfile(petId || activePetId, 'home')}
       onOpenVaccinations={(petId) => {
         if (petId) setActivePetWithPersist(petId);
-        openHealthHubWithCategory('vaccine');
+        openVaccinations('healthHub' as AppRoute);
       }}
       onOpenHealthRecords={(petId) => {
         if (petId) setActivePetWithPersist(petId);
-        openHealthHubWithCategory('record');
+        openHealthRecords('healthHub' as AppRoute);
       }}
       onOpenVetVisits={(petId) => {
         if (petId) setActivePetWithPersist(petId);

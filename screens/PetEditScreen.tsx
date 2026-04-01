@@ -3,10 +3,12 @@ import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import {
   Alert,
   Image,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,  Switch,
@@ -330,6 +332,18 @@ function toBirthDateIso(parts: { year: number; month: number; day: number }) {
   return String(parts.year) + '-' + mm + '-' + dd;
 }
 
+function birthPartsToDate(parts: { year: number; month: number; day: number }) {
+  return new Date(parts.year, Math.max(0, parts.month - 1), Math.max(1, parts.day));
+}
+
+function dateToBirthParts(date: Date) {
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: date.getDate(),
+  };
+}
+
 function getAgePartsFromBirthDate(value: string, now = new Date()) {
   const birth = parseBirthDate(value);
   let years = now.getFullYear() - birth.year;
@@ -385,6 +399,23 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
     setNameDraft(pet.name);
     setMicrochipDraft(pet.microchip || '');
   }, [pet]);
+
+  const handleBirthDatePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') {
+      if (event.type === 'set' && selectedDate) {
+        const next = dateToBirthParts(selectedDate);
+        setBirthPicker(next);
+        applySelection(toBirthDateIso(next));
+      } else {
+        setPickerField(null);
+      }
+      return;
+    }
+
+    if (selectedDate) {
+      setBirthPicker(dateToBirthParts(selectedDate));
+    }
+  };
 
   const breedOptions = useMemo(() => sortAlpha(draft.petType === 'Cat' ? CAT_BREEDS : DOG_BREEDS), [draft.petType]);
   const coatPatternOptions = useMemo(() => sortAlpha(getCoatPatternOptions(draft.petType, draft.breed)), [draft.petType, draft.breed]);
@@ -739,7 +770,22 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
           <View style={{ height: 8 }} />
         </ScrollView>
 
-        <Modal transparent visible={pickerField !== null} animationType="fade" onRequestClose={() => setPickerField(null)}>
+        {pickerField === 'birthDate' && Platform.OS === 'android' ? (
+          <DateTimePicker
+            value={birthPartsToDate(birthPicker)}
+            mode="date"
+            display="default"
+            maximumDate={new Date()}
+            onChange={handleBirthDatePickerChange}
+          />
+        ) : null}
+
+        <Modal
+          transparent
+          visible={pickerField !== null && !(pickerField === 'birthDate' && Platform.OS === 'android')}
+          animationType="fade"
+          onRequestClose={() => setPickerField(null)}
+        >
           <Pressable style={styles.modalBackdrop} onPress={() => setPickerField(null)}>
             <Pressable style={styles.modalCard} onPress={() => {}}>
               <Text style={styles.modalTitle}>
@@ -802,49 +848,14 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
                 </View>
               ) : pickerField === 'birthDate' ? (
                 <View>
-                  <View style={styles.dateHeadRow}>
-                    <Text style={styles.dateHeadLabel}>{isTr ? 'Gün' : 'Day'}</Text>
-                    <Text style={styles.dateHeadLabel}>{isTr ? 'Ay' : 'Month'}</Text>
-                    <Text style={styles.dateHeadLabel}>{isTr ? 'Yıl' : 'Year'}</Text>
-                  </View>
-
-                  <View style={styles.datePickerRow}>
-                    <ScrollView style={styles.dateCol} showsVerticalScrollIndicator={false}>
-                      {Array.from({ length: daysInMonth(birthPicker.year, birthPicker.month) }, (_, i) => i + 1).map((day) => (
-                        <Pressable
-                          key={String(day)}
-                          style={[styles.dateItem, birthPicker.day === day && styles.dateItemActive]}
-                          onPress={() => setBirthPicker((prev) => ({ ...prev, day }))}
-                        >
-                          <Text style={[styles.dateItemText, birthPicker.day === day && styles.dateItemTextActive]}>{day}</Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-
-                    <ScrollView style={styles.dateCol} showsVerticalScrollIndicator={false}>
-                      {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
-                        <Pressable
-                          key={String(month)}
-                          style={[styles.dateItem, birthPicker.month === month && styles.dateItemActive]}
-                          onPress={() => setBirthPicker((prev) => clampBirthDateParts({ ...prev, month }))}
-                        >
-                          <Text style={[styles.dateItemText, birthPicker.month === month && styles.dateItemTextActive]}>{MONTH_LABELS[month - 1]}</Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-
-                    <ScrollView style={styles.dateCol} showsVerticalScrollIndicator={false}>
-                      {Array.from({ length: 26 }, (_, i) => new Date().getFullYear() - i).map((year) => (
-                        <Pressable
-                          key={String(year)}
-                          style={[styles.dateItem, birthPicker.year === year && styles.dateItemActive]}
-                          onPress={() => setBirthPicker((prev) => clampBirthDateParts({ ...prev, year }))}
-                        >
-                          <Text style={[styles.dateItemText, birthPicker.year === year && styles.dateItemTextActive]}>{year}</Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  </View>
+                  <DateTimePicker
+                    value={birthPartsToDate(birthPicker)}
+                    mode="date"
+                    display="spinner"
+                    maximumDate={new Date()}
+                    onChange={handleBirthDatePickerChange}
+                    style={styles.nativeDatePicker}
+                  />
 
                   <Pressable style={styles.applyDateBtn} onPress={() => applySelection(toBirthDateIso(birthPicker))}>
                     <Text style={styles.applyDateBtnText}>{isTr ? 'Doğum Tarihini Uygula' : 'Apply Birth Date'}</Text>
@@ -1567,6 +1578,9 @@ const styles = StyleSheet.create({
     color: '#7b6556',
     fontWeight: '600',
     marginBottom: 10,
+  },
+  nativeDatePicker: {
+    alignSelf: 'stretch',
   },
   applyDateBtn: {
     height: 42,

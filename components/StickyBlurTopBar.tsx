@@ -2,9 +2,10 @@ import React from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { RefreshCw } from 'lucide-react-native';
 
 export const STICKY_HEADER_BUTTON_SIZE = 42;
-export const STICKY_HEADER_CONTENT_HEIGHT = 56;
+export const STICKY_HEADER_CONTENT_HEIGHT = 64;
 
 export function getStickyHeaderContentTop(topInset: number) {
   return topInset + STICKY_HEADER_CONTENT_HEIGHT + 12;
@@ -64,9 +65,14 @@ export default function StickyBlurTopBar({
 
       <View style={[styles.topBarRow, { height: topBarHeight + 2, paddingTop: topInset + 3 }]}>
         <View style={styles.topBarSide}>{leftSlot}</View>
-        <Text numberOfLines={1} style={[styles.topBarTitle, { color: titleColor }]}>
-          {title}
-        </Text>
+        <View style={styles.topBarTitleWrap}>
+          <Text numberOfLines={1} style={[styles.topBarTitle, { color: titleColor }]}>
+            {title}
+          </Text>
+          <View style={styles.titleAccent}>
+            <RefreshCw size={10} color={titleColor} strokeWidth={2.2} />
+          </View>
+        </View>
         <View style={[styles.topBarSide, styles.topBarSideRight]}>
           {rightSlot ?? <View style={styles.iconGhost} />}
         </View>
@@ -105,14 +111,30 @@ const styles = StyleSheet.create({
   topBarSideRight: {
     alignItems: 'flex-end',
   },
-  topBarTitle: {
+  topBarTitleWrap: {
     flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    gap: 4,
+  },
+  topBarTitle: {
     textAlign: 'center',
     fontSize: 15,
     lineHeight: 20,
     fontWeight: '800',
     letterSpacing: 1.35,
-    paddingHorizontal: 8,
+    maxWidth: '100%',
+  },
+  titleAccent: {
+    minWidth: 24,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.34)',
+    borderWidth: 1,
+    borderColor: 'rgba(115,139,134,0.16)',
   },
   iconGhost: {
     width: STICKY_HEADER_BUTTON_SIZE,

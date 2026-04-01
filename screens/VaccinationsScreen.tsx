@@ -125,33 +125,21 @@ function FeaturedVaccineCard({ data, locale }: { data: VaccinationsNextUpData; l
 
   return (
     <View style={styles.featuredCard}>
-      {/* glass blob */}
-      <View style={styles.featuredBlob} />
-
       <View style={styles.featuredTop}>
         <View style={styles.featuredLeft}>
-          {/* glass tag */}
-          <View style={styles.glassTag}>
-            <Text style={styles.glassTagText}>{isTr ? 'YAKLAŞAN' : 'UPCOMING'}</Text>
-          </View>
+          <Text style={styles.featuredTag}>{isTr ? 'YAKLAŞAN' : 'UPCOMING'}</Text>
           <Text style={styles.featuredTitle}>{localized.name}</Text>
           <Text style={styles.featuredSub}>{localized.subtitle}</Text>
         </View>
-        {/* date box */}
         <View style={styles.featuredDateBox}>
           <Text style={styles.featuredDateNum}>{dayStr}</Text>
           <Text style={styles.featuredDateSub}>{data.inWeeks}</Text>
         </View>
       </View>
-
       <View style={styles.featuredMeta}>
         <View style={styles.featuredMetaItem}>
-          <Icon kind="syringe" size={14} color="rgba(255,255,255,0.8)" />
+          <Icon kind="syringe" size={13} color="#5d605a" />
           <Text style={styles.featuredMetaText}>{data.date}</Text>
-        </View>
-        <View style={styles.featuredMetaItem}>
-          <Icon kind="shield" size={14} color="rgba(255,255,255,0.8)" />
-          <Text style={styles.featuredMetaText}>{localized.subtitle}</Text>
         </View>
       </View>
     </View>
@@ -512,18 +500,13 @@ const styles = StyleSheet.create({
     width: 76,
   },
   addPill: {
-    height: 36,
+    height: 34,
     paddingHorizontal: 14,
-    borderRadius: 999,
-    backgroundColor: '#56757c',
+    borderRadius: 8,
+    backgroundColor: '#47664a',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    shadowColor: '#27434b',
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
   },
   addPillText: {
     fontSize: 14,
@@ -537,15 +520,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: '#fff',
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    marginBottom: 24,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 1,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(93,96,90,0.10)',
   },
   attentionLeft: {
     flexDirection: 'row',
@@ -554,9 +534,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   attentionPill: {
-    height: 28,
-    paddingHorizontal: 10,
-    borderRadius: 999,
+    height: 26,
+    paddingHorizontal: 8,
+    borderRadius: 6,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
@@ -599,102 +579,80 @@ const styles = StyleSheet.create({
 
   // ── Featured card ──
   featuredCard: {
-    borderRadius: 28,
-    backgroundColor: '#56757c',
-    padding: 24,
-    overflow: 'hidden',
-    shadowColor: '#27434b',
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 4,
-  },
-  featuredBlob: {
-    position: 'absolute',
-    top: -40,
-    right: -40,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    padding: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(93,96,90,0.10)',
   },
   featuredTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   featuredLeft: {
     flex: 1,
     paddingRight: 12,
-    gap: 8,
+    gap: 4,
   },
-  glassTag: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-  },
-  glassTagText: {
+  featuredTag: {
     fontSize: 9,
     fontWeight: '700',
     letterSpacing: 1.2,
-    color: 'rgba(255,255,255,0.85)',
+    color: '#56757c',
+    marginBottom: 4,
   },
   featuredTitle: {
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: '800',
-    color: '#fff',
+    color: '#30332e',
     letterSpacing: -0.3,
-    lineHeight: 28,
+    lineHeight: 25,
   },
   featuredSub: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.65)',
-    lineHeight: 20,
+    color: '#5d605a',
   },
   featuredDateBox: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    borderRadius: 16,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    backgroundColor: '#f4f4ee',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    minWidth: 72,
+    minWidth: 64,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(93,96,90,0.10)',
   },
   featuredDateNum: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '800',
-    color: '#fff',
-    lineHeight: 32,
+    color: '#30332e',
+    lineHeight: 28,
   },
   featuredDateSub: {
     fontSize: 9,
     fontWeight: '700',
-    color: 'rgba(255,255,255,0.7)',
+    color: '#5d605a',
     letterSpacing: 0.5,
     marginTop: 2,
     textAlign: 'center',
   },
   featuredMeta: {
     flexDirection: 'row',
-    gap: 20,
+    gap: 16,
   },
   featuredMetaItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   featuredMetaText: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '500',
-    color: 'rgba(255,255,255,0.75)',
+    color: '#5d605a',
   },
 
   // ── Vaccine card ──
@@ -705,20 +663,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 14,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(93,96,90,0.10)',
   },
   vaccineIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -755,9 +710,9 @@ const styles = StyleSheet.create({
     color: '#5d605a',
   },
   vaccinePill: {
-    height: 26,
-    paddingHorizontal: 10,
-    borderRadius: 999,
+    height: 24,
+    paddingHorizontal: 8,
+    borderRadius: 6,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -777,10 +732,12 @@ const styles = StyleSheet.create({
   },
   statsCard: {
     flex: 1,
-    backgroundColor: '#ecf2f3',
-    borderRadius: 24,
-    padding: 20,
+    backgroundColor: '#f4f4ee',
+    borderRadius: 12,
+    padding: 16,
     gap: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(93,96,90,0.08)',
   },
   statsLabel: {
     fontSize: 10,

@@ -30,7 +30,8 @@ const fallbackPetHeroUri = Image.resolveAssetSource(require('../assets/icon.png'
 
 export type JourneyEventItem = {
   id: string;
-  eventType: 'reminder' | 'vaccine' | 'vet' | 'record' | 'insight';
+  sourceEventId?: string;
+  eventType: 'reminder' | 'vaccine' | 'vet' | 'record' | 'weight' | 'insight';
   title: string;
   subtitle?: string;
   date?: string;
@@ -916,7 +917,7 @@ export default function HomeScreen({
                 ? 'İlk kaydı ekleyin, yolculuk burada akmaya başlasın.'
                 : 'Add your first record and this timeline will come alive.'}
             </Text>
-            <Pressable style={styles.journeyEmptyCta} onPress={onOpenAddReminder}>
+            <Pressable style={styles.journeyEmptyCta} onPress={onQuickAdd ?? onOpenAddReminder}>
               <Text style={styles.journeyEmptyCtaText}>{isTr ? 'İlk Kaydı Ekle' : 'Add First Record'}</Text>
             </Pressable>
           </View>
@@ -1086,6 +1087,7 @@ function JourneyCard({
     if (eventType === 'vaccine') return { iconBg: '#cbebc8', iconFg: '#3a6a3a', label: isTr ? 'AŞI' : 'VACCINE' };
     if (eventType === 'vet') return { iconBg: '#edffe3', iconFg: '#3a6e45', label: isTr ? 'VET ZİYARETİ' : 'VET VISIT' };
     if (eventType === 'record') return { iconBg: '#ede8f5', iconFg: '#5a4a7a', label: isTr ? 'SAĞLIK KAYDI' : 'HEALTH RECORD' };
+    if (eventType === 'weight') return { iconBg: '#e3eef8', iconFg: '#3a4e7a', label: isTr ? 'KİLO' : 'WEIGHT' };
     if (eventType === 'reminder') return { iconBg: '#e3eef8', iconFg: '#3a4e7a', label: isTr ? 'HATIRLATMA' : 'REMINDER' };
     return { iconBg: '#eeeee8', iconFg: '#5d605a', label: isTr ? 'SAĞLIK NOTU' : 'HEALTH NOTE' };
   })();

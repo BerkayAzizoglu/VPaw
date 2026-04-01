@@ -1544,18 +1544,13 @@ const styles = StyleSheet.create({
 
   // Current weight card
   currentCard: {
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,249,245,0.92)',
+    borderRadius: 12,
+    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: 'rgba(201,146,114,0.16)',
-    paddingHorizontal: 22,
-    paddingTop: 20,
-    paddingBottom: 18,
-    shadowColor: '#8f5d42',
-    shadowOpacity: 0.10,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    borderColor: 'rgba(93,96,90,0.10)',
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 16,
   },
   currentCardLabel: {
     fontSize: 10,
@@ -1603,16 +1598,16 @@ const styles = StyleSheet.create({
     color: '#5d605a',
   },
   changePill: {
-    height: 28,
-    borderRadius: 14,
+    height: 24,
+    borderRadius: 6,
     backgroundColor: '#faede2',
     borderWidth: 1,
     borderColor: '#e8c4a0',
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 6,
+    marginBottom: 4,
   },
   changePillText: {
     fontSize: 12,
@@ -1843,22 +1838,19 @@ const styles = StyleSheet.create({
 
   // Insight cards
   insightCard: {
-    borderRadius: 20,
+    borderRadius: 12,
     backgroundColor: '#fff',
-    paddingVertical: 16,
-    paddingHorizontal: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
     flexDirection: 'row',
     gap: 12,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(93,96,90,0.10)',
   },
   insightIconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 8,
     backgroundColor: '#eeeee8',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1892,14 +1884,11 @@ const styles = StyleSheet.create({
 
   // History card
   historyCard: {
-    borderRadius: 20,
+    borderRadius: 12,
     backgroundColor: '#fff',
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(93,96,90,0.10)',
   },
   historyRow: {
     minHeight: 64,
@@ -1922,7 +1911,7 @@ const styles = StyleSheet.create({
   historyDateIconBox: {
     width: 34,
     height: 34,
-    borderRadius: 10,
+    borderRadius: 8,
     backgroundColor: '#eeeee8',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1944,9 +1933,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   historyDeltaPill: {
-    borderRadius: 999,
+    borderRadius: 6,
     backgroundColor: '#eeeee8',
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 2,
   },
   historyDeltaText: {

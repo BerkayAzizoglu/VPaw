@@ -12,6 +12,8 @@ export function useRouteActions<Route extends string>(args: {
   setPremiumBackRoute: Dispatch<SetStateAction<Route>>;
   setDocumentsBackRoute: Dispatch<SetStateAction<Route>>;
   setNotificationsBackRoute: Dispatch<SetStateAction<Route>>;
+  setVaccinationsBackRoute: Dispatch<SetStateAction<Route>>;
+  setHealthRecordsBackRoute: Dispatch<SetStateAction<Route>>;
   setActivePetWithPersist: (petId: string) => void;
 }) {
   const {
@@ -24,6 +26,8 @@ export function useRouteActions<Route extends string>(args: {
     setPremiumBackRoute,
     setDocumentsBackRoute,
     setNotificationsBackRoute,
+    setVaccinationsBackRoute,
+    setHealthRecordsBackRoute,
     setActivePetWithPersist,
   } = args;
 
@@ -66,6 +70,16 @@ export function useRouteActions<Route extends string>(args: {
     setRoute('notifications' as Route);
   }, [setNotificationsBackRoute, setRoute]);
 
+  const openVaccinations = useCallback((from: Route = 'healthHub' as Route) => {
+    setVaccinationsBackRoute(from);
+    setRoute('vaccinations' as Route);
+  }, [setVaccinationsBackRoute, setRoute]);
+
+  const openHealthRecords = useCallback((from: Route = 'healthHub' as Route) => {
+    setHealthRecordsBackRoute(from);
+    setRoute('healthRecords' as Route);
+  }, [setHealthRecordsBackRoute, setRoute]);
+
   return {
     openSubRoute,
     openPetProfile,
@@ -74,5 +88,7 @@ export function useRouteActions<Route extends string>(args: {
     openPremium,
     openDocuments,
     openNotifications,
+    openVaccinations,
+    openHealthRecords,
   };
 }
