@@ -230,8 +230,12 @@ function RecordDetailSheet({
             <View style={ss.sheetDivider} />
 
             {/* Description */}
-            <Text style={ss.sheetBodyLabel}>{isTr ? 'Notlar' : 'Notes'}</Text>
-            <Text style={ss.sheetBodyText}>{body}</Text>
+            {body ? (
+              <>
+                <Text style={ss.sheetBodyLabel}>{isTr ? 'Notlar' : 'Notes'}</Text>
+                <Text style={ss.sheetBodyText}>{body}</Text>
+              </>
+            ) : null}
 
             {/* Source info */}
             <View style={ss.sheetDivider} />

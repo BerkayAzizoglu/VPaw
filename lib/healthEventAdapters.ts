@@ -89,7 +89,10 @@ export function getVaccinationsFromEvents(
 
   const eventHistory = rawEvents.map((event) => {
     const status = getStatusFromDate(event.date);
-    const subtitle = ensureString(event.description, legacyProfile?.vaccines ?? 'Vaccination');
+    const vaccineTypeHint = typeof event.metadata?.vaccineType === 'string' && event.metadata.vaccineType !== event.title
+      ? event.metadata.vaccineType
+      : undefined;
+    const subtitle = ensureString(event.description, vaccineTypeHint ?? '');
     return {
       name: ensureString(event.title, 'Vaccination'),
       subtitle,
@@ -103,7 +106,7 @@ export function getVaccinationsFromEvents(
     const status = getStatusFromDate(item.date);
     return {
       name: item.name,
-      subtitle: legacyProfile?.vaccines || 'Vaccination',
+      subtitle: '',
       status,
       dueDate: toDateLabel(item.date),
       tint: status === 'overdue' ? 'danger' : 'neutral',
@@ -165,7 +168,7 @@ export function getVaccinesForUI(
     petId,
     type: 'vaccination',
     title: event.title,
-    description: event.note,
+    description: event.note || (event.subcategory && event.subcategory !== event.title ? event.subcategory : undefined),
     date: event.eventDate,
     metadata: {
       vaccineType: event.subcategory ?? event.title,
@@ -339,13 +342,13 @@ export function getHealthRecordsFromEvents(
     return {
       activeTitle: ensureString(primary?.title, fallbackTitle),
       activeDate: toDateLabel(primary?.date),
-      activeBody: ensureString(primary?.description, 'Record details are available.'),
+      activeBody: primary?.description?.trim() || '',
       activeBadge: status === 'resolved' ? 'Resolved' : status === 'active' ? 'Active' : 'Monitoring',
       activeSeverity: severity.charAt(0).toUpperCase() + severity.slice(1),
       activeSourceType: toHealthRecordSourceType(primary?.metadata?.source),
       historyTitle: ensureString(secondary?.title, ensureString(primary?.title, fallbackTitle)),
       historyDate: toDateLabel(secondary?.date || primary?.date),
-      historyBody: ensureString(secondary?.description, 'Previous record details are available.'),
+      historyBody: secondary?.description?.trim() || '',
       resolvedBadge: 'Resolved',
       historySeverity: 'Low',
       historySourceType: toHealthRecordSourceType(secondary?.metadata?.source ?? primary?.metadata?.source),

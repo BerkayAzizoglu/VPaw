@@ -169,7 +169,8 @@ function VisitCard({
   onEdit?: () => void;
   onOpenDocuments?: () => void;
 }) {
-  const parts = item.date.split('-');
+  const isoDate = item.rawDate ?? '';
+  const parts = isoDate.split('-');
   const monthIdx = parseInt(parts[1] ?? '1', 10) - 1;
   const day = parts[2] ?? '—';
   const mon = (isTr ? MONTHS_TR : MONTHS_EN)[monthIdx] ?? '—';
@@ -659,8 +660,8 @@ export default function VetVisitsScreen({
 
   const visitsData = visits ?? fallbackVisits;
   const canceledVisits = useMemo(() => visitsData.filter((v) => v.status === 'canceled'), [visitsData]);
-  const pastVisits = useMemo(() => visitsData.filter((v) => v.status !== 'canceled' && v.date <= today), [visitsData, today]);
-  const plannedVisits = useMemo(() => visitsData.filter((v) => v.status !== 'canceled' && v.date > today), [visitsData, today]);
+  const pastVisits = useMemo(() => visitsData.filter((v) => v.status !== 'canceled' && (v.rawDate ?? v.date) <= today), [visitsData, today]);
+  const plannedVisits = useMemo(() => visitsData.filter((v) => v.status !== 'canceled' && (v.rawDate ?? v.date) > today), [visitsData, today]);
 
   const totalCurrency = visitsData.find((v) => v.currency)?.currency ?? 'TL';
   const visitsCountText = isTr ? `${visitsData.length} Ziyaret` : `${visitsData.length} Visits`;
