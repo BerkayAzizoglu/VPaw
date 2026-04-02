@@ -13,6 +13,8 @@ export type HubTimelinePreviewItem = {
   notes?: string;
   metaLine?: string;
   statusLabel: SharedHealthStatus;
+  /** ID of the parent vet visit, if this record was created during a visit */
+  vetVisitId?: string;
 };
 
 export type HomeTimelinePreviewItem = {
@@ -130,6 +132,7 @@ export function buildHubTimelinePreview({
     notes: item.notes,
     metaLine: buildMetaLine(item, locale),
     statusLabel: resolveStatus(item, nowMs),
+    vetVisitId: typeof item.metadata?.vetVisitId === 'string' ? item.metadata.vetVisitId : undefined,
   }));
 }
 

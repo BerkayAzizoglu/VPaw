@@ -30,6 +30,7 @@ export type CreateVetVisitPayload = {
   date: string;
   clinic?: string;
   reason: VetVisitReasonCategory;
+  status?: 'planned' | 'completed' | 'canceled';
   amount?: number;
   currency?: string;
   note?: string;
@@ -51,12 +52,16 @@ type VetVisitsScreenProps = {
   status?: 'ready' | ScreenStateMode;
   onRetry?: () => void;
   visits?: VisitItem[];
+  /** Raw visit id prefix used to strip 'mvp-vet-' from VisitItem.id before calling onEditVisit */
+  visitIdPrefix?: string;
 };
 
 export type VisitItem = {
   id: string;
   icon: 'stethoscope' | 'pulse';
   date: string;
+  /** ISO date string (YYYY-MM-DD) for form editing */
+  rawDate?: string;
   title: string;
   clinic: string;
   doctor: string;
@@ -65,6 +70,7 @@ export type VisitItem = {
   paymentText?: string;
   attachments: string[];
   attachPlaceholder?: boolean;
+  status?: 'planned' | 'completed' | 'canceled';
 };
 
 function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethoscope' | 'wallet' | 'clinic' | 'file' | 'plus' | 'pulse' | 'edit' | 'check'; size?: number; color?: string }) {
@@ -256,6 +262,7 @@ export default function VetVisitsScreen({
   const [visitDate, setVisitDate] = useState(today);
   const [visitClinic, setVisitClinic] = useState('');
   const [visitReason, setVisitReason] = useState<VetVisitReasonCategory>('checkup');
+  const [visitStatus, setVisitStatus] = useState<'planned' | 'completed' | 'canceled'>('completed');
   const [visitNote, setVisitNote] = useState('');
   const [visitAmount, setVisitAmount] = useState('');
   const [visitCurrency, setVisitCurrency] = useState('TL');
@@ -420,6 +427,7 @@ export default function VetVisitsScreen({
     setVisitDate(today);
     setVisitClinic('');
     setVisitReason('checkup');
+    setVisitStatus('completed');
     setVisitNote('');
     setVisitAmount('');
     setVisitCurrency('TL');
@@ -459,8 +467,9 @@ export default function VetVisitsScreen({
   const openEditModal = (item: VisitItem) => {
     resetCreateForm();
     setEditingVisitId(item.id);
-    setVisitDate(item.date);
+    setVisitDate(item.rawDate ?? item.date);
     setVisitClinic(item.clinic ?? '');
+    if (item.status) setVisitStatus(item.status);
     if (item.amount != null) setVisitAmount(String(item.amount));
     if (item.currency) setVisitCurrency(item.currency);
     setIsCreateVisible(true);
@@ -631,6 +640,7 @@ export default function VetVisitsScreen({
       date: visitDateIso,
       clinic: visitClinic.trim() || undefined,
       reason: visitReason,
+      status: visitStatus,
       note: visitNote.trim() || undefined,
       amount: Number.isFinite(parsedAmount) && parsedAmount > 0 ? parsedAmount : undefined,
       currency: visitAmount.trim() ? visitCurrency : undefined,
@@ -648,8 +658,9 @@ export default function VetVisitsScreen({
   };
 
   const visitsData = visits ?? fallbackVisits;
-  const pastVisits = useMemo(() => visitsData.filter((v) => v.date <= today), [visitsData, today]);
-  const plannedVisits = useMemo(() => visitsData.filter((v) => v.date > today), [visitsData, today]);
+  const canceledVisits = useMemo(() => visitsData.filter((v) => v.status === 'canceled'), [visitsData]);
+  const pastVisits = useMemo(() => visitsData.filter((v) => v.status !== 'canceled' && v.date <= today), [visitsData, today]);
+  const plannedVisits = useMemo(() => visitsData.filter((v) => v.status !== 'canceled' && v.date > today), [visitsData, today]);
 
   const totalCurrency = visitsData.find((v) => v.currency)?.currency ?? 'TL';
   const visitsCountText = isTr ? `${visitsData.length} Ziyaret` : `${visitsData.length} Visits`;
@@ -748,6 +759,27 @@ export default function VetVisitsScreen({
                 </View>
                 <View style={styles.completedList}>
                   {pastVisits.map((item) => (
+                    <VisitCard
+                      key={item.id}
+                      item={item}
+                      isTr={isTr}
+                      isUpcoming={false}
+                      onOpenDocuments={onOpenDocuments}
+                      onEdit={onEditVisit ? () => openEditModal(item) : undefined}
+                    />
+                  ))}
+                </View>
+              </>
+            ) : null}
+
+            {/* ── Canceled visits ── */}
+            {canceledVisits.length > 0 ? (
+              <>
+                <View style={[styles.sectionHeaderRow, { marginTop: 28 }]}>
+                  <Text style={styles.sectionLabel}>{isTr ? 'İPTAL EDİLEN ZİYARETLER' : 'CANCELED VISITS'}</Text>
+                </View>
+                <View style={styles.completedList}>
+                  {canceledVisits.map((item) => (
                     <VisitCard
                       key={item.id}
                       item={item}
@@ -867,6 +899,31 @@ export default function VetVisitsScreen({
                     >
                       <Text style={styles.currencyToggleText}>{visitCurrency}</Text>
                     </Pressable>
+                  </View>
+
+                  <Text style={styles.modalLabel}>{isTr ? 'Ziyaret Durumu' : 'Visit status'}</Text>
+                  <View style={styles.chipsRow}>
+                    {(['completed', 'planned', 'canceled'] as const).map((s) => {
+                      const label = s === 'completed'
+                        ? (isTr ? 'Tamamlandı' : 'Completed')
+                        : s === 'planned'
+                          ? (isTr ? 'Planlandı' : 'Planned')
+                          : (isTr ? 'İptal Edildi' : 'Canceled');
+                      return (
+                        <Pressable
+                          key={s}
+                          style={({ pressed }) => [
+                            styles.chipBtn,
+                            visitStatus !== s ? styles.chipBtnInactive : null,
+                            visitStatus === s ? styles.chipBtnActive : null,
+                            pressed ? styles.chipBtnPressed : null,
+                          ]}
+                          onPress={() => setVisitStatus(s)}
+                        >
+                          <Text style={[styles.chipBtnText, visitStatus === s ? styles.chipBtnTextActive : null]}>{label}</Text>
+                        </Pressable>
+                      );
+                    })}
                   </View>
 
                   <Text style={styles.modalLabel}>{isTr ? 'Ziyaret Nedeni' : 'Visit reason'}</Text>

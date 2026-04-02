@@ -14,7 +14,7 @@ import HomeScreen, { type JourneyEventItem as HomeJourneyEventItem, type NextImp
 import PremiumScreen from '../screens/PremiumScreen';
 import ProfileEditScreen from '../screens/ProfileEditScreen';
 import WeightTrackingScreen from '../screens/WeightTrackingScreen';
-import VetVisitsScreen from '../screens/VetVisitsScreen';
+import VetVisitsScreen, { type CreateVetVisitPayload } from '../screens/VetVisitsScreen';
 import VaccinationsScreen from '../screens/VaccinationsScreen';
 import HealthRecordsScreen from '../screens/HealthRecordsScreen';
 import PetEditScreen from '../screens/PetEditScreen';
@@ -1562,6 +1562,38 @@ export default function AuthGate() {
     amount?: number;
     currency?: string;
     outcomes?: VetVisitOutcomeInput[];
+  };
+
+  const handleEditVetVisit = (visitItemId: string, payload: CreateVetVisitPayload) => {
+    const rawId = visitItemId.startsWith('mvp-vet-') ? visitItemId.slice('mvp-vet-'.length) : visitItemId;
+    const nowIso = new Date().toISOString();
+    setVetVisitsByPet((prev) => {
+      const next = { ...prev };
+      for (const petId of Object.keys(next)) {
+        const visits = next[petId];
+        if (!visits) continue;
+        const idx = visits.findIndex((v) => v.id === rawId);
+        if (idx === -1) continue;
+        const existing = visits[idx];
+        const updated: VetVisit = {
+          ...existing,
+          visitDate: payload.date,
+          clinicName: payload.clinic ?? existing.clinicName,
+          reasonCategory: payload.reason as VetVisitReasonCategory,
+          status: (payload.status ?? existing.status) as VetVisitStatus,
+          amount: payload.amount,
+          currency: payload.currency,
+          notes: payload.note ?? existing.notes,
+          updatedAt: nowIso,
+        };
+        const updatedVisits = [...visits];
+        updatedVisits[idx] = updated;
+        next[petId] = updatedVisits;
+        break;
+      }
+      return next;
+    });
+    hap.medium();
   };
 
   const recordVetVisitWithOutcomes = (input: VetVisitCreateInput) => {
@@ -3738,6 +3770,7 @@ export default function AuthGate() {
           visits={vetVisitsBridge ?? undefined}
           onOpenDocuments={() => openDocuments('vetVisits')}
           onAddVisit={() => { setPrimaryAddSheetMode('vetVisit'); setPrimaryAddSheetOpen(true); }}
+          onEditVisit={handleEditVetVisit}
         />
         {renderRouteToastOverlay()}
       </>

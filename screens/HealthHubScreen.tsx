@@ -110,6 +110,8 @@ export type HealthHubTimelineItem = {
   notes?: string;
   metaLine?: string;
   statusLabel?: string;
+  /** ID of the parent vet visit, if this record was created during a visit */
+  vetVisitId?: string;
 };
 type HealthHubDomainKey = 'vet' | 'records' | 'vaccines' | 'reminders' | 'weight' | 'documents';
 export type HealthHubDomainOverview = Partial<
@@ -328,16 +330,16 @@ const HEALTH_MODULE_CARD_THEMES: Record<AreaRowKey, {
 
 // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function typeTag(type: Exclude<HealthHubCategory, 'all'>, isTr: boolean) {
-  if (type === 'vaccine') return isTr ? 'AÅŸÄ±' : 'Vaccine';
+  if (type === 'vaccine') return isTr ? 'Aşı' : 'Vaccine';
   if (type === 'vet') return isTr ? 'Veteriner' : 'Vet Visit';
-  if (type === 'record') return isTr ? 'KayÄ±t' : 'Record';
+  if (type === 'record') return isTr ? 'Kayıt' : 'Record';
   return isTr ? 'Kilo' : 'Weight';
 }
 function recordTypeLabel(t: AddHealthRecordType, isTr: boolean) {
-  if (t === 'vaccine') return isTr ? 'AÅŸÄ±' : 'Vaccine';
-  if (t === 'diagnosis') return isTr ? 'TeÅŸhis' : 'Diagnosis';
-  if (t === 'procedure') return isTr ? 'ProsedÃ¼r' : 'Procedure';
-  if (t === 'prescription') return isTr ? 'Ä°laÃ§' : 'Prescription';
+  if (t === 'vaccine') return isTr ? 'Aşı' : 'Vaccine';
+  if (t === 'diagnosis') return isTr ? 'Teşhis' : 'Diagnosis';
+  if (t === 'procedure') return isTr ? 'Prosedür' : 'Procedure';
+  if (t === 'prescription') return isTr ? 'İlaç' : 'Prescription';
   return isTr ? 'Test' : 'Test';
 }
 function isValidDate(v: string) {
@@ -516,7 +518,7 @@ function fmtShort(n: number): string {
 }
 
 const MONTHS_SHORT_EN = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-const MONTHS_SHORT_TR = ['Oca','Åub','Mar','Nis','May','Haz','Tem','AÄŸu','Eyl','Eki','Kas','Ara'];
+const MONTHS_SHORT_TR = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
 
 function fmtVisitDate(raw: string, isTr: boolean): string {
   // Handles ISO date "2025-02-21" â†’ "Feb 21" / "Åub 21"
@@ -583,11 +585,10 @@ function BreedTeaserRow({
   insightText?: string;
   petName?: string;
 }) {
-  const typeLabel = entry.petType === 'Dog' ? (isTr ? 'KÃ¶pek' : 'Dog') : (isTr ? 'Kedi' : 'Cat');
-  const weightLabel = `${entry.weightRangeKg[0]}â€“${entry.weightRangeKg[1]} kg`;
-  const lifespanLabel = `${entry.lifespanYears[0]}â€“${entry.lifespanYears[1]} ${isTr ? 'yÄ±l' : 'yrs'}`;
+  const typeLabel = entry.petType === 'Dog' ? (isTr ? 'Köpek' : 'Dog') : (isTr ? 'Kedi' : 'Cat');
+  const weightLabel = `${entry.weightRangeKg[0]}-${entry.weightRangeKg[1]} kg`;
+  const lifespanLabel = `${entry.lifespanYears[0]}-${entry.lifespanYears[1]} ${isTr ? 'yıl' : 'yrs'}`;
   const topRisks = entry.healthRisks.slice(0, 3);
-  const pressScale = useRef(new Animated.Value(1)).current;
 
   // When the avatar is the pet's photo, the header reads as the pet â€” not breed data.
   // Primary = pet name, secondary = breed label. When no pet name, fall back to breed.
@@ -595,16 +596,14 @@ function BreedTeaserRow({
   const primaryLabel = hasPetIdentity ? petName! : entry.breed;
   const secondaryLabel = hasPetIdentity
     ? `${isTr ? 'Irk' : 'Breed'}: ${entry.breed}`
-    : `${typeLabel}  Â·  ${weightLabel}  Â·  ${lifespanLabel}`;
+    : `${typeLabel} | ${weightLabel} | ${lifespanLabel}`;
+  const tertiaryLabel = hasPetIdentity ? `${typeLabel} | ${weightLabel}` : undefined;
 
   return (
-    <Animated.View style={{ transform: [{ scale: pressScale }] }}>
     <Pressable
-      style={bs.teaserRow}
-      onPressIn={() => Animated.spring(pressScale, { toValue: 0.97, useNativeDriver: true, speed: 60, bounciness: 0 }).start()}
-      onPressOut={() => Animated.spring(pressScale, { toValue: 1, useNativeDriver: true, speed: 40, bounciness: 7 }).start()}
+      style={({ pressed }) => [bs.teaserRow, pressed && bs.teaserRowPressed]}
       onPress={onPress}
-      android_ripple={{ color: 'rgba(127,196,184,0.10)' }}
+      android_ripple={{ color: 'rgba(71,102,74,0.08)' }}
     >
       {/* Header row: avatar/icon + pet name (or breed) + chevron */}
       <View style={bs.teaserHeaderRow}>
@@ -614,14 +613,17 @@ function BreedTeaserRow({
           </View>
         ) : (
           <View style={bs.teaserIconBox}>
-            <BreedDnaIcon size={19} color="#7fc4b8" />
+            <BreedDnaIcon size={19} color={C.primary} />
           </View>
         )}
         <View style={bs.teaserBody}>
           <Text style={bs.teaserBreedName} numberOfLines={1}>{primaryLabel}</Text>
           <Text style={bs.teaserSub} numberOfLines={1}>{secondaryLabel}</Text>
+          {tertiaryLabel ? (
+            <Text style={bs.teaserMeta} numberOfLines={1}>{tertiaryLabel}</Text>
+          ) : null}
         </View>
-        <ChevronRight size={15} color="rgba(127,196,184,0.5)" strokeWidth={2.2} />
+        <ChevronRight size={15} color="rgba(71,102,74,0.62)" strokeWidth={2.2} />
       </View>
 
       {/* Divider */}
@@ -630,9 +632,9 @@ function BreedTeaserRow({
       {/* Bottom row */}
       <View style={bs.teaserBottomRow}>
         {/* Breed-standard stats â€” clearly separate from pet identity above */}
-        {hasPetIdentity ? (
+        {!hasPetIdentity ? (
           <Text style={bs.teaserStandardLine} numberOfLines={1}>
-            {typeLabel}  Â·  {weightLabel}  Â·  {lifespanLabel}
+            {typeLabel} | {weightLabel} | {lifespanLabel}
           </Text>
         ) : null}
 
@@ -654,17 +656,16 @@ function BreedTeaserRow({
         ) : (
           <View style={bs.teaserLockRow}>
             <View style={bs.teaserLockBadge}>
-              <LockIcon size={11} color="#88c4bc" />
+              <LockIcon size={11} color={C.primary} />
               <Text style={bs.teaserLockText}>Pro</Text>
             </View>
             <Text style={bs.teaserLockHint} numberOfLines={1}>
-              {isTr ? 'Irk saÄŸlÄ±k profilini kilidi aÃ§' : 'Unlock breed health profile'}
+              {isTr ? 'Irk sağlık profilinin kilidini aç' : 'Unlock breed health profile'}
             </Text>
           </View>
         )}
       </View>
     </Pressable>
-    </Animated.View>
   );
 }
 
@@ -672,19 +673,19 @@ const bs = StyleSheet.create({
   // â”€â”€ Breed teaser card (in scroll) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   teaserRow: {
     marginHorizontal: 0,
-    borderRadius: 20,
-    backgroundColor: '#0f2d3a',
+    borderRadius: 12,
+    backgroundColor: C.surface,
     borderWidth: 1,
-    borderColor: 'rgba(127,196,184,0.14)',
+    borderColor: 'rgba(121,124,117,0.20)',
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 3,
+    shadowOpacity: 0.07,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   teaserRowPressed: {
-    backgroundColor: '#0d2736',
+    backgroundColor: '#f8f7f4',
   },
   teaserHeaderRow: {
     flexDirection: 'row',
@@ -709,9 +710,9 @@ const bs = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 11,
-    backgroundColor: 'rgba(127,196,184,0.11)',
+    backgroundColor: 'rgba(71,102,74,0.08)',
     borderWidth: 1,
-    borderColor: 'rgba(127,196,184,0.18)',
+    borderColor: 'rgba(71,102,74,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -723,18 +724,24 @@ const bs = StyleSheet.create({
   teaserBreedName: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#dff2ef',
+    color: C.onSurface,
     letterSpacing: -0.2,
   },
   teaserSub: {
     marginTop: 2,
     fontSize: 11,
-    color: 'rgba(160,210,204,0.65)',
+    color: 'rgba(93,96,90,0.82)',
+    fontWeight: '500',
+  },
+  teaserMeta: {
+    marginTop: 2,
+    fontSize: 10.5,
+    color: 'rgba(93,96,90,0.76)',
     fontWeight: '500',
   },
   teaserDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(127,196,184,0.10)',
+    backgroundColor: 'rgba(121,124,117,0.16)',
     marginHorizontal: 16,
   },
   teaserBottomRow: {
@@ -752,24 +759,24 @@ const bs = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
-    backgroundColor: 'rgba(163,67,33,0.20)',
+    backgroundColor: '#fff2ee',
     borderWidth: 1,
-    borderColor: 'rgba(220,100,60,0.20)',
+    borderColor: 'rgba(167,59,33,0.22)',
   },
   teaserChipText: {
     fontSize: 10.5,
-    color: '#f0b49a',
+    color: '#8c4332',
     fontWeight: '700',
   },
   teaserStandardLine: {
     fontSize: 10.5,
-    color: 'rgba(127,196,184,0.38)',
+    color: 'rgba(93,96,90,0.84)',
     fontWeight: '500',
     letterSpacing: 0.1,
   },
   teaserInsightPreview: {
     fontSize: 11.5,
-    color: 'rgba(160,210,204,0.52)',
+    color: '#4f5a52',
     fontWeight: '400',
     lineHeight: 17,
   },
@@ -784,31 +791,33 @@ const bs = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 8,
-    backgroundColor: 'rgba(127,196,184,0.10)',
+    borderRadius: 6,
+    backgroundColor: 'rgba(71,102,74,0.10)',
     borderWidth: 1,
-    borderColor: 'rgba(127,196,184,0.18)',
+    borderColor: 'rgba(71,102,74,0.20)',
   },
   teaserLockText: {
     fontSize: 10.5,
-    color: '#88c4bc',
+    color: C.primary,
     fontWeight: '700',
     letterSpacing: 0.2,
   },
   teaserLockHint: {
     fontSize: 11,
-    color: 'rgba(136,196,188,0.45)',
+    color: 'rgba(93,96,90,0.78)',
     fontWeight: '400',
     flex: 1,
   },
 
   // â”€â”€ Bottom sheet â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   sheet: {
-    backgroundColor: '#0b1f2b',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: C.surface,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     maxHeight: '90%',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(121,124,117,0.18)',
   },
   sheetHandleArea: {
     alignItems: 'center',
@@ -820,7 +829,7 @@ const bs = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(127,196,184,0.25)',
+    backgroundColor: 'rgba(121,124,117,0.38)',
   },
   sheetAvatarFrame: {
     width: 52,
@@ -849,9 +858,9 @@ const bs = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 26,
-    backgroundColor: 'rgba(127,196,184,0.12)',
-    borderWidth: 1.5,
-    borderColor: 'rgba(127,196,184,0.24)',
+    backgroundColor: 'rgba(71,102,74,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.20)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -861,33 +870,33 @@ const bs = StyleSheet.create({
   sheetPetName: {
     fontSize: 12,
     fontWeight: '600',
-    color: 'rgba(160,210,204,0.6)',
+    color: 'rgba(93,96,90,0.72)',
     letterSpacing: 0.1,
     marginBottom: 2,
   },
   sheetBreedName: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#dff2ef',
+    color: C.onSurface,
     letterSpacing: -0.4,
   },
   sheetBreedSub: {
     marginTop: 3,
     fontSize: 12,
-    color: 'rgba(160,210,204,0.68)',
+    color: 'rgba(93,96,90,0.86)',
     fontWeight: '500',
   },
   sheetDivider: {
     height: 1,
-    backgroundColor: 'rgba(127,196,184,0.10)',
+    backgroundColor: 'rgba(121,124,117,0.16)',
     marginBottom: 18,
   },
   // AI observation card
   observationCard: {
-    borderRadius: 16,
-    backgroundColor: 'rgba(180,130,60,0.10)',
+    borderRadius: 10,
+    backgroundColor: '#f7f1e5',
     borderWidth: 1,
-    borderColor: 'rgba(200,160,80,0.18)',
+    borderColor: '#e3d3b5',
     padding: 14,
     marginBottom: 20,
     flexDirection: 'row',
@@ -903,21 +912,21 @@ const bs = StyleSheet.create({
   observationLabel: {
     fontSize: 10,
     fontWeight: '700',
-    color: 'rgba(210,170,90,0.8)',
+    color: '#8b6a30',
     letterSpacing: 0.8,
     marginBottom: 5,
   },
   observationText: {
     fontSize: 13,
     lineHeight: 19.5,
-    color: 'rgba(230,210,170,0.88)',
+    color: '#564929',
     fontWeight: '400',
   },
   // Section mini label
   miniLabel: {
     fontSize: 10,
     fontWeight: '700',
-    color: 'rgba(127,196,184,0.55)',
+    color: 'rgba(71,102,74,0.72)',
     letterSpacing: 0.8,
     marginBottom: 10,
   },
@@ -934,14 +943,14 @@ const bs = StyleSheet.create({
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 9,
-    backgroundColor: 'rgba(163,67,33,0.18)',
+    borderRadius: 8,
+    backgroundColor: '#fff1eb',
     borderWidth: 1,
-    borderColor: 'rgba(220,100,60,0.22)',
+    borderColor: '#e6bfb1',
   },
   chipText: {
     fontSize: 12,
-    color: '#f4bfaa',
+    color: '#86412e',
     fontWeight: '600',
   },
   // Daily care items
@@ -955,7 +964,7 @@ const bs = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 8,
-    backgroundColor: 'rgba(127,196,184,0.10)',
+    backgroundColor: 'rgba(71,102,74,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -964,7 +973,7 @@ const bs = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     lineHeight: 18.5,
-    color: 'rgba(196,230,226,0.82)',
+    color: '#3f4c43',
     fontWeight: '500',
     paddingTop: 5,
   },
@@ -979,7 +988,7 @@ const bs = StyleSheet.create({
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: '#7fc4b8',
+    backgroundColor: C.primary,
     marginTop: 6,
     flexShrink: 0,
   },
@@ -987,7 +996,7 @@ const bs = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     lineHeight: 18.5,
-    color: 'rgba(196,230,226,0.82)',
+    color: '#3f4c43',
     fontWeight: '500',
   },
   // Close button
@@ -997,33 +1006,33 @@ const bs = StyleSheet.create({
     paddingBottom: 32,
   },
   sheetCloseBtn: {
-    height: 50,
-    borderRadius: 999,
-    backgroundColor: 'rgba(127,196,184,0.12)',
+    height: 46,
+    borderRadius: 10,
+    backgroundColor: '#f3f6f1',
     borderWidth: 1,
-    borderColor: 'rgba(127,196,184,0.20)',
+    borderColor: 'rgba(71,102,74,0.20)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   sheetCloseBtnText: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#7fc4b8',
+    color: C.primaryDim,
   },
   // Premium lock overlay (over sheet)
   lockOverlay: {
     ...StyleSheet.absoluteFillObject,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 32,
     overflow: 'hidden',
   },
   lockOverlayTint: {
-    backgroundColor: 'rgba(5,16,24,0.55)',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: 'rgba(28,34,30,0.42)',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   lockContent: {
     alignItems: 'center',
@@ -1033,10 +1042,10 @@ const bs = StyleSheet.create({
   lockIconRing: {
     width: 56,
     height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(127,196,184,0.15)',
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.88)',
     borderWidth: 1,
-    borderColor: 'rgba(127,196,184,0.28)',
+    borderColor: 'rgba(71,102,74,0.18)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
@@ -1044,13 +1053,13 @@ const bs = StyleSheet.create({
   lockTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#e6f6f4',
+    color: '#ffffff',
     letterSpacing: -0.3,
   },
   lockSub: {
     fontSize: 13.5,
     lineHeight: 20,
-    color: 'rgba(196,230,226,0.75)',
+    color: 'rgba(246,250,247,0.92)',
     textAlign: 'center',
     fontWeight: '400',
   },
@@ -1058,17 +1067,15 @@ const bs = StyleSheet.create({
     marginTop: 4,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    borderRadius: 999,
-    backgroundColor: '#7fc4b8',
-    shadowColor: '#7fc4b8',
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    borderRadius: 10,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.24)',
   },
   lockBtnText: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#071820',
+    color: C.primaryDim,
   },
 });
 
@@ -1193,10 +1200,26 @@ export default function HealthHubScreen({
     ]),
     [isTr],
   );
-  const filteredTimelinePreview = useMemo(
-    () => (timelineFilter === 'all' ? timeline : timeline.filter((item) => item.type === timelineFilter)),
-    [timeline, timelineFilter],
-  );
+  const filteredTimelinePreview = useMemo(() => {
+    const base = timelineFilter === 'all' ? timeline : timeline.filter((item) => item.type === timelineFilter);
+    // When viewing 'all', suppress record items that are linked to a vet visit already shown in the list.
+    // This prevents duplicates like "General Checkup · Record" + "General Checkup · Vet Visit" for the same event.
+    if (timelineFilter !== 'all') return base;
+    const visibleVetVisitIds = new Set(
+      base
+        .filter((item) => item.type === 'vet')
+        .map((item) => {
+          // vet items have id "visit-{visitId}"
+          return item.id.startsWith('visit-') ? item.id.slice(6) : null;
+        })
+        .filter(Boolean) as string[],
+    );
+    return base.filter((item) => {
+      if (item.type !== 'record') return true;
+      if (!item.vetVisitId) return true;
+      return !visibleVetVisitIds.has(item.vetVisitId);
+    });
+  }, [timeline, timelineFilter]);
   const createSavedPayloadRef = useRef<AddHealthRecordPayload | null>(null);
   const headerBtnScale = useRef(new Animated.Value(1)).current;
 
@@ -1357,15 +1380,6 @@ export default function HealthHubScreen({
 
   const quickActionItems = useMemo(() => ([
     {
-      key: 'vet' as const,
-      title: isTr ? 'Veteriner ziyareti ekle' : 'Add Vet Visit',
-      subtitle: isTr ? 'Kontrol, hastalik ve takip gorusmelerini kaydedin' : 'Capture checkups, consultations, and follow-ups',
-      shortHint: isTr ? 'Ziyaret kaydi' : 'Visit entry',
-      onPress: () => openCreate('procedure'),
-      icon: <Stethoscope size={18} color="#365a3f" strokeWidth={2.2} />,
-      tone: 'vet' as const,
-    },
-    {
       key: 'vaccine' as const,
       title: isTr ? 'Asi kaydi ekle' : 'Log Vaccine',
       subtitle: isTr ? 'Dozlari ve sonraki tarihleri duzenleyin' : 'Track doses and next due dates',
@@ -1397,9 +1411,9 @@ export default function HealthHubScreen({
   const primaryQuickActionKey = useMemo(() => {
     const vaccinesStatus = healthAreas.find((item) => item.key === 'vaccines')?.statusKind;
     if (vaccinesStatus === 'attention' || vaccinesStatus === 'soon') return 'vaccine';
-    const vetStatus = healthAreas.find((item) => item.key === 'vet')?.statusKind;
-    if (vetStatus === 'empty') return 'vet';
-    return 'vet';
+    const weightStatus = healthAreas.find((item) => item.key === 'weight')?.statusKind;
+    if (weightStatus === 'empty') return 'weight';
+    return 'vaccine';
   }, [healthAreas]);
 
   const primaryQuickAction = useMemo(
@@ -1646,7 +1660,7 @@ export default function HealthHubScreen({
           <View style={[s.sectionBlock, s.breedSectionBlock]}>
             <View style={s.sectionHeaderCompact}>
               <View style={s.sectionTextWrap}>
-                <Text style={s.sectionTitle}>{isTr ? 'Irk Ä°Ã§gÃ¶rÃ¼leri' : 'Breed Insights'}</Text>
+                <Text style={s.sectionTitle}>{isTr ? 'Irk İçgörüleri' : 'Breed Insights'}</Text>
               </View>
             </View>
             <BreedTeaserRow
@@ -1666,13 +1680,13 @@ export default function HealthHubScreen({
           <Text style={s.aiTextRowMessage} numberOfLines={2}>
             {primaryInsight?.message ?? (
               isTr
-                ? 'Daha derin analiz iÃ§in Insights ekranÄ±nÄ± aÃ§Ä±n.'
+                ? 'Daha derin analiz için Insights ekranını açın.'
                 : 'Open Insights for deeper AI analysis.'
             )}
           </Text>
           {onOpenInsights ? (
             <Pressable style={s.aiTextRowBtn} onPress={onOpenInsights}>
-              <Text style={s.aiTextRowBtnText}>{isTr ? 'AÃ§' : 'Open'}</Text>
+              <Text style={s.aiTextRowBtnText}>{isTr ? 'Aç' : 'Open'}</Text>
               <ChevronRight size={13} color={C.primary} strokeWidth={2.2} />
             </Pressable>
           ) : null}
@@ -1735,7 +1749,7 @@ export default function HealthHubScreen({
         <View style={{ flex: 1, justifyContent: 'flex-end' }}>
           {/* Animated backdrop */}
           <Animated.View
-            style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(0,0,0,0.62)', opacity: sheetBackdropOpacity }]}
+            style={[StyleSheet.absoluteFillObject, { backgroundColor: 'rgba(16,20,16,0.34)', opacity: sheetBackdropOpacity }]}
             pointerEvents="none"
           />
           <Pressable style={StyleSheet.absoluteFillObject} onPress={closeBreedSheet} />
@@ -1759,7 +1773,7 @@ export default function HealthHubScreen({
                       </View>
                     ) : (
                       <View style={bs.sheetIconCircle}>
-                        <BreedDnaIcon size={24} color="#7fc4b8" />
+                        <BreedDnaIcon size={24} color={C.primary} />
                       </View>
                     )}
                     <View style={bs.sheetHeaderText}>
@@ -1768,9 +1782,9 @@ export default function HealthHubScreen({
                       ) : null}
                       <Text style={bs.sheetBreedName} numberOfLines={1}>{breedEntry.breed}</Text>
                       <Text style={bs.sheetBreedSub}>
-                        {breedEntry.petType === 'Dog' ? (isTr ? 'KÃ¶pek' : 'Dog') : (isTr ? 'Kedi' : 'Cat')}
-                        {'  Â·  '}{breedEntry.weightRangeKg[0]}â€“{breedEntry.weightRangeKg[1]} kg
-                        {'  Â·  '}{breedEntry.lifespanYears[0]}â€“{breedEntry.lifespanYears[1]} {isTr ? 'yÄ±l' : 'yrs'}
+                        {breedEntry.petType === 'Dog' ? (isTr ? 'Köpek' : 'Dog') : (isTr ? 'Kedi' : 'Cat')}
+                        {' | '}{breedEntry.weightRangeKg[0]}-{breedEntry.weightRangeKg[1]} kg
+                        {' | '}{breedEntry.lifespanYears[0]}-{breedEntry.lifespanYears[1]} {isTr ? 'yıl' : 'yrs'}
                       </Text>
                     </View>
                   </View>
@@ -1795,17 +1809,17 @@ export default function HealthHubScreen({
                       </Svg>
                     </View>
                     <View style={bs.observationTextCol}>
-                      <Text style={bs.observationLabel}>{isTr ? 'SAÄLIK ANALÄ°ZÄ°' : 'HEALTH ANALYSIS'}</Text>
+                      <Text style={bs.observationLabel}>{isTr ? 'SAĞLIK ANALİZİ' : 'HEALTH ANALYSIS'}</Text>
                       <Text style={bs.observationText}>{breedInsight.text}</Text>
                     </View>
                   </View>
                 ) : null}
 
                 {/* Genetic Risks */}
-                <Text style={bs.miniLabel}>{isTr ? 'GENETÄ°K RÄ°SKLER' : 'GENETIC RISKS'}</Text>
+                <Text style={bs.miniLabel}>{isTr ? 'GENETİK RİSKLER' : 'GENETIC RISKS'}</Text>
                 <View style={bs.chipsRow}>
                   {breedEntry.healthRisks.map((r, i) => (
-                    <View key={i} style={[bs.chip, breedInsight?.matchedRisks.includes(isTr ? r.label_tr : r.label) && { borderColor: 'rgba(240,120,70,0.45)', backgroundColor: 'rgba(163,67,33,0.30)' }]}>
+                    <View key={i} style={[bs.chip, breedInsight?.matchedRisks.includes(isTr ? r.label_tr : r.label) && { borderColor: '#cf7f64', backgroundColor: '#f9ddd3' }]}>
                       <Text style={bs.chipText}>{isTr ? r.label_tr : r.label}</Text>
                     </View>
                   ))}
@@ -1814,11 +1828,11 @@ export default function HealthHubScreen({
                 {/* Daily Care */}
                 {(breedEntry.dailyCare?.length ?? 0) > 0 ? (
                   <>
-                    <Text style={[bs.miniLabel, bs.miniLabelSpaced]}>{isTr ? 'GÃœNLÃœK BAKIM' : 'DAILY CARE'}</Text>
+                    <Text style={[bs.miniLabel, bs.miniLabelSpaced]}>{isTr ? 'GÜNLÜK BAKIM' : 'DAILY CARE'}</Text>
                     {breedEntry.dailyCare!.map((item, i) => (
                       <View key={i} style={bs.careItem}>
                         <View style={bs.careIconBox}>
-                          <DailyCareIcon category={item.category} size={15} color="#7fc4b8" />
+                          <DailyCareIcon category={item.category} size={15} color={C.primary} />
                         </View>
                         <Text style={bs.careText}>{isTr ? item.label_tr : item.label}</Text>
                       </View>
@@ -1827,7 +1841,7 @@ export default function HealthHubScreen({
                 ) : null}
 
                 {/* Care Tips */}
-                <Text style={[bs.miniLabel, bs.miniLabelSpaced]}>{isTr ? 'VETERÄ°NER Ã–NERÄ°LERÄ°' : 'VET RECOMMENDATIONS'}</Text>
+                <Text style={[bs.miniLabel, bs.miniLabelSpaced]}>{isTr ? 'VETERİNER ÖNERİLERİ' : 'VET RECOMMENDATIONS'}</Text>
                 {breedEntry.careTips.map((tip, i) => (
                   <View key={i} style={bs.tipRow}>
                     <View style={bs.tipDot} />
@@ -1849,22 +1863,22 @@ export default function HealthHubScreen({
               <Pressable
                 style={bs.lockOverlay}
                 onPress={() => { closeBreedSheet(); onUpgradePremium?.(); }}
-                android_ripple={{ color: 'rgba(255,255,255,0.06)' }}
+                android_ripple={{ color: 'rgba(71,102,74,0.08)' }}
               >
-                <BlurView intensity={36} tint="dark" style={StyleSheet.absoluteFillObject} />
+                <BlurView intensity={28} tint="light" style={StyleSheet.absoluteFillObject} />
                 <View style={[StyleSheet.absoluteFillObject, bs.lockOverlayTint]} />
                 <View style={bs.lockContent}>
                   <View style={bs.lockIconRing}>
-                    <LockIcon size={24} color="#c8ede8" />
+                    <LockIcon size={24} color={C.primary} />
                   </View>
-                  <Text style={bs.lockTitle}>{isTr ? 'Premium Ã–zellik' : 'Premium Feature'}</Text>
+                  <Text style={bs.lockTitle}>{isTr ? 'Premium Özellik' : 'Premium Feature'}</Text>
                   <Text style={bs.lockSub}>
                     {isTr
-                      ? 'Irk saÄŸlÄ±k profili, gÃ¼nlÃ¼k bakÄ±m rehberi ve AI analizini gÃ¶rmek iÃ§in Pro\'ya geÃ§in.'
+                      ? 'Irk sağlık profili, günlük bakım rehberi ve AI analizini görmek için Pro\'ya geçin.'
                       : 'Upgrade to Pro to unlock breed health profiles, daily care guides, and AI analysis.'}
                   </Text>
                   <View style={bs.lockBtn}>
-                    <Text style={bs.lockBtnText}>{isTr ? 'Pro\'ya GeÃ§' : 'Upgrade to Pro'}</Text>
+                    <Text style={bs.lockBtnText}>{isTr ? 'Pro\'ya Geç' : 'Upgrade to Pro'}</Text>
                   </View>
                 </View>
               </Pressable>
@@ -1906,7 +1920,7 @@ export default function HealthHubScreen({
                 <View style={s.sheetActions}>
                   {onOpenDocuments && selectedItem.type !== 'weight' ? (
                     <Pressable style={s.sheetCloseBtn} onPress={onOpenDocuments}>
-                      <Text style={s.sheetCloseBtnText}>{isTr ? 'Belgeleri GÃ¶r' : 'View Documents'}</Text>
+                      <Text style={s.sheetCloseBtnText}>{isTr ? 'Belgeleri Gör' : 'View Documents'}</Text>
                     </Pressable>
                   ) : null}
                   <Pressable style={s.sheetCloseBtn} onPress={() => setSelectedItem(null)}>
@@ -1924,7 +1938,7 @@ export default function HealthHubScreen({
                         }}
                       >
                         <Text style={s.sheetDeleteConfirmText}>
-                          {isTr ? 'Sil â€” emin misin?' : 'Confirm Delete'}
+                          {isTr ? 'Sil - emin misin?' : 'Confirm Delete'}
                         </Text>
                       </Pressable>
                     ) : (

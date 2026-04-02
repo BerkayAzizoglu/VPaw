@@ -103,7 +103,6 @@ export function buildTriggeredNotifications(args: {
   const seen = new Set<string>();
   const todayStart = startOfDayMs(nowMs);
   const todayEnd = endOfDayMs(nowMs);
-  const dayBucket = String(todayStart);
 
   const pushUnique = (item: HealthNotification) => {
     if (seen.has(item.id)) return;
@@ -173,6 +172,69 @@ export function buildTriggeredNotifications(args: {
         });
       });
 
+    // ── Vaccine due / overdue ────────────────────────────────────────────────
+    // Fires when a vaccine medical event has a dueDate (nextDueDate) set.
+    // Window: -0 to +14 days (upcoming), or overdue if dueDate < today.
+    (medicalEventsByPet[petId] ?? [])
+      .filter((event) => event.type === 'vaccine' && typeof event.dueDate === 'string' && event.dueDate.length > 0)
+      .forEach((event) => {
+        const dueMs = toMs(event.dueDate ?? '');
+        if (!Number.isFinite(dueMs)) return;
+        const isOverdue = dueMs < todayStart;
+        const daysDiff = dateDiffDays(todayStart, dueMs);
+        // upcoming window: within 14 days; overdue window: up to 90 days past
+        if (!isOverdue && daysDiff > 14) return;
+        if (isOverdue && dateDiffDays(dueMs, todayStart) > 90) return;
+        pushUnique({
+          id: `notif-vaccine-${isOverdue ? 'overdue' : 'due'}-${event.id}-${event.dueDate}`,
+          petId,
+          type: isOverdue ? 'overdue' : 'reminder_due',
+          priority: 'high',
+          title: isOverdue
+            ? (locale === 'tr' ? 'Asi tarihi gecti' : 'Vaccine overdue')
+            : (locale === 'tr' ? 'Asi hatirlatmasi' : 'Vaccine due soon'),
+          message: isOverdue
+            ? `${petName} - ${event.title} (${locale === 'tr' ? 'Gec kalan gun' : 'Days overdue'}: ${dateDiffDays(dueMs, todayStart)})`
+            : `${petName} - ${event.title} (${locale === 'tr' ? 'Kalan gun' : 'Days left'}: ${daysDiff})`,
+          createdAt: new Date(nowMs).toISOString(),
+          isRead: false,
+          relatedEntityId: event.id,
+        });
+      });
+
+    // ── Active health record follow-up ───────────────────────────────────────
+    // Fires when an active health record (diagnosis/procedure/test/prescription)
+    // has a dueDate set and it is within 7 days or overdue.
+    (medicalEventsByPet[petId] ?? [])
+      .filter((event) =>
+        event.type !== 'vaccine'
+        && event.status === 'active'
+        && typeof event.dueDate === 'string'
+        && event.dueDate.length > 0,
+      )
+      .forEach((event) => {
+        const dueMs = toMs(event.dueDate ?? '');
+        if (!Number.isFinite(dueMs)) return;
+        const daysDiff = dateDiffDays(todayStart, dueMs);
+        const isOverdue = dueMs < todayStart;
+        // upcoming window: within 7 days; overdue window: up to 30 days past
+        if (!isOverdue && daysDiff > 7) return;
+        if (isOverdue && dateDiffDays(dueMs, todayStart) > 30) return;
+        pushUnique({
+          id: `notif-record-followup-${event.id}-${event.dueDate}`,
+          petId,
+          type: 'followup',
+          priority: 'medium',
+          title: isOverdue
+            ? (locale === 'tr' ? 'Kontrol tarihi gecti' : 'Follow-up overdue')
+            : (locale === 'tr' ? 'Yaklasan kontrol' : 'Follow-up due soon'),
+          message: `${petName} - ${event.title}`,
+          createdAt: new Date(nowMs).toISOString(),
+          isRead: false,
+          relatedEntityId: event.id,
+        });
+      });
+
     const latestWeightMs = Math.max(0, ...(weightsByPet[petId] ?? []).map((w) => toMs(w.date)).filter((ms) => Number.isFinite(ms)));
     const latestMedicalMs = Math.max(0, ...(medicalEventsByPet[petId] ?? []).map((e) => toMs(e.eventDate)).filter((ms) => Number.isFinite(ms)));
     const latestVetMs = Math.max(0, ...(vetVisitsByPet[petId] ?? []).map((v) => toMs(v.visitDate)).filter((ms) => Number.isFinite(ms)));
@@ -187,7 +249,7 @@ export function buildTriggeredNotifications(args: {
           ? (locale === 'tr' ? 'saglik kaydi' : 'health record')
           : (locale === 'tr' ? 'veteriner ziyareti' : 'vet visit');
       pushUnique({
-        id: `notif-missing-${domain}-${petId}-${dayBucket}`,
+        id: `notif-missing-${domain}-${petId}`,
         petId,
         type: 'missing_data',
         priority: 'low',
