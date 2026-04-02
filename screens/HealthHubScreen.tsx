@@ -191,6 +191,7 @@ type HealthHubScreenProps = {
   isPremium?: boolean;
   onUpgradePremium?: () => void;
   vaccineAttentionCounts?: VaccinationsAttentionCounts;
+  onOpenPassport?: () => void;
 };
 type HealthHubIconKind = 'vet' | 'records' | 'vaccines' | 'weight' | 'documents';
 type AreaRowKey = HealthHubIconKind;
@@ -1119,6 +1120,7 @@ export default function HealthHubScreen({
   isPremium = false,
   onUpgradePremium,
   vaccineAttentionCounts,
+  onOpenPassport,
 }: HealthHubScreenProps) {
   const isTr = locale === 'tr';
   const insets = useSafeAreaInsets();
@@ -1556,7 +1558,7 @@ export default function HealthHubScreen({
           </View>
         </View>
         <View style={s.healthAreaList}>
-          {healthAreas.map((item) => {
+          {healthAreas.map((item, areaIndex) => {
             const statusPillTone = item.statusKind === 'attention'
               ? s.healthAreaStatusAttention
               : item.statusKind === 'soon'
@@ -1581,32 +1583,22 @@ export default function HealthHubScreen({
                     ? s.healthAreaIconDocument
                     : s.healthAreaIconRecord;
             return (
-              <Pressable key={item.key} style={s.healthAreaCard} onPress={() => item.onPress?.()}>
-                <View style={s.healthAreaCardTop}>
-                  <View style={s.healthAreaIdentity}>
-                    <View style={[s.healthAreaIconWrap, iconTone]}>
-                      <HealthHubCategoryIcon kind={item.key} size={20} />
-                    </View>
-                    <View style={s.healthAreaTitleWrap}>
-                      <Text style={s.healthAreaTitle}>{item.title}</Text>
-                      <Text style={s.healthAreaCount}>{item.countText}</Text>
-                    </View>
-                  </View>
-                  <View style={[s.healthAreaStatusPill, statusPillTone]}>
-                    <Text style={[s.healthAreaStatusText, statusTextTone]}>{item.statusLabel}</Text>
-                  </View>
+              <Pressable
+                key={item.key}
+                style={[s.healthAreaCard, areaIndex < healthAreas.length - 1 && s.healthAreaCardBorder]}
+                onPress={() => item.onPress?.()}
+              >
+                <View style={[s.healthAreaIconWrap, iconTone]}>
+                  <HealthHubCategoryIcon kind={item.key} size={18} />
                 </View>
-                <Text style={[s.healthAreaHelper, item.statusKind === 'empty' ? s.healthAreaHelperEmpty : null]}>{item.helperText}</Text>
-                {item.actionLabel ? (
-                  <View style={s.healthAreaActionHintWrap}>
-                    <Text style={s.healthAreaActionHint}>{item.actionLabel}</Text>
-                  </View>
-                ) : null}
-                <View style={s.healthAreaCardFooter}>
-                  <View style={s.healthAreaChevronCapsule}>
-                    <ChevronRight size={14} color={C.primary} strokeWidth={2.2} />
-                  </View>
+                <View style={s.healthAreaTitleWrap}>
+                  <Text style={s.healthAreaTitle}>{item.title}</Text>
+                  <Text style={s.healthAreaCount} numberOfLines={1}>{item.countText}</Text>
                 </View>
+                <View style={[s.healthAreaStatusPill, statusPillTone]}>
+                  <Text style={[s.healthAreaStatusText, statusTextTone]}>{item.statusLabel}</Text>
+                </View>
+                <ChevronRight size={13} color={C.primary} strokeWidth={2.2} />
               </Pressable>
             );
           })}
@@ -1697,6 +1689,19 @@ export default function HealthHubScreen({
             </Pressable>
           ) : null}
         </View>
+
+        {onOpenPassport ? (
+          <Pressable style={s.exportPassportRow} onPress={onOpenPassport}>
+            <View style={s.exportPassportIconWrap}>
+              <FileText size={18} color={C.primary} strokeWidth={2.1} />
+            </View>
+            <View style={s.exportPassportText}>
+              <Text style={s.exportPassportTitle}>{isTr ? 'Sağlık Kartı' : 'Health Card'}</Text>
+              <Text style={s.exportPassportSub}>{isTr ? 'Özet görüntüle veya PDF olarak aktar' : 'View summary or export as PDF'}</Text>
+            </View>
+            <ChevronRight size={14} color={C.primary} strokeWidth={2.2} />
+          </Pressable>
+        ) : null}
 
       </Animated.ScrollView>
 
@@ -3658,6 +3663,48 @@ const s = StyleSheet.create({
     color: C.primary,
   },
 
+  exportPassportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 6,
+    marginBottom: 24,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.12)',
+    shadowColor: '#405248',
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 1,
+  },
+  exportPassportIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    backgroundColor: 'rgba(71,102,74,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exportPassportText: {
+    flex: 1,
+  },
+  exportPassportTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#24342d',
+    letterSpacing: -0.1,
+  },
+  exportPassportSub: {
+    marginTop: 1,
+    fontSize: 11,
+    color: '#6b736d',
+    lineHeight: 15,
+  },
+
   sectionHeaderRow: {
     marginBottom: 12,
     flexDirection: 'row',
@@ -3910,42 +3957,34 @@ const s = StyleSheet.create({
     backgroundColor: '#f7efe6',
   },
   healthAreaList: {
-    gap: 14,
-    marginBottom: 28,
-  },
-  healthAreaCard: {
     backgroundColor: 'rgba(255,255,255,0.92)',
-    borderRadius: 22,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: 'rgba(71,102,74,0.10)',
-    paddingHorizontal: 18,
-    paddingVertical: 18,
+    overflow: 'hidden',
+    marginBottom: 28,
     shadowColor: '#405248',
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 3,
+    shadowOpacity: 0.07,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 2,
   },
-  healthAreaCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  healthAreaIdentity: {
+  healthAreaCard: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    flex: 1,
-    minWidth: 0,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+  },
+  healthAreaCardBorder: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(71,102,74,0.10)',
   },
   healthAreaIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     backgroundColor: '#f4f4ee',
-    borderWidth: 1,
-    borderColor: 'rgba(71,102,74,0.08)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -3974,25 +4013,25 @@ const s = StyleSheet.create({
     minWidth: 0,
   },
   healthAreaTitle: {
-    fontSize: 16,
-    lineHeight: 21,
-    fontWeight: '700',
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '600',
     color: '#24342d',
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
   },
   healthAreaCount: {
-    marginTop: 3,
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '600',
+    marginTop: 1,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '500',
     color: '#6b736d',
   },
   healthAreaStatusPill: {
     borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderWidth: 1,
-    minWidth: 96,
+    minWidth: 80,
     alignItems: 'center',
   },
   healthAreaStatusAttention: {
@@ -4027,47 +4066,6 @@ const s = StyleSheet.create({
   },
   healthAreaStatusTextOk: {
     color: '#416d49',
-  },
-  healthAreaHelper: {
-    marginTop: 13,
-    fontSize: 13,
-    lineHeight: 19,
-    fontWeight: '500',
-    color: '#5f6762',
-  },
-  healthAreaHelperEmpty: {
-    color: '#56605a',
-    fontWeight: '600',
-  },
-  healthAreaActionHintWrap: {
-    marginTop: 10,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 999,
-    backgroundColor: 'rgba(71,102,74,0.09)',
-    borderWidth: 1,
-    borderColor: 'rgba(71,102,74,0.14)',
-  },
-  healthAreaActionHint: {
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-    color: '#47664a',
-  },
-  healthAreaCardFooter: {
-    marginTop: 10,
-    alignItems: 'flex-end',
-  },
-  healthAreaChevronCapsule: {
-    width: 30,
-    height: 30,
-    borderRadius: 999,
-    backgroundColor: 'rgba(71,102,74,0.08)',
-    borderWidth: 1,
-    borderColor: 'rgba(71,102,74,0.10)',
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   historyCta: {
     flexDirection: 'row',

@@ -3846,6 +3846,7 @@ export default function AuthGate() {
           historyItems={vaccinationsBridge?.historyItems}
           attentionCounts={vaccinationsBridge?.attentionCounts}
           nextUpData={vaccinationsBridge?.nextUpData}
+          vetVisits={vetVisitsByPet[activePetId] ?? []}
           onAddVaccination={() => { setPrimaryAddSheetMode('vaccine'); setPrimaryAddSheetOpen(true); }}
         />
         {renderRouteToastOverlay()}
@@ -4170,6 +4171,10 @@ export default function AuthGate() {
         isPremium={isPremium}
         onUpgradePremium={() => openPremium('healthHub')}
         vaccineAttentionCounts={vaccinationsBridge?.attentionCounts}
+        onOpenPassport={() => {
+          setPassportBackRoute('healthHub');
+          setRoute('passport');
+        }}
       />,
     );
   }
