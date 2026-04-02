@@ -212,6 +212,7 @@ export function getVetVisitsFromEvents(
       title: ensureString(event.title, 'Vet Visit'),
       clinic: ensureString(metadata.clinic, 'Downtown Vet Clinic'),
       doctor: ensureString(metadata.doctor, 'Dr. Sarah Jenkins'),
+      note: typeof event.description === 'string' && event.description.trim().length > 0 ? event.description.trim() : undefined,
       amount: amountValue ?? undefined,
       currency: currencyValue,
       paymentText: typeof metadata.paymentText === 'string' ? metadata.paymentText : undefined,
