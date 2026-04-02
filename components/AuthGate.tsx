@@ -1558,6 +1558,7 @@ export default function AuthGate() {
     clinicName?: string;
     vetName?: string;
     followUpDate?: string;
+    followUpContext?: string;
     notes?: string;
     amount?: number;
     currency?: string;
@@ -1608,6 +1609,7 @@ export default function AuthGate() {
         clinicName: input.clinicName,
         vetName: input.vetName,
         followUpDate: input.followUpDate,
+        followUpContext: input.followUpContext,
         notes: input.notes,
         amount: input.amount,
         currency: input.currency,
@@ -1721,6 +1723,7 @@ export default function AuthGate() {
         clinicName: payload.clinicName,
         vetName: payload.vetName,
         followUpDate: payload.dueDate,
+        followUpContext: payload.followUpContext,
         notes: payload.note,
         amount: payload.fee,
         currency: payload.feeCurrency,
@@ -1735,6 +1738,60 @@ export default function AuthGate() {
           },
         ],
       });
+      setPetProfilesUpdatedAt((prev) => ({ ...prev, [activePetId]: nowIso }));
+      return;
+    }
+
+    // Vaccine administered at vet: create a VetVisit with vaccine outcome
+    if (payload.type === 'vaccine' && payload.linkedToVetVisit) {
+      recordVetVisitWithOutcomes({
+        petId: activePetId,
+        visitDate: eventDate,
+        reasonCategory: 'vaccine',
+        status: 'completed',
+        clinicName: payload.clinicName,
+        vetName: payload.vetName,
+        outcomes: [
+          {
+            type: 'vaccine',
+            title: payload.title,
+            eventDate,
+            subcategory: payload.title,
+            dueDate: payload.dueDate,
+            note: payload.batchNumber
+              ? `${locale === 'tr' ? 'Seri No' : 'Lot'}: ${payload.batchNumber}${payload.note ? `\n${payload.note}` : ''}`
+              : payload.note,
+            metadataJson: {
+              source: 'add_record_sheet',
+              vaccineType: payload.title,
+              batchNumber: payload.batchNumber,
+            },
+          },
+        ],
+      });
+      // Also schedule booster reminder
+      const boosterDate = new Date(eventDate);
+      boosterDate.setFullYear(boosterDate.getFullYear() + 1);
+      const boosterDateStr = boosterDate.toISOString().slice(0, 10);
+      const boosterTitle = locale === 'tr'
+        ? `${payload.title} - Hatırlatma`
+        : `${payload.title} - Booster`;
+      setRemindersWithNotificationSync((prev) =>
+        createReminder(prev, {
+          petId: activePetId,
+          type: 'medical',
+          subtype: 'vaccine',
+          title: boosterTitle,
+          frequency: 'once',
+          scheduledAt: `${boosterDateStr}T09:00:00.000Z`,
+          isActive: true,
+          kind: 'vaccine_due',
+          status: 'pending',
+          originType: 'system',
+          sourceType: 'medical_event',
+          note: locale === 'tr' ? 'Aşı takviyesi' : 'Vaccine booster',
+        }).next,
+      );
       setPetProfilesUpdatedAt((prev) => ({ ...prev, [activePetId]: nowIso }));
       return;
     }
@@ -1795,6 +1852,7 @@ export default function AuthGate() {
   const resolveHealthCreateSuccessRoute = (payload?: AddHealthRecordPayload): AppRoute => {
     if (!payload) return 'healthHub';
     if (payload.visitReason) return 'vetVisits';
+    if (payload.type === 'vaccine' && payload.linkedToVetVisit) return 'vetVisits';
     return 'healthHub';
   };
 
@@ -2489,20 +2547,22 @@ export default function AuthGate() {
     const vaccineStatus = summary.latestVaccine?.title || (locale === 'tr' ? 'Kayıt yok' : 'No data');
     const lastVetVisit = summary.latestVet?.date ? formatReminderDateLabel(summary.latestVet.date, locale) : (locale === 'tr' ? 'Kayıt yok' : 'No data');
 
-    // Expense totals from vet visits — uses VetVisit.amount (number) directly
+    // Expense totals from real visit records (current year, completed-only)
+    const currentYear = new Date().getFullYear();
     const activeVisits = vetVisitsByPet[activePetId] ?? [];
     const expenseByCategory: Record<string, number> = {};
     let totalExpenseNum = 0;
     let primaryCurrency = 'TL';
     for (const v of activeVisits) {
+      if (v.status === 'planned' || v.status === 'canceled') continue;
+      const visitMs = parseUpdatedAtMs(v.visitDate);
+      if (visitMs == null || new Date(visitMs).getFullYear() !== currentYear) continue;
       if (v.amount == null || v.amount <= 0) continue;
       totalExpenseNum += v.amount;
       if (v.currency) primaryCurrency = v.currency;
       const cat = v.reasonCategory === 'vaccine' ? 'vaccine' : 'vet';
       expenseByCategory[cat] = (expenseByCategory[cat] ?? 0) + v.amount;
     }
-    const medEvents = medicalEventsByPet[activePetId] ?? [];
-    const medTotal = medEvents.filter((e) => e.type === 'prescription').length * 0; // placeholder until med costs tracked
 
     const totalExpenses = totalExpenseNum > 0
       ? {
@@ -2511,13 +2571,12 @@ export default function AuthGate() {
           breakdown: [
             ...(expenseByCategory['vaccine'] ? [{ label: locale === 'tr' ? 'Aşı' : 'Vaccine', amount: expenseByCategory['vaccine'], color: '#4a8a5a' }] : []),
             ...(expenseByCategory['vet'] ? [{ label: 'Vet', amount: expenseByCategory['vet'], color: '#7a9a6a' }] : []),
-            ...(medTotal > 0 ? [{ label: locale === 'tr' ? 'İlaç' : 'Med', amount: medTotal, color: '#a0b890' }] : []),
           ],
         }
       : undefined;
 
     return { latestWeight, vaccineStatus, lastVetVisit, totalExpenses };
-  }, [activePetId, locale, medicalEventsByPet, unifiedEventsForActivePet, vetVisitsByPet, vetVisitsBridge]);
+  }, [activePetId, locale, unifiedEventsForActivePet, vetVisitsByPet]);
 
   const insightsBreedCard = useMemo(() => {
     const activePet = petProfiles[activePetId];
@@ -3768,6 +3827,7 @@ export default function AuthGate() {
           backPreview={resolveBackPreview(subBackRoute)}
           status={vetVisitsScreenStatus}
           visits={vetVisitsBridge ?? undefined}
+          onRefresh={refreshPetsFromCloud}
           onOpenDocuments={() => openDocuments('vetVisits')}
           onAddVisit={() => { setPrimaryAddSheetMode('vetVisit'); setPrimaryAddSheetOpen(true); }}
           onEditVisit={handleEditVetVisit}

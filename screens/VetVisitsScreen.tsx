@@ -7,6 +7,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Switch,
@@ -49,6 +50,7 @@ type VetVisitsScreenProps = {
   onAddVisit?: () => void;
   onEditVisit?: (id: string, payload: CreateVetVisitPayload) => void;
   onOpenDocuments?: () => void;
+  onRefresh?: () => Promise<void> | void;
   status?: 'ready' | ScreenStateMode;
   onRetry?: () => void;
   visits?: VisitItem[];
@@ -71,6 +73,7 @@ export type VisitItem = {
   attachments: string[];
   attachPlaceholder?: boolean;
   status?: 'planned' | 'completed' | 'canceled';
+  followUpContext?: string;
 };
 
 function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethoscope' | 'wallet' | 'clinic' | 'file' | 'plus' | 'pulse' | 'edit' | 'check'; size?: number; color?: string }) {
@@ -196,6 +199,11 @@ function VisitCard({
         {item.title ? (
           <Text style={styles.visitCardTitle} numberOfLines={1}>{item.title}</Text>
         ) : null}
+        {item.followUpContext ? (
+          <Text style={styles.visitCardFollowUpCtx} numberOfLines={1}>
+            {isTr ? `↩ ${item.followUpContext}` : `↩ ${item.followUpContext}`}
+          </Text>
+        ) : null}
         <View style={styles.visitCardMeta}>
           {isUpcoming ? (
             <View style={styles.visitCardPlannedBadge}>
@@ -243,6 +251,7 @@ export default function VetVisitsScreen({
   onAddVisit,
   onEditVisit,
   onOpenDocuments,
+  onRefresh,
   status = 'ready',
   onRetry,
   visits,
@@ -256,6 +265,7 @@ export default function VetVisitsScreen({
 
   const [isCreateVisible, setIsCreateVisible] = useState(false);
   const [editingVisitId, setEditingVisitId] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const today = useMemo(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -553,6 +563,24 @@ export default function VetVisitsScreen({
     return parsed.toISOString();
   };
 
+  const parseVisitDateMs = React.useCallback((item: VisitItem) => {
+    const source = (item.rawDate && item.rawDate.trim().length > 0 ? item.rawDate : item.date).trim();
+    if (!source) return null;
+    const normalized = source.length <= 10 && source.includes('-') ? `${source}T12:00:00.000Z` : source;
+    const parsedMs = new Date(normalized).getTime();
+    return Number.isFinite(parsedMs) ? parsedMs : null;
+  }, []);
+
+  const handleRefresh = React.useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await Promise.resolve(onRefresh?.());
+    } finally {
+      setRefreshing(false);
+    }
+  }, [onRefresh, refreshing]);
+
   const isCreateFormValid = useMemo(() => {
     const visitDateIso = parseInputDate(visitDate);
     if (!visitDateIso) return false;
@@ -668,13 +696,22 @@ export default function VetVisitsScreen({
 
   const currentYear = new Date().getFullYear();
   const prevYear = currentYear - 1;
-  const annualAmount = visitsData
-    .filter((v) => v.date.startsWith(String(currentYear)))
-    .reduce((sum, v) => sum + (v.amount ?? 0), 0);
-  const prevYearAmount = visitsData
-    .filter((v) => v.date.startsWith(String(prevYear)))
-    .reduce((sum, v) => sum + (v.amount ?? 0), 0);
-  const totalAmount = visitsData.reduce((sum, item) => sum + (item.amount ?? 0), 0);
+  const isSpendEligible = (item: VisitItem) => item.status !== 'planned' && item.status !== 'canceled' && (item.amount ?? 0) > 0;
+  const annualEntries = visitsData.filter((item) => {
+    if (!isSpendEligible(item)) return false;
+    const dateMs = parseVisitDateMs(item);
+    if (dateMs == null) return false;
+    return new Date(dateMs).getFullYear() === currentYear;
+  });
+  const prevYearEntries = visitsData.filter((item) => {
+    if (!isSpendEligible(item)) return false;
+    const dateMs = parseVisitDateMs(item);
+    if (dateMs == null) return false;
+    return new Date(dateMs).getFullYear() === prevYear;
+  });
+  const annualAmount = annualEntries.reduce((sum, v) => sum + (v.amount ?? 0), 0);
+  const prevYearAmount = prevYearEntries.reduce((sum, v) => sum + (v.amount ?? 0), 0);
+  const annualCurrency = annualEntries.find((item) => item.currency)?.currency ?? totalCurrency;
 
   const yearChangeLabel = (() => {
     if (prevYearAmount <= 0 && annualAmount <= 0) return isTr ? `BU YIL` : 'THIS YEAR';
@@ -686,7 +723,7 @@ export default function VetVisitsScreen({
       : `${arrow} ${Math.abs(pct)}% VS LAST YEAR`;
   })();
 
-  const totalCostText = annualAmount > 0 ? `${annualAmount.toLocaleString('tr-TR')} ${totalCurrency}` : copy.totalCost;
+  const totalCostText = annualAmount > 0 ? `${annualAmount.toLocaleString('tr-TR')} ${annualCurrency}` : copy.totalCost;
 
   const screenState = status;
   const showMainContent = screenState === 'ready';
@@ -732,6 +769,15 @@ export default function VetVisitsScreen({
         )}
         scrollEventThrottle={24}
         directionalLockEnabled
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#4c6750"
+            colors={['#4c6750']}
+            progressBackgroundColor="#eff4ee"
+          />
+        )}
       >
 
         {showMainContent ? (
@@ -825,6 +871,7 @@ export default function VetVisitsScreen({
         title={isTr ? 'VETERINER ZIYARETLERI' : 'VET VISITS'}
         topInset={topInset}
         scrollY={scrollY}
+        isRefreshing={refreshing}
         titleColor="#2f352f"
         overlayColors={['rgba(63,93,71,0.56)', 'rgba(63,93,71,0.38)', 'rgba(63,93,71,0.18)', 'rgba(63,93,71,0)']}
         borderColor="rgba(49,73,56,0.24)"
@@ -1270,6 +1317,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: '#5d605a',
+  },
+  visitCardFollowUpCtx: {
+    fontSize: 11,
+    color: '#7a7c78',
+    fontStyle: 'italic',
+    marginTop: 1,
   },
   visitCardMeta: {
     flexDirection: 'row',

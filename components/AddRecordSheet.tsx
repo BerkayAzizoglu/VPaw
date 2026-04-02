@@ -236,6 +236,7 @@ export default function AddRecordSheet({
   const [feeCurrency, setFeeCurrency] = useState<(typeof CURRENCIES)[number]>('₺');
   const [followUpEnabled, setFollowUpEnabled] = useState(false);
   const [followUpDate, setFollowUpDate] = useState('');
+  const [followUpContext, setFollowUpContext] = useState('');
 
   // Vaccine
   const [vaccineName, setVaccineName] = useState('');
@@ -243,6 +244,7 @@ export default function AddRecordSheet({
   const [vaccineClinic, setVaccineClinic] = useState('');
   const [vaccineVet, setVaccineVet] = useState('');
   const [batchNumber, setBatchNumber] = useState('');
+  const [atVet, setAtVet] = useState(false);
   const vaccineNameInputRef = useRef<TextInput>(null);
   const vaccineDateInputRef = useRef<TextInput>(null);
 
@@ -270,11 +272,13 @@ export default function AddRecordSheet({
     setFeeCurrency('₺');
     setFollowUpEnabled(false);
     setFollowUpDate('');
+    setFollowUpContext('');
     setVaccineName(mode === 'vaccine' ? initialTitle : '');
     setNextDueDate('');
     setVaccineClinic('');
     setVaccineVet('');
     setBatchNumber('');
+    setAtVet(false);
     setRecType(initialType);
     setRecTitle(mode === 'record' ? initialTitle : '');
     setRecStatus(null);
@@ -396,6 +400,7 @@ export default function AddRecordSheet({
         fee: fee.trim() ? parseFloat(fee.replace(',', '.')) : undefined,
         feeCurrency: fee.trim() ? feeCurrency : undefined,
         dueDate: followUpEnabled && isValidDate(followUpDate) ? followUpDate : undefined,
+        followUpContext: visitReason === 'follow_up' && followUpContext.trim() ? followUpContext.trim() : undefined,
       };
     } else if (wizard.type === 'vaccine') {
       payload = {
@@ -407,6 +412,7 @@ export default function AddRecordSheet({
         clinicName: vaccineClinic.trim() || undefined,
         vetName: vaccineVet.trim() || undefined,
         batchNumber: batchNumber.trim() || undefined,
+        linkedToVetVisit: atVet || undefined,
       };
     } else {
       payload = {
@@ -583,6 +589,17 @@ export default function AddRecordSheet({
   const renderVetStep2 = () => (
     <>
       <Text style={st.stepHint}>{isTr ? 'Ziyaret bilgilerini girin' : 'Enter visit details'}</Text>
+      {visitReason === 'follow_up' ? (
+        <>
+          {renderLabel(isTr ? 'NE TAKİBİ?' : 'FOLLOWING UP ON?')}
+          {renderInput(
+            followUpContext,
+            setFollowUpContext,
+            isTr ? 'Örn: Kulak iltihabı tedavisi, geçen haftaki muayene...' : 'e.g. Otitis treatment, last week\'s exam...',
+            'followUpCtx',
+          )}
+        </>
+      ) : null}
       {renderLabel(isTr ? 'TARİH' : 'DATE', true)}
       {renderInput(formDate, setFormDate, 'YYYY-MM-DD', 'date', { noCapitalize: true })}
 
@@ -703,6 +720,24 @@ export default function AddRecordSheet({
           {renderLabel(isTr ? 'SERİ NO' : 'BATCH NO')}
           {renderInput(batchNumber, setBatchNumber, isTr ? 'Seri no' : 'Batch no', 'batch', { noCapitalize: true })}
         </View>
+      </View>
+
+      {renderLabel(isTr ? 'VETERİNERDE Mİ YAPILDI?' : 'DONE AT A VET?')}
+      <View style={st.atVetRow}>
+        {(['yes', 'no'] as const).map((v) => {
+          const isActive = atVet ? v === 'yes' : v === 'no';
+          return (
+            <Pressable
+              key={v}
+              style={[st.atVetChip, isActive && st.atVetChipActive]}
+              onPress={() => setAtVet(v === 'yes')}
+            >
+              <Text style={[st.atVetChipText, isActive && st.atVetChipTextActive]}>
+                {v === 'yes' ? (isTr ? 'Evet' : 'Yes') : (isTr ? 'Hayır' : 'No')}
+              </Text>
+            </Pressable>
+          );
+        })}
       </View>
 
       {renderLabel(isTr ? 'NOTLAR' : 'NOTES')}
@@ -1048,6 +1083,21 @@ const st = StyleSheet.create({
 
   // Toggle
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 18, marginBottom: 8 },
+
+  // At-vet toggle
+  atVetRow: { flexDirection: 'row', gap: 10 },
+  atVetChip: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 10,
+    backgroundColor: C.surfaceContainer,
+    alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: 'transparent',
+  },
+  atVetChipActive: { backgroundColor: C.primaryTint, borderColor: C.primary },
+  atVetChipText: { fontSize: 14, fontWeight: '600', color: C.onSurfaceVariant },
+  atVetChipTextActive: { color: C.primary },
 
   // Test result
   valueRow: { flexDirection: 'row', gap: 10 },

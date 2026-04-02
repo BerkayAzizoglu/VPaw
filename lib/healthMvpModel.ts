@@ -74,6 +74,7 @@ export type VetVisit = {
   clinicName?: string;
   vetName?: string;
   followUpDate?: string;
+  followUpContext?: string;
   notes?: string;
   amount?: number;
   currency?: string;
@@ -218,6 +219,7 @@ export function normalizeVetVisitsByPet(raw: unknown): ByPet<VetVisit> {
         clinicName: typeof i.clinicName === 'string' ? i.clinicName : undefined,
         vetName: typeof i.vetName === 'string' ? i.vetName : undefined,
         followUpDate: typeof i.followUpDate === 'string' ? i.followUpDate : undefined,
+        followUpContext: typeof i.followUpContext === 'string' ? i.followUpContext : undefined,
         notes: typeof i.notes === 'string' ? i.notes : undefined,
         amount: typeof i.amount === 'number' && i.amount > 0 ? i.amount : undefined,
         currency: typeof i.currency === 'string' && i.currency.trim().length > 0 ? i.currency.trim() : undefined,

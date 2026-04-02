@@ -218,6 +218,7 @@ export function getVetVisitsFromEvents(
       status: (metadata.visitStatus === 'planned' || metadata.visitStatus === 'completed' || metadata.visitStatus === 'canceled') ? metadata.visitStatus : undefined,
       attachments: Array.isArray(metadata.attachments) ? metadata.attachments.filter((x): x is string => typeof x === 'string') : [],
       attachPlaceholder: Boolean(metadata.attachPlaceholder),
+      followUpContext: typeof metadata.followUpContext === 'string' && metadata.followUpContext.trim() ? metadata.followUpContext.trim() : undefined,
     };
   });
 
@@ -286,6 +287,7 @@ export function getVetVisitsForUI(
         attachPlaceholder: attachments.length === 0,
         amount: visit.amount,
         currency: visit.currency,
+        followUpContext: visit.followUpContext,
       },
       createdAt: visit.createdAt,
       updatedAt: visit.updatedAt,

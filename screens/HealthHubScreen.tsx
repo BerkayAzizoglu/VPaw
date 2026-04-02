@@ -89,6 +89,10 @@ export type AddHealthRecordPayload = {
   valueNumber?: number;
   valueUnit?: string;
   dueDate?: string;
+  /** vaccine was administered at a vet clinic — triggers VetVisit creation */
+  linkedToVetVisit?: boolean;
+  /** free-text context for follow-up visits — shown on the visit card */
+  followUpContext?: string;
 };
 export type HealthHubExpenses = {
   total: number;
@@ -1645,7 +1649,9 @@ export default function HealthHubScreen({
                 </View>
                 <View style={s.timelinePreviewBodyModern}>
                   <Text style={s.timelinePreviewTitleModern} numberOfLines={1}>{item.title}</Text>
-                  <Text style={s.timelinePreviewMetaModern} numberOfLines={1}>{item.date} · {typeTag(item.type, isTr)}</Text>
+                  <Text style={s.timelinePreviewMetaModern} numberOfLines={1}>
+                    {item.date}{item.title.toLowerCase() !== typeTag(item.type, isTr).toLowerCase() ? ` · ${typeTag(item.type, isTr)}` : ''}
+                  </Text>
                 </View>
               </View>
             ))
