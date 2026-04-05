@@ -2,13 +2,14 @@
 import { StatusBar } from 'expo-status-bar';
 import { Alert, Animated, Pressable, ScrollView, StyleSheet, Text, View, Image, RefreshControl, Switch } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { RefreshCw, PawPrint } from 'lucide-react-native';
+import { PawPrint } from 'lucide-react-native';
 import type { PetProfile } from '../lib/petProfileTypes';
 import type { WeightPoint } from './WeightTrackingScreen';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import type { HealthCardSummary } from '../lib/healthEventAdapters';
 import type { PetPassportExportSelection } from '../lib/petHealthPassportPdf';
+import PullRefreshIndicator from '../components/PullRefreshIndicator';
 
 type PetHealthPassportScreenProps = {
   onBack: () => void;
@@ -241,18 +242,21 @@ export default function PetHealthPassportScreen({
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         scrollEnabled={!swipePanResponder.isSwiping}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#6f6f6f" colors={['#6f6f6f']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="transparent" colors={['transparent']} />}
       >
+        {refreshing ? <PullRefreshIndicator size={38} /> : null}
         <View style={styles.header}>
           <Pressable style={styles.backBtn} onPress={onBack}><Icon kind="back" size={22} /></Pressable>
-          <Text style={styles.title}>{isTr ? 'Pet Sağlık Kartı' : 'Pet Health Card'}</Text>
-          <View style={styles.backBtnGhost}>{refreshing ? <RefreshCw size={16} color="#6f6f6f" /> : null}</View>
+          <View style={styles.titleWrap}>
+            <Text style={styles.title}>{isTr ? 'Pet Sağlık Kartı' : 'Pet Health Card'}</Text>
+          </View>
+          <View style={styles.backBtnGhost} />
         </View>
 
         <View style={styles.identityCard}>
           <View style={styles.docPill}><Text style={styles.docPillText}>{isTr ? 'Detaylı Sağlık Dokümanı' : 'Detailed Health Document'}</Text></View>
           <View style={styles.identityTop}>
-            <Image source={{ uri: pet.image }} style={styles.petImage} />
+            <Image source={{ uri: pet.image }} style={styles.petImage as any} />
             <View style={styles.identityTexts}>
               <Text style={styles.petName}>{pet.name}</Text>
               <Text style={styles.petMeta}>{pet.breed}</Text>
@@ -350,6 +354,7 @@ const styles = StyleSheet.create({
   header: { height: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#f1f1ef', alignItems: 'center', justifyContent: 'center' },
   backBtnGhost: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  titleWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 12 },
   title: { fontSize: 24, lineHeight: 28, color: '#2d2d2d', fontWeight: '700' },
   identityCard: { marginTop: 6, backgroundColor: '#fff', borderRadius: 24, padding: 16, borderWidth: 1, borderColor: 'rgba(0,0,0,0.03)' },
   docPill: { alignSelf: 'flex-start', borderRadius: 12, backgroundColor: '#fcf6ee', borderWidth: 1, borderColor: '#f2ebd9', paddingHorizontal: 10, paddingVertical: 4, marginBottom: 10 },
@@ -422,4 +427,3 @@ const styles = StyleSheet.create({
   exportBtnDisabled: { opacity: 0.72 },
   exportBtnText: { fontSize: 16, lineHeight: 22, color: '#faf8f5', fontWeight: '700' },
 });
-

@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import Svg, { Defs, LinearGradient, Path, Stop, SvgUri } from 'react-native-svg';
-import { Bell, Plus } from 'lucide-react-native';
+import { Bell } from 'lucide-react-native';
 import { hap } from '../lib/haptics';
 import type { PetProfile } from '../lib/petProfileTypes';
 import type { WeightPoint } from './WeightTrackingScreen';
@@ -25,7 +25,7 @@ import type { AiInsight } from '../lib/insightsEngine';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { monoType as mt } from '../lib/typography';
 
-const logoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
+const homeBrandLogoUri = Image.resolveAssetSource(require('../assets/vpaw-figma-logo.svg')).uri;
 const fallbackPetHeroUri = Image.resolveAssetSource(require('../assets/icon.png')).uri;
 
 export type JourneyEventItem = {
@@ -106,16 +106,6 @@ type HomeScreenProps = {
   weightGoal?: number;
   nextImportantEvent?: NextImportantEventItem | null;
   healthJourneyEvents?: JourneyEventItem[];
-  summaryCard?: {
-    title: string;
-    body: string;
-  };
-  expenseBreakdown?: {
-    total: number;
-    currency: string;
-    breakdown: Array<{ label: string; amount: number; color: string }>;
-  };
-  onQuickAdd?: () => void;
   onTestOnboarding?: () => void;
 };
 type DayPhase = 'morning' | 'afternoon' | 'evening' | 'night';
@@ -136,11 +126,28 @@ function formatPetAge(birthDate: string, locale: 'en' | 'tr') {
   years = Math.max(0, years);
   months = Math.max(0, months);
   if (years <= 0) {
-    return locale === 'tr' ? `${months} ay` : `${months} mo`;
+    return locale === 'tr' ? `${months} ay` : `${months} mos`;
   }
-  const decimalYears = years + months / 12;
-  const rounded = months === 0 ? `${years}` : decimalYears.toFixed(1).replace('.', locale === 'tr' ? ',' : '.');
-  return locale === 'tr' ? `${rounded} yas` : `${rounded} yrs`;
+  if (months <= 0) {
+    return locale === 'tr' ? `${years} yıl` : `${years} yrs`;
+  }
+  return locale === 'tr' ? `${years} yıl ${months} ay` : `${years} yrs ${months} mos`;
+}
+
+function formatBreedLabel(
+  breed: string,
+  coatPattern: string,
+  petType: 'Dog' | 'Cat',
+  locale: 'en' | 'tr',
+) {
+  const b = breed.trim();
+  if (b && b.toLowerCase() !== 'other') return b;
+
+  const c = coatPattern.trim();
+  if (c && c.toLowerCase() !== 'other') return c;
+
+  if (locale === 'tr') return petType === 'Cat' ? 'Melez Kedi' : 'Melez Köpek';
+  return petType === 'Cat' ? 'Mixed Cat' : 'Mixed Dog';
 }
 function parseWeightKg(value: string) {
   const parsed = Number(value.replace(',', '.').split(' ')[0]);
@@ -232,8 +239,6 @@ export default function HomeScreen({
   weightsByPet,
   activePetId,
   onChangeActivePet,
-  petLockEnabled,
-  onChangePetLockEnabled,
   upcomingRemindersByPet,
   completedRemindersByPet,
   onCompleteReminder,
@@ -244,9 +249,6 @@ export default function HomeScreen({
   weightGoal,
   nextImportantEvent,
   healthJourneyEvents,
-  summaryCard,
-  expenseBreakdown,
-  onQuickAdd,
   onTestOnboarding,
 }: HomeScreenProps) {
   const { locale } = useLocale();
@@ -294,20 +296,91 @@ export default function HomeScreen({
   const switchScale = useRef(new Animated.Value(1)).current;
   const heroWiggleX = useRef(new Animated.Value(0)).current;
   const suppressHeroPressRef = useRef(false);
-  const [isGestureActive, setIsGestureActive] = useState(false);
-  const isPetLockEnabled = petLockEnabled ?? false;
   const [frontImageLoaded, setFrontImageLoaded] = useState(false);
   const [quickWeightVisible, setQuickWeightVisible] = useState(false);
   const [quickWeightValue, setQuickWeightValue] = useState('');
   const [quickWeightSaved, setQuickWeightSaved] = useState(false);
+  const quickWeightSheetTranslateY = useRef(new Animated.Value(360)).current;
+  const quickWeightBackdropOpacity = useRef(new Animated.Value(0)).current;
+  const quickWeightSheetHeightRef = useRef(360);
 
   useEffect(() => {
     mainScrollRef.current?.scrollTo?.({ y: 0, animated: true });
   }, [scrollToTopSignal]);
 
+  const closeQuickWeightSheet = React.useCallback((cb?: () => void) => {
+    Animated.parallel([
+      Animated.spring(quickWeightSheetTranslateY, {
+        toValue: quickWeightSheetHeightRef.current,
+        damping: 28,
+        stiffness: 380,
+        useNativeDriver: true,
+      }),
+      Animated.timing(quickWeightBackdropOpacity, {
+        toValue: 0,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setQuickWeightVisible(false);
+      cb?.();
+    });
+  }, [quickWeightBackdropOpacity, quickWeightSheetTranslateY]);
+
+  useEffect(() => {
+    if (!quickWeightVisible) return;
+    quickWeightSheetTranslateY.setValue(quickWeightSheetHeightRef.current);
+    quickWeightBackdropOpacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(quickWeightSheetTranslateY, {
+        toValue: 0,
+        damping: 24,
+        stiffness: 300,
+        mass: 0.86,
+        useNativeDriver: true,
+      }),
+      Animated.timing(quickWeightBackdropOpacity, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [quickWeightBackdropOpacity, quickWeightSheetTranslateY, quickWeightVisible]);
+
+  const quickWeightSheetPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g) => {
+        if (g.dy > 0) {
+          quickWeightSheetTranslateY.setValue(g.dy);
+          quickWeightBackdropOpacity.setValue(Math.max(0, 1 - g.dy / Math.max(quickWeightSheetHeightRef.current, 1)));
+        }
+      },
+      onPanResponderRelease: (_, g) => {
+        if (g.dy > 72 || g.vy > 0.6) {
+          closeQuickWeightSheet();
+          return;
+        }
+        Animated.parallel([
+          Animated.spring(quickWeightSheetTranslateY, {
+            toValue: 0,
+            damping: 24,
+            stiffness: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(quickWeightBackdropOpacity, {
+            toValue: 1,
+            duration: 130,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      },
+    }),
+  ).current;
+
   // ── Native Animated: weight card breathing + urgent pulse + press ──
   const breathAnim = useRef(new Animated.Value(0)).current;
-  const pulseAnim = useRef(new Animated.Value(0)).current;
   const weightCardPressScale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -317,19 +390,9 @@ export default function HomeScreen({
         Animated.timing(breathAnim, { toValue: 0, duration: 3400, useNativeDriver: true }),
       ]),
     );
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1, duration: 680, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0, duration: 820, useNativeDriver: true }),
-      ]),
-    );
     breathLoop.start();
-    pulseLoop.start();
-    return () => {
-      breathLoop.stop();
-      pulseLoop.stop();
-    };
-  }, [breathAnim, pulseAnim]);
+    return () => { breathLoop.stop(); };
+  }, [breathAnim]);
 
   const breathAnimStyle = {
     transform: [
@@ -389,7 +452,6 @@ export default function HomeScreen({
   const activePet = pets[activeIndex] ?? null;
   const activeUpcoming = (activePet ? (upcomingRemindersByPet?.[activePet.id] ?? []) : []).slice(0, 2);
   const backPet = pets.length > 1 ? pets[(activeIndex + 1) % pets.length] : null;
-  const prevPet = pets.length > 1 ? pets[(activeIndex - 1 + pets.length) % pets.length] : null;
   const activeWeightHistory = (activePet ? (weightsByPet?.[activePet.id] ?? []) : []).slice(-6);
   const hasWeightData = activeWeightHistory.length > 0;
 
@@ -425,15 +487,6 @@ export default function HomeScreen({
     return events;
   }, [activeUpcoming, onInsightAction, topInsights]);
   const journeyEvents = (healthJourneyEvents?.length ?? 0) > 0 ? healthJourneyEvents! : fallbackJourneyEvents;
-  const urgentCount = journeyEvents.filter((evt) => !!evt.urgent).length;
-  const summaryTitle = summaryCard?.title ?? (isTr ? 'Sağlık Özeti' : 'Health Outlook');
-  const summaryBody = summaryCard?.body ?? (resolvedNextImportantEvent
-    ? (isTr
-      ? `Sonraki adım net: ${resolvedNextImportantEvent.title}.`
-      : `Next step is clear: ${resolvedNextImportantEvent.title}.`)
-    : (isTr
-      ? 'Ufuk sakin görünüyor. Planlanan acil adım yok.'
-      : 'Your horizon looks clear. No urgent action is pending.'));
   const todayPulse = useMemo(() => {
     const todayItems = activeUpcoming.slice(0, 2).map((item) => ({
       id: `today-${item.id}`,
@@ -494,7 +547,7 @@ export default function HomeScreen({
 
   const weightUpdatedText = hasWeightData
     ? (fmtWeightDate(weightSpark.latestDate, isTr) || (isTr ? 'Son güncelleme bugün' : 'Last updated today'))
-    : (isTr ? 'Henüz giriş yok' : 'No entries yet');
+    : '';
 
   const weightStatusInfo = useMemo(() => {
     if (!hasWeightData || activePet.weightDelta === '—') {
@@ -538,7 +591,7 @@ export default function HomeScreen({
     const parsed = Number(quickWeightValue.replace(',', '.'));
     if (!Number.isFinite(parsed) || parsed <= 0) return;
     onQuickAddWeight?.(Number(parsed.toFixed(1)));
-    setQuickWeightVisible(false);
+    closeQuickWeightSheet();
     setQuickWeightSaved(true);
   };
 
@@ -548,7 +601,7 @@ export default function HomeScreen({
       tension: 80,
       friction: 11,
       useNativeDriver: true,
-    }).start(() => setIsGestureActive(false));
+    }).start();
   };
 
   const finishSwitch = (nextPetId: string, settleFrom: number) => {
@@ -573,7 +626,7 @@ export default function HomeScreen({
         duration: 220,
         useNativeDriver: true,
       }),
-    ]).start(() => setIsGestureActive(false));
+    ]).start();
   };
 
   const commitSwitchDown = () => {
@@ -586,45 +639,6 @@ export default function HomeScreen({
       finishSwitch(backPet.id, -42);
     });
   };
-
-  const commitSwitchUp = () => {
-    if (!prevPet) { resetCard(); return; }
-    Animated.timing(cardDragY, {
-      toValue: -140,
-      duration: 150,
-      useNativeDriver: true,
-    }).start(() => {
-      finishSwitch(prevPet.id, 42);
-    });
-  };
-
-  const cardPanResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_, gesture) => !isPetLockEnabled && pets.length > 1 && Math.abs(gesture.dy) > 6,
-        onMoveShouldSetPanResponderCapture: (_, gesture) => !isPetLockEnabled && pets.length > 1 && Math.abs(gesture.dy) > 6,
-        onPanResponderGrant: () => setIsGestureActive(true),
-        onPanResponderMove: (_, gesture) => {
-          const nextY = Math.max(-130, Math.min(160, gesture.dy));
-          cardDragY.setValue(nextY);
-        },
-        onPanResponderRelease: (_, gesture) => {
-          if (gesture.dy > 72) {
-            commitSwitchDown();
-            return;
-          }
-          if (gesture.dy < -58) {
-            commitSwitchUp();
-            return;
-          }
-          resetCard();
-        },
-        onPanResponderTerminate: resetCard,
-        onPanResponderTerminationRequest: () => false,
-      }),
-    [backPet, cardDragY, isPetLockEnabled, onChangeActivePet, pets.length, prevPet],
-  );
 
   const runHeroWiggle = () => {
     heroWiggleX.stopAnimation();
@@ -671,7 +685,6 @@ export default function HomeScreen({
         ref={mainScrollRef}
         contentContainerStyle={[styles.content, { paddingTop: topBarHeight + 14 }]}
         showsVerticalScrollIndicator={false}
-        scrollEnabled={!isGestureActive}
         onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], { useNativeDriver: true })}
         scrollEventThrottle={16}
       >
@@ -687,7 +700,6 @@ export default function HomeScreen({
           </View>
 
           <Animated.View
-            {...cardPanResponder.panHandlers}
             style={[styles.frontCardWrap, { opacity: switchFade, transform: [{ translateY: cardDragY }, { scale: switchScale }, { translateX: heroWiggleX }] }]}
           >
             <Pressable
@@ -713,7 +725,9 @@ export default function HomeScreen({
                 <View style={styles.heroBottom}>
                   <Text style={styles.heroName} numberOfLines={1} ellipsizeMode="tail">{activePet.name}</Text>
                   <View style={styles.heroMetaRow}>
-                    <Text style={styles.heroBreedPill}>{activePet.breed === 'Other' ? (activePet.coatPattern === 'Other' ? 'Other' : activePet.coatPattern) : activePet.breed}</Text>
+                    <Text style={styles.heroBreedPill}>
+                      {formatBreedLabel(activePet.breed, activePet.coatPattern, activePet.petType, locale)}
+                    </Text>
                     <Text style={styles.heroMeta}>{activePet.age}</Text>
                   </View>
                 </View>
@@ -721,23 +735,6 @@ export default function HomeScreen({
             </Pressable>
           </Animated.View>
         </View>
-
-        {/* ── Quick Add CTA ── */}
-        {onQuickAdd && (
-          <Pressable
-            style={({ pressed }) => [styles.quickAddCta, pressed && styles.quickAddCtaPressed]}
-            onPress={() => { hap.light(); onQuickAdd(); }}
-          >
-            <View style={styles.quickAddCtaInner}>
-              <View style={styles.quickAddCtaIcon}>
-                <Plus size={16} color="#47664a" strokeWidth={2.5} />
-              </View>
-              <Text style={styles.quickAddCtaText}>
-                {isTr ? 'Sağlık Kaydı Ekle' : 'Add Health Record'}
-              </Text>
-            </View>
-          </Pressable>
-        )}
 
         {/* ── PRIMARY HEALTH CARD (breathing animation) ── */}
         <Animated.View style={breathAnimStyle}>
@@ -776,7 +773,7 @@ export default function HomeScreen({
                 </Svg>
               </View>
             </View>
-            <Text style={styles.weightDateText}>{weightUpdatedText}</Text>
+            {weightUpdatedText ? <Text style={styles.weightDateText}>{weightUpdatedText}</Text> : null}
             {goalProgress && (
               <View style={styles.goalProgressWrap}>
                 <View style={styles.goalProgressTrack}>
@@ -792,207 +789,136 @@ export default function HomeScreen({
           </Pressable>
         </Animated.View>
 
+        {/* ── TODAY + NEXT EVENT (unified) ── */}
         <View style={styles.todayPulseCard}>
           <View style={styles.todayPulseHeader}>
-            <Text style={styles.todayPulseTitle}>{isTr ? 'Bugün' : 'Today'}</Text>
+            <View style={styles.todayPulseTitleRow}>
+              <Text style={styles.todayPulseTitle}>{isTr ? 'Bugün' : 'Today'}</Text>
+              {reminderBadgeCount > 0 ? (
+                <View style={styles.todayBadge}>
+                  <Text style={styles.todayBadgeText}>{Math.min(reminderBadgeCount, 9)}</Text>
+                </View>
+              ) : null}
+            </View>
             <Pressable style={styles.todayPulseCta} onPress={onOpenNotifications ?? onOpenReminders}>
-              <Text style={styles.todayPulseCtaText}>{isTr ? 'Tüm alarmları gör' : 'See all alerts'}</Text>
+              <Text style={styles.todayPulseCtaText}>{isTr ? 'Tümünü gör →' : 'See all →'}</Text>
             </Pressable>
           </View>
-          {todayPulse.length > 0 ? (
-            <View style={styles.todayPulseList}>
-              {todayPulse.map((item, index) => (
-                <View key={item.id} style={[styles.todayPulseRow, index !== todayPulse.length - 1 && styles.todayPulseRowBorder]}>
-                  <View style={[styles.todayPulseDot, item.urgent && styles.todayPulseDotUrgent]} />
-                  <View style={styles.todayPulseTextWrap}>
-                    <View style={styles.todayPulseLabelPill}>
-                      <Text style={styles.todayPulseLabelText}>{item.label}</Text>
-                    </View>
-                    <Text style={styles.todayPulseRowTitle} numberOfLines={1}>{item.title}</Text>
-                    {item.sub ? <Text style={styles.todayPulseRowSub} numberOfLines={1}>{item.sub}</Text> : null}
-                  </View>
-                </View>
-              ))}
-            </View>
-          ) : (
-            <Text style={styles.todayPulseEmpty}>{isTr ? 'Bugün için dikkat gerektiren bir kayıt yok.' : 'No urgent or upcoming tasks for today.'}</Text>
-          )}
-        </View>
 
-        {/* ── NEXT IMPORTANT EVENT ── */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.nextSectionTitle}>{isTr ? 'Sonraki Önemli Olay' : 'Next Important Event'}</Text>
-          {reminderBadgeCount > 0 ? (
-            <View style={styles.sectionBadge}>
-              <Text style={styles.sectionBadgeText}>{reminderBadgeCount}</Text>
-            </View>
-          ) : null}
-        </View>
-        <View style={[styles.nextCard, resolvedNextImportantEvent?.urgent && styles.nextCardUrgent]}>
-          {resolvedNextImportantEvent?.urgent ? <View style={styles.nextCardAccentBar} /> : <View style={styles.nextCardAccentBarGreen} />}
+          {/* Main event row with inline CTA */}
           {resolvedNextImportantEvent ? (
-            <View style={styles.nextCardRow}>
-              <View style={styles.nextTextWrap}>
-                <Text style={styles.nextCardTitle} numberOfLines={2}>{resolvedNextImportantEvent.title}</Text>
+            <View style={[styles.todayMainRow, resolvedNextImportantEvent.urgent && styles.todayMainRowUrgent]}>
+              <View style={styles.todayMainTextWrap}>
+                <View style={styles.todayPulseLabelPill}>
+                  <Text style={styles.todayPulseLabelText}>
+                    {resolvedNextImportantEvent.urgent
+                      ? (isTr ? 'ACİL' : 'URGENT')
+                      : (isTr ? 'SONRAKI' : 'NEXT')}
+                  </Text>
+                </View>
+                <Text style={styles.todayMainTitle} numberOfLines={2}>{resolvedNextImportantEvent.title}</Text>
                 {(resolvedNextImportantEvent.subtitle ?? resolvedNextImportantEvent.date) ? (
-                  <Text style={styles.nextCardSub}>{resolvedNextImportantEvent.subtitle ?? resolvedNextImportantEvent.date}</Text>
+                  <Text style={styles.todayPulseRowSub}>
+                    {resolvedNextImportantEvent.subtitle ?? resolvedNextImportantEvent.date}
+                  </Text>
                 ) : null}
               </View>
               <Pressable
-                style={[styles.nextCardCta, resolvedNextImportantEvent.urgent && styles.nextCardCtaUrgent]}
+                style={[styles.todayMainCta, resolvedNextImportantEvent.urgent && styles.todayMainCtaUrgent]}
                 onPress={() => {
-                  if (resolvedNextImportantEvent.kind === 'weight') {
-                    openQuickWeight();
-                    return;
-                  }
+                  if (resolvedNextImportantEvent.kind === 'weight') { openQuickWeight(); return; }
                   resolvedNextImportantEvent.onPress?.();
                 }}
               >
-                <Text style={[styles.nextCardCtaText, resolvedNextImportantEvent.urgent && styles.nextCardCtaTextUrgent]}>
+                <Text style={[styles.todayMainCtaText, resolvedNextImportantEvent.urgent && styles.todayMainCtaTextUrgent]}>
                   {resolvedNextImportantEvent.ctaLabel ?? (isTr ? 'Aç' : 'Open')}
                 </Text>
               </Pressable>
             </View>
-          ) : (
-            <View style={styles.nextEmptyWrap}>
-              <Text style={styles.nextEmptyTitle}>{isTr ? 'Her şey hazır' : 'All set for now'}</Text>
-              <Text style={styles.nextEmptySub}>
-                {isTr ? 'Yeni bir kayıt ekleyerek planını güncel tut.' : 'Add a record to keep your plan up to date.'}
-              </Text>
-              <Pressable style={styles.nextEmptyCta} onPress={onOpenAddReminder}>
-                <Text style={styles.nextEmptyCtaText}>{isTr ? 'Oluştur' : 'Create'}</Text>
-              </Pressable>
-            </View>
-          )}
-        </View>
-        {resolvedNextImportantEvent?.secondaryCtaLabel && resolvedNextImportantEvent?.onSecondaryPress ? (
-          <View style={styles.nextSecondaryRow}>
-            <Pressable style={styles.nextSecondaryCta} onPress={resolvedNextImportantEvent.onSecondaryPress}>
-              <Text style={styles.nextSecondaryCtaText}>{resolvedNextImportantEvent.secondaryCtaLabel}</Text>
-            </Pressable>
-          </View>
-        ) : null}
-        {quickWeightSaved ? (
-          <View style={styles.quickSuccessWrap}>
-            <Text style={styles.quickSuccessText}>{isTr ? 'Kilo kaydı eklendi' : 'Weight entry saved'}</Text>
-          </View>
-        ) : null}
+          ) : null}
 
-        {/* ── HEALTH JOURNEY ── */}
-        <View style={styles.journeyHeader}>
-          <Text style={styles.journeyTitle}>{isTr ? 'Sağlık Yolculuğu' : 'Health Journey'}</Text>
-          {journeyEvents.length > 0 ? (
-            <View style={styles.journeyCountPill}>
-              <Text style={styles.journeyCountPillText}>{journeyEvents.length} {isTr ? 'Olay' : 'Events'}</Text>
+          {/* Secondary items */}
+          {(() => {
+            const mainId = resolvedNextImportantEvent?.id ?? null;
+            const remaining = todayPulse.filter((item) => {
+              if (!mainId) return true;
+              const strippedId = item.id.replace(/^(today-|attention-|upcoming-)/, '');
+              return strippedId !== mainId;
+            });
+            if (remaining.length === 0 && !resolvedNextImportantEvent) {
+              return (
+                <>
+                  <Text style={styles.todayPulseEmpty}>
+                    {isTr ? 'Bugün için görev yok.' : 'No tasks for today.'}
+                  </Text>
+                  <Pressable style={styles.todayEmptyCta} onPress={onOpenAddReminder}>
+                    <Text style={styles.todayEmptyCtaText}>{isTr ? 'Hatırlatma Ekle' : 'Add Reminder'}</Text>
+                  </Pressable>
+                </>
+              );
+            }
+            if (remaining.length === 0) return null;
+            return (
+              <View style={[styles.todayPulseList, resolvedNextImportantEvent && styles.todayPulseListSep]}>
+                {remaining.map((item, index) => (
+                  <View key={item.id} style={[styles.todayPulseRow, index !== remaining.length - 1 && styles.todayPulseRowBorder]}>
+                    <View style={[styles.todayPulseDot, item.urgent && styles.todayPulseDotUrgent]} />
+                    <View style={styles.todayPulseTextWrap}>
+                      <View style={styles.todayPulseLabelPill}>
+                        <Text style={styles.todayPulseLabelText}>{item.label}</Text>
+                      </View>
+                      <Text style={styles.todayPulseRowTitle} numberOfLines={1}>{item.title}</Text>
+                      {item.sub ? <Text style={styles.todayPulseRowSub} numberOfLines={1}>{item.sub}</Text> : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
+
+          {resolvedNextImportantEvent?.secondaryCtaLabel && resolvedNextImportantEvent?.onSecondaryPress ? (
+            <Pressable style={styles.todaySecondaryCta} onPress={resolvedNextImportantEvent.onSecondaryPress}>
+              <Text style={styles.todaySecondaryCtaText}>{resolvedNextImportantEvent.secondaryCtaLabel}</Text>
+            </Pressable>
+          ) : null}
+
+          {quickWeightSaved ? (
+            <View style={styles.quickSuccessWrap}>
+              <Text style={styles.quickSuccessText}>{isTr ? 'Kilo kaydı eklendi' : 'Weight entry saved'}</Text>
             </View>
           ) : null}
         </View>
 
-        {journeyEvents.length > 0 ? (
-          <View style={styles.journeyList}>
-            <View style={styles.journeyConnector} />
-            {journeyEvents.map((evt, i) => (
-              <JourneyCard
-                key={evt.id}
-                eventType={evt.eventType}
-                title={evt.title}
-                subtitle={evt.subtitle}
-                date={evt.date}
-                urgent={evt.urgent}
-                delay={i * 110}
-                pulseAnim={pulseAnim}
-                actionLabel={evt.actionLabel}
-                onAction={evt.onAction}
-                isTr={isTr}
-              />
-            ))}
-          </View>
-        ) : (
-          <View style={styles.journeyEmpty}>
-            <Text style={styles.journeyEmptyTitle}>
-              {isTr ? 'Henüz sağlık geçmişi yok' : 'No health history yet'}
-            </Text>
-            <Text style={styles.journeyEmptySub}>
-              {isTr
-                ? 'İlk kaydı ekleyin, yolculuk burada akmaya başlasın.'
-                : 'Add your first record and this timeline will come alive.'}
-            </Text>
-            <Pressable style={styles.journeyEmptyCta} onPress={onQuickAdd ?? onOpenAddReminder}>
-              <Text style={styles.journeyEmptyCtaText}>{isTr ? 'İlk Kaydı Ekle' : 'Add First Record'}</Text>
-            </Pressable>
-          </View>
-        )}
-
-        <View style={styles.summaryCard}>
-          <View style={styles.summaryIconCircle}>
-            <View style={[styles.summaryIconDot, urgentCount > 0 && styles.summaryIconDotUrgent]} />
-          </View>
-          <View style={styles.summaryTextWrap}>
-            <Text style={styles.summaryTitle}>{summaryTitle}</Text>
-            <Text style={styles.summaryBody}>{summaryBody}</Text>
-          </View>
-        </View>
-
-        <View style={styles.expenseCard}>
-          <View style={styles.expenseHeader}>
-            <Text style={styles.expenseTitle}>{isTr ? 'Harcama Analizi' : 'Expense Breakdown'}</Text>
-            <View style={styles.expenseYearPill}>
-              <Text style={styles.expenseYearText}>{new Date().getFullYear()}</Text>
-            </View>
-          </View>
-
-          {expenseBreakdown && expenseBreakdown.breakdown.length > 0 ? (
-            <>
-              <View style={styles.expenseStackBar}>
-                {expenseBreakdown.breakdown.map((item, index) => (
-                  <View
-                    key={item.label}
-                    style={[
-                      styles.expenseStackSegment,
-                      { flex: item.amount / expenseBreakdown.total, backgroundColor: item.color },
-                      index === 0 && styles.expenseStackFirst,
-                      index === expenseBreakdown.breakdown.length - 1 && styles.expenseStackLast,
-                    ]}
-                  />
-                ))}
-              </View>
-
-              <View style={styles.expenseRows}>
-                {expenseBreakdown.breakdown.map((item) => {
-                  const ratio = item.amount / expenseBreakdown.total;
-                  const pct = Math.round(ratio * 100);
-                  return (
-                    <View key={item.label} style={styles.expenseRow}>
-                      <View style={[styles.expenseDot, { backgroundColor: item.color }]} />
-                      <Text style={styles.expenseRowLabel}>{item.label}</Text>
-                      <View style={styles.expenseBarTrack}>
-                        <View style={[styles.expenseBarFill, { width: `${Math.max(10, ratio * 100)}%`, backgroundColor: `${item.color}33` }]} />
-                      </View>
-                      <Text style={styles.expensePct}>{pct}%</Text>
-                      <Text style={styles.expenseAmt}>
-                        {item.amount.toLocaleString(isTr ? 'tr-TR' : 'en-US')} {expenseBreakdown.currency}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-
-              <View style={styles.expenseFooter}>
-                <Text style={styles.expenseFooterLabel}>{isTr ? 'Toplam' : 'Total'}</Text>
-                <Text style={styles.expenseFooterValue}>
-                  {expenseBreakdown.total.toLocaleString(isTr ? 'tr-TR' : 'en-US')} {expenseBreakdown.currency}
-                </Text>
-              </View>
-            </>
-          ) : (
-            <View style={styles.expenseEmpty}>
-              <Text style={styles.expenseEmptyText}>
-                {isTr
-                  ? 'Veteriner ziyareti eklendikçe harcama dağılımı burada görünür.'
-                  : 'Expense distribution will appear here as you add vet visits.'}
-              </Text>
-            </View>
-          )}
+        {/* ── QUICK ACCESS ── */}
+        <View style={styles.quickAccessRow}>
+          <Pressable
+            style={({ pressed }) => [styles.quickAccessChip, pressed && styles.quickAccessChipPressed]}
+            onPress={() => onOpenVetVisits?.(activePet.id)}
+          >
+            <Text style={styles.quickAccessIcon}>🏥</Text>
+            <Text style={styles.quickAccessLabel}>{isTr ? 'Ziyaretler' : 'Visits'}</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.quickAccessChip, pressed && styles.quickAccessChipPressed]}
+            onPress={() => onOpenVaccinations?.(activePet.id)}
+          >
+            <Text style={styles.quickAccessIcon}>💉</Text>
+            <Text style={styles.quickAccessLabel}>{isTr ? 'Aşılar' : 'Vaccines'}</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.quickAccessChip, pressed && styles.quickAccessChipPressed]}
+            onPress={() => onOpenHealthRecords?.(activePet.id)}
+          >
+            <Text style={styles.quickAccessIcon}>📋</Text>
+            <Text style={styles.quickAccessLabel}>{isTr ? 'Kayıtlar' : 'Records'}</Text>
+          </Pressable>
+          <Pressable
+            style={({ pressed }) => [styles.quickAccessChip, pressed && styles.quickAccessChipPressed]}
+            onPress={() => onOpenWeightTracking?.()}
+          >
+            <Text style={styles.quickAccessIcon}>⚖️</Text>
+            <Text style={styles.quickAccessLabel}>{isTr ? 'Kilo' : 'Weight'}</Text>
+          </Pressable>
         </View>
 
       </Animated.ScrollView>
@@ -1006,7 +932,7 @@ export default function HomeScreen({
         <View style={[styles.topRow, styles.topRowFixed, { height: topBarHeight + 2, paddingTop: topInset + 2 }]}>
           <View style={styles.brandWrap}>
             <Animated.View style={[styles.brandLogoWrap, headerLogoAnimStyle]}>
-              <SvgUri uri={logoUri} width={28} height={28} />
+              <SvgUri uri={homeBrandLogoUri} width={44} height={44} />
             </Animated.View>
             <View style={styles.greetingWrap}>
               {__DEV__ && onTestOnboarding ? (
@@ -1037,11 +963,19 @@ export default function HomeScreen({
       <Modal
         visible={quickWeightVisible}
         transparent
-        animationType="fade"
-        onRequestClose={() => setQuickWeightVisible(false)}
+        animationType="none"
+        onRequestClose={() => closeQuickWeightSheet()}
       >
-        <Pressable style={styles.quickWeightOverlay} onPress={() => setQuickWeightVisible(false)}>
-          <Pressable style={styles.quickWeightCard} onPress={() => {}}>
+        <View style={styles.quickWeightOverlay}>
+          <Animated.View pointerEvents="none" style={[styles.quickWeightBackdrop, { opacity: quickWeightBackdropOpacity }]} />
+          <Pressable style={StyleSheet.absoluteFillObject} onPress={() => closeQuickWeightSheet()} />
+          <Animated.View
+            style={[styles.quickWeightCard, { transform: [{ translateY: quickWeightSheetTranslateY }] }]}
+            onLayout={(event) => { quickWeightSheetHeightRef.current = event.nativeEvent.layout.height; }}
+          >
+            <View style={styles.quickWeightHandleZone} {...quickWeightSheetPan.panHandlers}>
+              <View style={styles.quickWeightHandle} />
+            </View>
             <Text style={styles.quickWeightTitle}>{isTr ? 'Hızlı Kilo Kaydı' : 'Quick Weight Entry'}</Text>
             <Text style={styles.quickWeightSub}>{isTr ? 'Kilo değerini girin ve kaydedin.' : 'Enter weight value and save.'}</Text>
             <TextInput
@@ -1053,78 +987,20 @@ export default function HomeScreen({
               placeholderTextColor="#9d9d9d"
             />
             <View style={styles.quickWeightActions}>
-              <Pressable style={styles.quickWeightCancel} onPress={() => setQuickWeightVisible(false)}>
+              <Pressable style={styles.quickWeightCancel} onPress={() => closeQuickWeightSheet()}>
                 <Text style={styles.quickWeightCancelText}>{isTr ? 'İptal' : 'Cancel'}</Text>
               </Pressable>
               <Pressable style={styles.quickWeightSave} onPress={submitQuickWeight}>
                 <Text style={styles.quickWeightSaveText}>{isTr ? 'Kaydet' : 'Save'}</Text>
               </Pressable>
             </View>
-          </Pressable>
-        </Pressable>
+          </Animated.View>
+        </View>
       </Modal>
     </View>
   );
 }
 
-function JourneyCard({
-  eventType,
-  title,
-  subtitle,
-  date,
-  urgent,
-  delay,
-  pulseAnim,
-  actionLabel,
-  onAction,
-  isTr,
-}: Omit<JourneyEventItem, 'id'> & {
-  delay: number;
-  pulseAnim: Animated.Value;
-  isTr: boolean;
-}) {
-  const config = (() => {
-    if (eventType === 'vaccine') return { iconBg: '#cbebc8', iconFg: '#3a6a3a', label: isTr ? 'AŞI' : 'VACCINE' };
-    if (eventType === 'vet') return { iconBg: '#edffe3', iconFg: '#3a6e45', label: isTr ? 'VET ZİYARETİ' : 'VET VISIT' };
-    if (eventType === 'record') return { iconBg: '#ede8f5', iconFg: '#5a4a7a', label: isTr ? 'SAĞLIK KAYDI' : 'HEALTH RECORD' };
-    if (eventType === 'weight') return { iconBg: '#e3eef8', iconFg: '#3a4e7a', label: isTr ? 'KİLO' : 'WEIGHT' };
-    if (eventType === 'reminder') return { iconBg: '#e3eef8', iconFg: '#3a4e7a', label: isTr ? 'HATIRLATMA' : 'REMINDER' };
-    return { iconBg: '#eeeee8', iconFg: '#5d605a', label: isTr ? 'SAĞLIK NOTU' : 'HEALTH NOTE' };
-  })();
-
-  const pulseStyle = {
-    transform: [{ scale: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [1.0, 1.3] }) }],
-    opacity: pulseAnim.interpolate({ inputRange: [0, 1], outputRange: [0.8, 0.0] }),
-  };
-
-  return (
-    <View style={styles.journeyRow}>
-      <View style={[styles.journeyIconBox, { backgroundColor: config.iconBg }]}>
-        {urgent ? (
-          <Animated.View style={[styles.journeyIconPulse, { borderColor: config.iconFg }, pulseStyle]} />
-        ) : null}
-        <View style={[styles.journeyIconDot, { backgroundColor: config.iconFg }]} />
-      </View>
-      <View style={[styles.journeyCard, urgent && styles.journeyCardUrgent]}>
-        <Text style={[styles.journeyCardMeta, { color: config.iconFg }]}>
-          {config.label}{date ? ` · ${date}` : ''}
-        </Text>
-        <Text style={styles.journeyCardTitle} numberOfLines={2}>{title}</Text>
-        {subtitle ? <Text style={styles.journeyCardSub}>{subtitle}</Text> : null}
-        {urgent ? (
-          <View style={styles.urgentTag}>
-            <Text style={styles.urgentTagText}>{isTr ? 'ACİL' : 'URGENT'}</Text>
-          </View>
-        ) : null}
-        {onAction && actionLabel ? (
-          <Pressable style={styles.journeyCardAction} onPress={onAction}>
-            <Text style={styles.journeyCardActionText}>{actionLabel}</Text>
-          </Pressable>
-        ) : null}
-      </View>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   screen: {
@@ -1132,10 +1008,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f6f4f0',
   },
   content: {
-    paddingHorizontal: 22,
+    paddingHorizontal: 18,
     paddingTop: 56,
     paddingBottom: 132,
-    gap: 16,
+    gap: 14,
   },
   topChrome: {
     position: 'absolute',
@@ -1163,34 +1039,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   topRowFixed: {
-    paddingHorizontal: 22,
+    paddingLeft: 22,
+    paddingRight: 20,
   },
   brandWrap: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
+    alignItems: 'center',
+    gap: 10,
     flex: 1,
     minWidth: 0,
   },
   brandLogoWrap: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
+    width: 44,
+    height: 44,
+    alignItems: 'flex-start',
     justifyContent: 'center',
-    marginTop: 10,
+    marginTop: 2,
+    marginLeft: 0,
+  },
+  brandLogoImage: {
+    width: 44,
+    height: 44,
   },
   greetingWrap: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
-    paddingRight: 8,
+    gap: 1,
+    paddingRight: 2,
+    marginLeft: 2,
     position: 'relative',
   },
   greetingSmall: {
     ...mt.metricSm,
     fontSize: 12,
     lineHeight: 15,
-    color: '#7f7f78',
+    color: '#5a5a5a',
     letterSpacing: -0.1,
   },
   greetingName: {
@@ -1362,17 +1245,44 @@ const styles = StyleSheet.create({
   },
   todayPulseCard: {
     borderRadius: 18,
-    backgroundColor: '#F7F8FA',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    borderColor: 'rgba(0,0,0,0.06)',
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 14,
     gap: 10,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 1,
   },
   todayPulseHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  todayPulseTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  todayBadge: {
+    height: 18,
+    minWidth: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: '#47664a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  todayBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    lineHeight: 12,
+    fontWeight: '700',
   },
   todayPulseTitle: {
     fontSize: 18,
@@ -1453,163 +1363,91 @@ const styles = StyleSheet.create({
     color: '#7b828b',
     fontWeight: '500',
   },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  sectionBadge: {
-    height: 22,
-    minWidth: 22,
-    borderRadius: 11,
-    backgroundColor: '#47664a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  sectionBadgeText: {
-    ...mt.metric,
-    fontSize: 11,
-    lineHeight: 14,
-    color: '#fff',
-  },
-  nextSectionTitle: {
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: '700',
-    color: '#30332e',
-    letterSpacing: -0.3,
-  },
-  nextCard: {
-    borderRadius: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    backgroundColor: '#fff',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
-  },
-  nextCardUrgent: {
-    borderColor: 'rgba(180,80,60,0.15)',
-    backgroundColor: '#fff',
-  },
-  nextCardAccentBar: {
-    width: 3,
-    borderRadius: 999,
-    backgroundColor: '#c96a6a',
-    marginRight: 12,
-    alignSelf: 'stretch',
-  },
-  nextCardAccentBarGreen: {
-    width: 3,
-    borderRadius: 999,
-    backgroundColor: '#47664a',
-    marginRight: 12,
-    alignSelf: 'stretch',
-  },
-  nextCardRow: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  nextDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  nextTextWrap: {
-    flex: 1,
-    gap: 3,
-  },
-  nextCardTitle: {
-    fontSize: 15,
-    lineHeight: 20,
-    color: '#30332e',
-    fontWeight: '700',
-  },
-  nextCardSub: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#7a7a72',
-    fontWeight: '500',
-  },
-  nextCardCta: {
-    borderRadius: 12,
-    backgroundColor: '#eef6ef',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    flexShrink: 0,
-  },
-  nextCardCtaUrgent: {
-    backgroundColor: '#fde8e3',
-  },
-  nextCardCtaText: {
-    color: '#47664a',
-    fontSize: 12,
-    lineHeight: 16,
-    fontWeight: '700',
-  },
-  nextCardCtaTextUrgent: {
-    color: '#a73b21',
-  },
-  nextEmptyWrap: {
-    gap: 6,
-  },
-  nextEmptyTitle: {
-    color: '#2d2d2d',
-    fontSize: 15,
-    lineHeight: 19,
-    fontWeight: '700',
-  },
-  nextEmptySub: {
-    color: '#868686',
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '500',
-  },
-  nextEmptyCta: {
+  todayEmptyCta: {
     alignSelf: 'flex-start',
-    marginTop: 2,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.1)',
+    borderColor: 'rgba(0,0,0,0.10)',
     backgroundColor: '#fff',
     paddingHorizontal: 12,
     paddingVertical: 7,
   },
-  nextEmptyCtaText: {
+  todayEmptyCtaText: {
     color: '#4f6b43',
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '700',
   },
-  nextSecondaryRow: {
-    marginTop: -2,
-    alignItems: 'flex-end',
+  todayMainRow: {
+    marginHorizontal: -14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#47664a',
+    backgroundColor: '#f3f8f3',
   },
-  nextSecondaryCta: {
-    borderRadius: 14,
+  todayMainRowUrgent: {
+    borderLeftColor: '#a73b21',
+    backgroundColor: '#fdf6f5',
+  },
+  todayMainTextWrap: {
+    flex: 1,
+    gap: 3,
+  },
+  todayMainTitle: {
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '700',
+    color: '#1f2f2a',
+    letterSpacing: -0.1,
+  },
+  todayMainCta: {
+    paddingHorizontal: 13,
+    paddingVertical: 7,
+    borderRadius: 10,
+    backgroundColor: '#edf5ea',
+    borderWidth: 1,
+    borderColor: '#c4dcc0',
+    flexShrink: 0,
+  },
+  todayMainCtaUrgent: {
+    backgroundColor: '#f9e5e1',
+    borderColor: '#e8b4aa',
+  },
+  todayMainCtaText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#47664a',
+    letterSpacing: -0.1,
+  },
+  todayMainCtaTextUrgent: {
+    color: '#a73b21',
+  },
+  todayPulseListSep: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(0,0,0,0.07)',
+    marginTop: 2,
+    paddingTop: 2,
+  },
+  todaySecondaryCta: {
+    alignSelf: 'flex-end',
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.09)',
     backgroundColor: '#fff',
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  nextSecondaryCtaText: {
+  todaySecondaryCtaText: {
     color: '#6a6a6a',
     fontSize: 11,
     lineHeight: 14,
     fontWeight: '700',
   },
   quickSuccessWrap: {
-    marginTop: -2,
     alignSelf: 'flex-start',
     borderRadius: 999,
     backgroundColor: '#eef5ea',
@@ -1696,206 +1534,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  summaryCard: {
-    borderRadius: 18,
-    backgroundColor: '#eef6ef',
-    borderWidth: 1,
-    borderColor: 'rgba(71,102,74,0.14)',
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-  },
-  summaryIconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    backgroundColor: '#47664a',
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginTop: 1,
-  },
-  summaryIconDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#fff',
-  },
-  summaryIconDotUrgent: {
-    backgroundColor: '#f4a896',
-  },
-  summaryTextWrap: {
-    flex: 1,
-    gap: 3,
-  },
-  summaryTitle: {
-    fontSize: 14,
-    lineHeight: 19,
-    color: '#2e4230',
-    fontWeight: '700',
-  },
-  summaryBody: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#3d5a40',
-    fontWeight: '400',
-  },
-  expenseCard: {
-    marginTop: 2,
-    marginBottom: 8,
-    backgroundColor: '#fff',
-    borderRadius: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(71,102,74,0.08)',
-    shadowColor: '#2d3a2d',
-    shadowOpacity: 0.05,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 2,
-    gap: 14,
-  },
-  expenseHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  expenseTitle: {
-    fontSize: 18,
-    lineHeight: 22,
-    fontWeight: '700',
-    color: '#30332e',
-    letterSpacing: -0.3,
-  },
-  expenseYearPill: {
-    paddingHorizontal: 10,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: '#f1f1eb',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  expenseYearText: {
-    fontSize: 11,
-    lineHeight: 12,
-    fontWeight: '700',
-    color: '#5d605a',
-    letterSpacing: 0.6,
-  },
-  expenseStackBar: {
-    height: 10,
-    borderRadius: 999,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    backgroundColor: '#f1f1eb',
-  },
-  expenseStackSegment: {
-    height: '100%',
-  },
-  expenseStackFirst: {
-    borderTopLeftRadius: 999,
-    borderBottomLeftRadius: 999,
-  },
-  expenseStackLast: {
-    borderTopRightRadius: 999,
-    borderBottomRightRadius: 999,
-  },
-  expenseRows: {
-    gap: 10,
-  },
-  expenseRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  expenseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  expenseRowLabel: {
-    width: 62,
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '600',
-    color: '#4b4d48',
-  },
-  expenseBarTrack: {
-    flex: 1,
-    height: 8,
-    borderRadius: 999,
-    backgroundColor: '#f1f1eb',
-    overflow: 'hidden',
-  },
-  expenseBarFill: {
-    height: '100%',
-    borderRadius: 999,
-  },
-  expensePct: {
-    width: 36,
-    textAlign: 'right',
-    fontSize: 12,
-    lineHeight: 14,
-    fontWeight: '700',
-    color: '#6a6d67',
-  },
-  expenseAmt: {
-    minWidth: 78,
-    textAlign: 'right',
-    fontSize: 12,
-    lineHeight: 14,
-    fontWeight: '700',
-    color: '#30332e',
-  },
-  expenseFooter: {
-    paddingTop: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderTopWidth: 1,
-    borderTopColor: '#ecece4',
-  },
-  expenseFooterLabel: {
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '600',
-    color: '#6a6d67',
-  },
-  expenseFooterValue: {
-    ...mt.metric,
-    fontSize: 16,
-    lineHeight: 20,
-    color: '#30332e',
-    letterSpacing: -0.2,
-  },
-  expenseEmpty: {
-    paddingVertical: 8,
-  },
-  expenseEmptyText: {
-    fontSize: 13,
-    lineHeight: 20,
-    color: '#6a6d67',
-  },
   quickWeightOverlay: {
     flex: 1,
+    justifyContent: 'flex-end',
+  },
+  quickWeightBackdrop: {
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.16)',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
   },
   quickWeightCard: {
     backgroundColor: '#fff',
-    borderRadius: 24,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     paddingHorizontal: 22,
-    paddingVertical: 22,
+    paddingTop: 8,
+    paddingBottom: 22,
     gap: 12,
     shadowColor: '#000',
     shadowOpacity: 0.12,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
+  },
+  quickWeightHandleZone: {
+    alignItems: 'center',
+    paddingTop: 2,
+    paddingBottom: 6,
+  },
+  quickWeightHandle: {
+    width: 42,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#d0d3cb',
   },
   quickWeightTitle: {
     fontSize: 18,
@@ -2006,201 +1676,39 @@ const styles = StyleSheet.create({
   },
 
   // ── Health Journey ──
-  journeyHeader: {
+  quickAccessRow: {
     flexDirection: 'row',
+    gap: 10,
+  },
+  quickAccessChip: {
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#1d252d',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
   },
-  journeyTitle: {
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: '700',
-    color: '#30332e',
-    letterSpacing: -0.3,
+  quickAccessChipPressed: {
+    backgroundColor: '#f3f3ed',
   },
-  journeyCountPill: {
-    borderRadius: 999,
-    backgroundColor: '#eeeee8',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+  quickAccessIcon: {
+    fontSize: 22,
+    lineHeight: 26,
   },
-  journeyCountPillText: {
+  quickAccessLabel: {
     fontSize: 11,
     lineHeight: 14,
-    color: '#5d605a',
-    fontWeight: '700',
-  },
-  journeyList: {
-    gap: 10,
-  },
-  journeyConnector: {
-    display: 'none',
-  },
-  journeyRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  journeyIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-    marginTop: 2,
-    position: 'relative',
-  },
-  journeyIconDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  journeyIconPulse: {
-    position: 'absolute',
-    width: 28,
-    height: 28,
-    borderRadius: 10,
-    borderWidth: 2,
-  },
-  journeyCard: {
-    flex: 1,
-    borderRadius: 16,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 3,
-    shadowColor: '#000',
-    shadowOpacity: 0.03,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
-  },
-  journeyCardUrgent: {
-    borderColor: 'rgba(180,77,52,0.2)',
-    backgroundColor: '#fff9f8',
-  },
-  journeyCardMeta: {
-    fontSize: 10,
-    lineHeight: 13,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  journeyCardTitle: {
-    fontSize: 14,
-    lineHeight: 19,
-    color: '#30332e',
     fontWeight: '600',
-  },
-  journeyCardSub: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#7a7a72',
-    fontWeight: '400',
-  },
-  urgentTag: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    backgroundColor: '#fde8e3',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-  },
-  urgentTagText: {
-    fontSize: 9,
-    lineHeight: 12,
-    color: '#a73b21',
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
-  journeyCardAction: {
-    alignSelf: 'flex-start',
-    marginTop: 4,
-    borderRadius: 10,
-    backgroundColor: '#eef6ef',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  journeyCardActionText: {
-    color: '#47664a',
-    fontSize: 12,
-    lineHeight: 15,
-    fontWeight: '700',
-  },
-
-  // ── Journey empty state ──
-  journeyEmpty: {
-    borderRadius: 18,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.06)',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-    alignItems: 'center',
-    gap: 8,
-  },
-  journeyEmptyTitle: {
-    fontSize: 16,
-    lineHeight: 22,
-    color: '#30332e',
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  journeyEmptySub: {
-    fontSize: 13,
-    lineHeight: 18,
-    color: '#5d605a',
-    fontWeight: '400',
-    textAlign: 'center',
-  },
-  journeyEmptyCta: {
-    marginTop: 4,
-    borderRadius: 999,
-    backgroundColor: '#47664a',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  journeyEmptyCtaText: {
-    color: '#fff',
-    fontSize: 13,
-    lineHeight: 16,
-    fontWeight: '700',
-  },
-  quickAddCta: {
-    marginHorizontal: 20,
-    marginTop: 12,
-    marginBottom: 4,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(71,102,74,0.2)',
-    backgroundColor: 'rgba(71,102,74,0.07)',
-    overflow: 'hidden',
-  },
-  quickAddCtaPressed: {
-    backgroundColor: 'rgba(71,102,74,0.14)',
-  },
-  quickAddCtaInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 13,
-    paddingHorizontal: 20,
-  },
-  quickAddCtaIcon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(71,102,74,0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickAddCtaText: {
-    color: '#47664a',
-    fontSize: 15,
-    fontWeight: '600',
-    letterSpacing: 0.1,
+    color: '#454845',
+    letterSpacing: -0.1,
   },
 });
 

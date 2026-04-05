@@ -33,6 +33,7 @@ import {
   Utensils,
 } from 'lucide-react-native';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
+const healthHubHeaderIconAsset = require('../assets/illustrations/health-hub-icon.png');
 
 // â”€â”€â”€ Colour palette (matches reference design system) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const C = {
@@ -93,6 +94,8 @@ export type AddHealthRecordPayload = {
   linkedToVetVisit?: boolean;
   /** free-text context for follow-up visits — shown on the visit card */
   followUpContext?: string;
+  /** local file URIs attached to the health record (images / documents) */
+  attachedFileUris?: string[];
 };
 export type HealthHubExpenses = {
   total: number;
@@ -425,19 +428,19 @@ function healthAreaStatusMeta(
 }
 
 function emptyAreaGuidance(key: AreaRowKey, isTr: boolean) {
-  if (key === 'vet') return isTr ? 'Ilk veteriner ziyaretini ekleyin.' : 'Add first vet visit.';
-  if (key === 'vaccines') return isTr ? 'Ilk asiyi girip takip baslatin.' : 'Log first vaccine to start tracking.';
-  if (key === 'weight') return isTr ? 'Trend icin ilk kiloyu ekleyin.' : 'Add first weight to start trends.';
-  if (key === 'records') return isTr ? 'Ilk saglik kaydini ekleyin.' : 'Add first health record.';
-  return isTr ? 'Ilk belgeyi yukleyin.' : 'Upload first record.';
+  if (key === 'vet') return isTr ? 'İlk veteriner ziyaretini ekleyin.' : 'Add first vet visit.';
+  if (key === 'vaccines') return isTr ? 'İlk aşıyı girip takip başlatın.' : 'Log first vaccine to start tracking.';
+  if (key === 'weight') return isTr ? 'Trend için ilk kiloyu ekleyin.' : 'Add first weight to start trends.';
+  if (key === 'records') return isTr ? 'İlk sağlık kaydını ekleyin.' : 'Add first health record.';
+  return isTr ? 'İlk belgeyi yükleyin.' : 'Upload first record.';
 }
 
 function actionLabelForArea(key: AreaRowKey, isTr: boolean) {
   if (key === 'vet') return isTr ? 'Veteriner ziyareti ekle' : 'Add Vet Visit';
-  if (key === 'vaccines') return isTr ? 'Asi kaydi ekle' : 'Log Vaccine';
-  if (key === 'weight') return isTr ? 'Ilk kiloyu ekle' : 'Add first weight';
-  if (key === 'records') return isTr ? 'Saglik kaydi ekle' : 'Add first record';
-  return isTr ? 'Ilk belgeyi yukle' : 'Upload first record';
+  if (key === 'vaccines') return isTr ? 'Aşı kaydı ekle' : 'Log Vaccine';
+  if (key === 'weight') return isTr ? 'İlk kiloyu ekle' : 'Add first weight';
+  if (key === 'records') return isTr ? 'Sağlık kaydı ekle' : 'Add first record';
+  return isTr ? 'İlk belgeyi yükle' : 'Upload first record';
 }
 
 function FolderHeartIcon({ size = 21, color = '#7aa2b8' }: { size?: number; color?: string }) {
@@ -1198,11 +1201,11 @@ export default function HealthHubScreen({
   );
   const timelineFilterOptions = useMemo(
     () => ([
-      { key: 'all' as const, label: isTr ? 'Tum' : 'All' },
-      { key: 'vaccine' as const, label: isTr ? 'Asi' : 'Vaccines' },
+      { key: 'all' as const, label: isTr ? 'Tümü' : 'All' },
+      { key: 'vaccine' as const, label: isTr ? 'Aşı' : 'Vaccines' },
       { key: 'weight' as const, label: isTr ? 'Kilo' : 'Weight' },
-      { key: 'vet' as const, label: 'Vet' },
-      { key: 'record' as const, label: isTr ? 'Kayit' : 'Records' },
+      { key: 'vet' as const, label: isTr ? 'Veteriner' : 'Vet' },
+      { key: 'record' as const, label: isTr ? 'Kayıt' : 'Records' },
     ]),
     [isTr],
   );
@@ -1245,25 +1248,25 @@ export default function HealthHubScreen({
       {
         key: 'vet',
         title: isTr ? 'Veteriner Ziyaretleri' : 'Vet Visits',
-        fallbackSubtitle: isTr ? 'Klinik gecmisi ve randevular' : 'Visits, checkups, and scheduled care',
+        fallbackSubtitle: isTr ? 'Klinik geçmişi ve randevular' : 'Visits, checkups, and scheduled care',
         onPress: onOpenVetVisits,
       },
       {
         key: 'vaccines',
-        title: isTr ? 'Asilar' : 'Vaccines',
+        title: isTr ? 'Aşılar' : 'Vaccines',
         fallbackSubtitle: isTr ? 'Son durum ve sonraki dozlar' : 'Coverage and upcoming doses',
         onPress: onOpenVaccines,
       },
       {
         key: 'weight',
-        title: isTr ? 'Agirlik Profili' : 'Weight Profile',
-        fallbackSubtitle: isTr ? 'Trend ve son olcumler' : 'Trends and recent weigh-ins',
+        title: isTr ? 'Ağırlık Profili' : 'Weight Profile',
+        fallbackSubtitle: isTr ? 'Trend ve son ölçümler' : 'Trends and recent weigh-ins',
         onPress: onOpenWeightTracking,
       },
       {
         key: 'records',
-        title: isTr ? 'Saglik Kayitlari' : 'Health Records',
-        fallbackSubtitle: isTr ? 'Tani, test ve tedavi gecmisi' : 'Diagnoses, tests, and treatment history',
+        title: isTr ? 'Sağlık Kayıtları' : 'Health Records',
+        fallbackSubtitle: isTr ? 'Tanı, test ve tedavi geçmişi' : 'Diagnoses, tests, and treatment history',
         onPress: onOpenHealthRecords,
       },
       {
@@ -1320,7 +1323,7 @@ export default function HealthHubScreen({
           : (isTr ? 'Kayitlar duzenli gorunuyor.' : 'Your health records look well organized.');
     const recommendedLabel = nextRecommendedArea
       ? (isTr ? 'Sonraki en iyi adim' : 'Recommended next step')
-      : (isTr ? 'Saglik ozeti' : 'Health snapshot');
+      : (isTr ? 'Sağlık özeti' : 'Health snapshot');
     const recommendedAction = nextRecommendedArea
       ? (nextRecommendedArea.actionLabel ?? nextRecommendedArea.title)
       : (isTr ? 'Kayitlari guncel tutmaya devam edin.' : 'Keep your records up to date.');
@@ -1353,18 +1356,38 @@ export default function HealthHubScreen({
     extrapolate: 'clamp',
   });
   const headerTitleScale = scrollY.interpolate({
-    inputRange: [0, 84, 180],
-    outputRange: [1.06, 0.97, 0.9],
+    inputRange: [0, 28, 90],
+    outputRange: [1, 0.985, 0.96],
     extrapolate: 'clamp',
   });
   const headerTitleTranslateX = scrollY.interpolate({
-    inputRange: [0, 80],
-    outputRange: [0, 0],
+    inputRange: [0, 76, 160],
+    outputRange: [0, -4, -8],
     extrapolate: 'clamp',
   });
   const headerTitleTranslateY = scrollY.interpolate({
-    inputRange: [0, 80],
-    outputRange: [3, 0],
+    inputRange: [0, 76, 160],
+    outputRange: [0, -1, -4],
+    extrapolate: 'clamp',
+  });
+  const headerTitleOpacity = scrollY.interpolate({
+    inputRange: [0, 8, 34, 76],
+    outputRange: [1, 0.88, 0.26, 0],
+    extrapolate: 'clamp',
+  });
+  const headerCenterIconOpacity = scrollY.interpolate({
+    inputRange: [0, 4, 22, 66],
+    outputRange: [0, 0.22, 0.78, 1],
+    extrapolate: 'clamp',
+  });
+  const headerCenterIconScale = scrollY.interpolate({
+    inputRange: [0, 28, 90],
+    outputRange: [0.95, 0.985, 1],
+    extrapolate: 'clamp',
+  });
+  const headerCenterIconTranslateY = scrollY.interpolate({
+    inputRange: [0, 28, 90],
+    outputRange: [-4, 0, 0],
     extrapolate: 'clamp',
   });
   // â”€â”€ form helpers â”€â”€
@@ -1387,9 +1410,9 @@ export default function HealthHubScreen({
   const quickActionItems = useMemo(() => ([
     {
       key: 'vaccine' as const,
-      title: isTr ? 'Asi kaydi ekle' : 'Log Vaccine',
-      subtitle: isTr ? 'Dozlari ve sonraki tarihleri duzenleyin' : 'Track doses and next due dates',
-      shortHint: isTr ? 'Immunizasyon' : 'Immunization',
+      title: isTr ? 'Aşı kaydı ekle' : 'Log Vaccine',
+      subtitle: isTr ? 'Dozları ve sonraki tarihleri düzenleyin' : 'Track doses and next due dates',
+      shortHint: isTr ? 'İmmünizasyon' : 'Immunization',
       onPress: () => openCreate('vaccine'),
       icon: <Syringe size={18} color="#41688c" strokeWidth={2.2} />,
       tone: 'vaccine' as const,
@@ -1397,16 +1420,16 @@ export default function HealthHubScreen({
     {
       key: 'weight' as const,
       title: isTr ? 'Kilo ekle' : 'Add Weight',
-      subtitle: isTr ? 'Trend takibi icin yeni olcum ekleyin' : 'Log a fresh weigh-in for trend tracking',
-      shortHint: isTr ? 'Olcum girişi' : 'Measurement',
+      subtitle: isTr ? 'Trend takibi için yeni ölçüm ekleyin' : 'Log a fresh weigh-in for trend tracking',
+      shortHint: isTr ? 'Ölçüm girişi' : 'Measurement',
       onPress: onAddWeightEntry,
       icon: <TrendingUp size={18} color="#5f4f93" strokeWidth={2.2} />,
       tone: 'weight' as const,
     },
     {
       key: 'document' as const,
-      title: isTr ? 'Belge yukle' : 'Upload Document',
-      subtitle: isTr ? 'Raporlari ve dosyalari tek yerde tutun' : 'Keep reports and files ready in one place',
+      title: isTr ? 'Belge yükle' : 'Upload Document',
+      subtitle: isTr ? 'Raporları ve dosyaları tek yerde tutun' : 'Keep reports and files ready in one place',
       shortHint: isTr ? 'Dosya eki' : 'Attachment',
       onPress: onOpenDocuments,
       icon: <Files size={18} color="#7a5a3a" strokeWidth={2.2} />,
@@ -1430,6 +1453,14 @@ export default function HealthHubScreen({
     () => quickActionItems.filter((item) => item.key !== primaryQuickAction.key),
     [primaryQuickAction.key, quickActionItems],
   );
+  const visibleTimelinePreview = useMemo(
+    () => filteredTimelinePreview.slice(0, 3),
+    [filteredTimelinePreview],
+  );
+  const activeTimelineFilterLabel = useMemo(
+    () => timelineFilterOptions.find((option) => option.key === timelineFilter)?.label ?? (isTr ? 'Tümü' : 'All'),
+    [isTr, timelineFilter, timelineFilterOptions],
+  );
 
   const springDown = (v: Animated.Value, toValue = 0.96) =>
     () => Animated.spring(v, { toValue, useNativeDriver: true, speed: 60, bounciness: 0 }).start();
@@ -1438,13 +1469,7 @@ export default function HealthHubScreen({
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   return (
-    <ExpoLinearGradient
-      colors={['#FFFFFF', '#ECE9E6']}
-      locations={[0, 1]}
-      start={{ x: 0, y: 0.5 }}
-      end={{ x: 1, y: 0.5 }}
-      style={s.screen}
-    >
+    <View style={s.screen}>
       <Animated.ScrollView
         ref={mainScrollRef}
         contentContainerStyle={[s.content, { paddingTop: topBarHeight + 12 }]}
@@ -1467,7 +1492,7 @@ export default function HealthHubScreen({
             <View style={[s.summaryMetricItem, s.summaryMetricUrgent]}>
               <View style={s.summaryMetricLabelRow}>
                 <View style={[s.summaryMetricDot, s.summaryMetricDotUrgent]} />
-                <Text style={s.summaryMetricLabel}>{isTr ? 'Geciken oge' : 'Overdue items'}</Text>
+                <Text style={s.summaryMetricLabel}>{isTr ? 'Geciken öğe' : 'Overdue items'}</Text>
               </View>
               <Text style={[s.summaryMetricValue, s.summaryMetricValueUrgent]}>{healthSummaryData.overdueItems}</Text>
             </View>
@@ -1475,7 +1500,7 @@ export default function HealthHubScreen({
             <View style={s.summaryMetricItem}>
               <View style={s.summaryMetricLabelRow}>
                 <View style={[s.summaryMetricDot, s.summaryMetricDotSoon]} />
-                <Text style={s.summaryMetricLabel}>{isTr ? 'Yaklasan alan' : 'Due soon areas'}</Text>
+                <Text style={s.summaryMetricLabel}>{isTr ? 'Yaklaşan alan' : 'Due soon areas'}</Text>
               </View>
               <Text style={[s.summaryMetricValue, s.summaryMetricValueSoon]}>{healthSummaryData.dueSoonItems}</Text>
             </View>
@@ -1483,7 +1508,7 @@ export default function HealthHubScreen({
             <View style={s.summaryMetricItem}>
               <View style={s.summaryMetricLabelRow}>
                 <View style={[s.summaryMetricDot, s.summaryMetricDotMissing]} />
-                <Text style={s.summaryMetricLabel}>{isTr ? 'Eksik veri alani' : 'Missing data areas'}</Text>
+                <Text style={s.summaryMetricLabel}>{isTr ? 'Eksik veri alanı' : 'Missing data areas'}</Text>
               </View>
               <Text style={[s.summaryMetricValue, s.summaryMetricValueMissing]}>{healthSummaryData.missingDataAreas}</Text>
             </View>
@@ -1492,69 +1517,8 @@ export default function HealthHubScreen({
 
         <View style={s.sectionHeaderRow}>
           <View>
-            <Text style={s.sectionEyebrow}>{isTr ? 'Hizli Islemler' : 'Quick Actions'}</Text>
-            <Text style={s.sectionLeadSecondary}>{isTr ? 'Veri girisini net aksiyonlarla baslatin.' : 'Start structured input with clear actions.'}</Text>
-          </View>
-        </View>
-        <View style={s.quickActionZone}>
-          <Pressable
-            style={[s.quickActionPrimaryCard, primaryQuickAction.tone === 'vaccine' ? s.quickActionPrimaryVaccine : s.quickActionPrimaryVet]}
-            onPress={primaryQuickAction.onPress}
-            disabled={!primaryQuickAction.onPress}
-          >
-            <View style={s.quickActionPrimaryHead}>
-              <View style={[
-                s.quickActionPrimaryIconWrap,
-                primaryQuickAction.tone === 'vaccine'
-                  ? s.quickActionIconVaccine
-                  : s.quickActionIconVet,
-              ]}>
-                {primaryQuickAction.icon}
-              </View>
-              <View style={s.quickActionPrimaryBadge}>
-                <Text style={s.quickActionPrimaryBadgeText}>{isTr ? 'Onerilen' : 'Recommended'}</Text>
-              </View>
-            </View>
-            <Text style={s.quickActionPrimaryTitle}>{primaryQuickAction.title}</Text>
-            <Text style={s.quickActionPrimarySub}>{primaryQuickAction.subtitle}</Text>
-          </Pressable>
-
-          <View style={s.quickActionSecondaryList}>
-            {secondaryQuickActions.map((action, index) => (
-              <Pressable
-                key={action.key}
-                style={[s.quickActionSecondaryRow, index === secondaryQuickActions.length - 1 ? s.quickActionSecondaryRowLast : null]}
-                onPress={action.onPress}
-                disabled={!action.onPress}
-              >
-                <View
-                  style={[
-                    s.quickActionSecondaryIconWrap,
-                    action.tone === 'weight'
-                      ? s.quickActionIconWeight
-                      : action.tone === 'document'
-                        ? s.quickActionIconDocument
-                        : action.tone === 'vaccine'
-                          ? s.quickActionIconVaccine
-                          : s.quickActionIconVet,
-                  ]}
-                >
-                  {action.icon}
-                </View>
-                <View style={s.quickActionSecondaryTextWrap}>
-                  <Text style={s.quickActionSecondaryTitle}>{action.title}</Text>
-                  <Text style={s.quickActionSecondarySub} numberOfLines={1}>{action.shortHint}</Text>
-                </View>
-                <ChevronRight size={14} color={C.primary} strokeWidth={2.2} />
-              </Pressable>
-            ))}
-          </View>
-        </View>
-
-        <View style={s.sectionHeaderRow}>
-          <View>
-            <Text style={s.sectionEyebrow}>{isTr ? 'Saglik Alanlari' : 'Health Areas'}</Text>
-            <Text style={s.sectionLeadSecondary}>{isTr ? 'Her alanin durumunu ve sonraki dogru adimi gorun.' : 'See each area status and the next right action.'}</Text>
+            <Text style={s.sectionEyebrow}>{isTr ? 'Sağlık Alanları' : 'Health Areas'}</Text>
+            <Text style={s.sectionLeadSecondary}>{isTr ? 'Her alanın durumu ve sonraki adım.' : 'See each area status and the next right action.'}</Text>
           </View>
         </View>
         <View style={s.healthAreaList}>
@@ -1607,14 +1571,19 @@ export default function HealthHubScreen({
         <View style={s.sectionHeaderRow}>
           <View>
             <Text style={s.sectionEyebrow}>{isTr ? 'Son Aktivite' : 'Recent Activity'}</Text>
-            <Text style={s.sectionLeadSecondary}>{isTr ? 'En son eklenen saglik guncellemeleri.' : 'A lightweight preview of the latest health updates.'}</Text>
+            <Text style={s.sectionLeadSecondary}>{isTr ? 'Son sağlık güncellemeleri.' : 'A lightweight preview of the latest health updates.'}</Text>
           </View>
           <Pressable style={s.historyCta} onPress={handleOpenTimelineHistory}>
-            <Text style={s.historyCtaText}>{isTr ? 'Tum gecmisi gor' : 'View full history'}</Text>
+            <Text style={s.historyCtaText}>{isTr ? 'Tüm geçmişi gör' : 'View full history'}</Text>
             <ChevronRight size={14} color={C.primary} strokeWidth={2.2} />
           </Pressable>
         </View>
-        <View style={s.timelineFilterRowCompact}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={s.timelineFilterScrollOuter}
+          contentContainerStyle={s.timelineFilterRowCompact}
+        >
           {timelineFilterOptions.map((option) => {
             const active = option.key === timelineFilter;
             return (
@@ -1631,34 +1600,53 @@ export default function HealthHubScreen({
               </Pressable>
             );
           })}
-        </View>
+        </ScrollView>
         <View style={s.timelinePreviewCard}>
-          {filteredTimelinePreview.length > 0 ? (
-            filteredTimelinePreview.slice(0, 3).map((item, idx) => (
-              <View key={item.id} style={[s.timelinePreviewRowModern, idx < Math.min(filteredTimelinePreview.length, 3) - 1 && s.timelinePreviewRowDividerModern]}>
-                <View style={[s.timelinePreviewIconWrapModern, { backgroundColor: `${timelineTypeAccent(item.type)}14` }]}>
-                  {timelineFilterIcon(item.type, true)}
+          <View style={s.timelinePreviewHeader}>
+            <View style={s.timelinePreviewHeaderCopy}>
+              <Text style={s.timelinePreviewHeaderTitle}>
+                {timelineFilter === 'all'
+                  ? (isTr ? 'Son kayıtlar' : 'Latest updates')
+                  : `${activeTimelineFilterLabel} ${isTr ? 'akışı' : 'activity'}`}
+              </Text>
+              <Text style={s.timelinePreviewHeaderCaption}>
+                {isTr ? 'En yeni sağlık hareketleri burada görünür.' : 'Newest health events appear here first.'}
+              </Text>
+            </View>
+            <View style={s.timelinePreviewCountBadge}>
+              <Text style={s.timelinePreviewCountText}>{visibleTimelinePreview.length}</Text>
+            </View>
+          </View>
+          {visibleTimelinePreview.length > 0 ? (
+            visibleTimelinePreview.map((item, idx) => (
+              <View key={item.id} style={[s.timelinePreviewRowModern, idx < visibleTimelinePreview.length - 1 && s.timelinePreviewRowDividerModern]}>
+                <View style={s.timelinePreviewLead}>
+                  <View style={[s.timelinePreviewIconWrapModern, { backgroundColor: `${timelineTypeAccent(item.type)}16` }]}>
+                    {timelineFilterIcon(item.type, true)}
+                  </View>
+                  <View style={s.timelinePreviewBodyModern}>
+                    <Text style={s.timelinePreviewTitleModern} numberOfLines={1}>{item.title}</Text>
+                    <Text style={s.timelinePreviewMetaModern} numberOfLines={1}>{typeTag(item.type, isTr)}</Text>
+                  </View>
                 </View>
-                <View style={s.timelinePreviewBodyModern}>
-                  <Text style={s.timelinePreviewTitleModern} numberOfLines={1}>{item.title}</Text>
-                  <Text style={s.timelinePreviewMetaModern} numberOfLines={1}>
-                    {item.date}{item.title.toLowerCase() !== typeTag(item.type, isTr).toLowerCase() ? ` · ${typeTag(item.type, isTr)}` : ''}
-                  </Text>
+                <View style={s.timelinePreviewDatePill}>
+                  <Text style={s.timelinePreviewDateText} numberOfLines={1}>{item.date}</Text>
                 </View>
               </View>
             ))
           ) : (
             <View style={s.timelinePreviewEmptyModern}>
-              <Text style={s.timelinePreviewEmptyTitle}>{isTr ? 'Henuz aktivite yok' : 'No activity yet'}</Text>
-              <Text style={s.timelinePreviewEmptyTextModern}>{isTr ? 'Asi veya veteriner ziyareti ekleyerek gecmisi baslatin.' : 'Start with a vaccine or vet visit to build history.'}</Text>
+              <Text style={s.timelinePreviewEmptyTitle}>{isTr ? 'Henüz aktivite yok' : 'No activity yet'}</Text>
+              <Text style={s.timelinePreviewEmptyTextModern}>{isTr ? 'Aşı veya veteriner ziyareti ekleyerek geçmişi başlatın.' : 'Start with a vaccine or vet visit to build history.'}</Text>
             </View>
           )}
         </View>
         {breedEntry ? (
           <View style={[s.sectionBlock, s.breedSectionBlock]}>
-            <View style={s.sectionHeaderCompact}>
-              <View style={s.sectionTextWrap}>
-                <Text style={s.sectionTitle}>{isTr ? 'Irk İçgörüleri' : 'Breed Insights'}</Text>
+            <View style={s.sectionHeaderRow}>
+              <View>
+                <Text style={s.sectionEyebrow}>{isTr ? 'IRK İÇGÖRÜLERİ' : 'BREED INSIGHTS'}</Text>
+                <Text style={s.sectionLeadSecondary}>{isTr ? 'Irka özgü sağlık ipuçları.' : 'Breed-specific health tips.'}</Text>
               </View>
             </View>
             <BreedTeaserRow
@@ -1673,35 +1661,6 @@ export default function HealthHubScreen({
           </View>
         ) : null}
 
-        <View style={s.aiTextRow}>
-          <TrendingUp size={16} color={C.primary} strokeWidth={2.1} />
-          <Text style={s.aiTextRowMessage} numberOfLines={2}>
-            {primaryInsight?.message ?? (
-              isTr
-                ? 'Daha derin analiz için Insights ekranını açın.'
-                : 'Open Insights for deeper AI analysis.'
-            )}
-          </Text>
-          {onOpenInsights ? (
-            <Pressable style={s.aiTextRowBtn} onPress={onOpenInsights}>
-              <Text style={s.aiTextRowBtnText}>{isTr ? 'Aç' : 'Open'}</Text>
-              <ChevronRight size={13} color={C.primary} strokeWidth={2.2} />
-            </Pressable>
-          ) : null}
-        </View>
-
-        {onOpenPassport ? (
-          <Pressable style={s.exportPassportRow} onPress={onOpenPassport}>
-            <View style={s.exportPassportIconWrap}>
-              <FileText size={18} color={C.primary} strokeWidth={2.1} />
-            </View>
-            <View style={s.exportPassportText}>
-              <Text style={s.exportPassportTitle}>{isTr ? 'Sağlık Kartı' : 'Health Card'}</Text>
-              <Text style={s.exportPassportSub}>{isTr ? 'Özet görüntüle veya PDF olarak aktar' : 'View summary or export as PDF'}</Text>
-            </View>
-            <ChevronRight size={14} color={C.primary} strokeWidth={2.2} />
-          </Pressable>
-        ) : null}
 
       </Animated.ScrollView>
 
@@ -1709,7 +1668,7 @@ export default function HealthHubScreen({
         <Animated.View pointerEvents="none" style={[s.topChromeSurface, { height: topChromeHeight, opacity: topChromeOpacity }]}>
           <BlurView intensity={32} tint="light" style={StyleSheet.absoluteFillObject} />
           <ExpoLinearGradient
-            colors={['rgba(255,255,255,0.96)', 'rgba(255,255,255,0.75)', 'rgba(255,255,255,0.24)', 'rgba(255,255,255,0)']}
+            colors={['rgba(246,244,240,0.98)', 'rgba(246,244,240,0.80)', 'rgba(246,244,240,0.20)', 'rgba(246,244,240,0)']}
             locations={[0, 0.45, 0.8, 1]}
             start={{ x: 0.5, y: 0 }}
             end={{ x: 0.5, y: 1 }}
@@ -1723,6 +1682,7 @@ export default function HealthHubScreen({
             style={[
               s.topBarTitle,
               {
+                opacity: headerTitleOpacity,
                 transform: [
                   { translateX: headerTitleTranslateX },
                   { translateY: headerTitleTranslateY },
@@ -1733,6 +1693,19 @@ export default function HealthHubScreen({
           >
             Health Hub
           </Animated.Text>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              s.topBarCenterIconWrap,
+              { top: topInset + 2, height: 56 },
+              {
+                opacity: headerCenterIconOpacity,
+                transform: [{ translateY: headerCenterIconTranslateY }, { scale: headerCenterIconScale }],
+              },
+            ]}
+          >
+            <Image source={healthHubHeaderIconAsset} style={s.topBarCenterIcon} resizeMode="contain" />
+          </Animated.View>
           <Animated.View style={{ transform: [{ scale: headerBtnScale }] }}>
             <Pressable
               style={s.heroActionButton}
@@ -1974,6 +1947,7 @@ export default function HealthHubScreen({
         initialTitle={addSheetPresetTitle}
         initialType={addSheetPresetType}
         locale={locale}
+        onSelectWeight={onAddWeightEntry}
         onClose={() => {
           const savedPayload = createSavedPayloadRef.current;
           createSavedPayloadRef.current = null;
@@ -1985,7 +1959,7 @@ export default function HealthHubScreen({
           onAddRecord?.(payload);
         }}
       />
-    </ExpoLinearGradient>
+    </View>
   );
 }
 
@@ -1993,7 +1967,7 @@ export default function HealthHubScreen({
 const s = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#ECE9E6',
+    backgroundColor: '#f6f4f0',
   },
   content: {
     paddingTop: 56,
@@ -2028,6 +2002,7 @@ const s = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    position: 'relative',
   },
   topBarTitle: {
     flex: 1,
@@ -2037,6 +2012,24 @@ const s = StyleSheet.create({
     fontWeight: '800',
     color: '#24342d',
     letterSpacing: -1,
+  },
+  topBarCenterIconWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarCenterIcon: {
+    width: 102,
+    height: 102,
+    marginTop: -8,
+    opacity: 0.98,
+    shadowColor: '#0f2019',
+    shadowOpacity: 0.26,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 9,
   },
   heroTopRow: {
     flexDirection: 'row',
@@ -3713,37 +3706,44 @@ const s = StyleSheet.create({
     gap: 12,
   },
   sectionEyebrow: {
-    fontSize: 13,
+    fontSize: 11,
     lineHeight: 16,
     fontWeight: '700',
-    color: '#47664a',
-    letterSpacing: 0.1,
+    color: C.onSurfaceVariant,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   sectionLead: {
     marginTop: 5,
-    fontSize: 17,
-    lineHeight: 24,
-    fontWeight: '600',
-    color: '#24342d',
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '700',
+    color: C.onSurface,
+    letterSpacing: -0.5,
     maxWidth: 320,
   },
   sectionLeadSecondary: {
-    marginTop: 4,
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: '500',
-    color: '#6b736d',
+    marginTop: 2,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '400',
+    color: C.onSurfaceVariant,
     maxWidth: 310,
   },
   summaryRecommendationRow: {
-    marginTop: -1,
+    marginTop: 4,
     marginBottom: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.62)',
+    backgroundColor: '#ffffff',
     borderWidth: 1,
-    borderColor: 'rgba(71,102,74,0.08)',
+    borderColor: 'rgba(0,0,0,0.06)',
+    shadowColor: '#000',
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
   summaryRecommendationLabel: {
     fontSize: 11,
@@ -3848,10 +3848,10 @@ const s = StyleSheet.create({
     elevation: 3,
   },
   quickActionPrimaryVet: {
-    backgroundColor: 'rgba(250,255,250,0.93)',
+    backgroundColor: '#f5fbf6',
   },
   quickActionPrimaryVaccine: {
-    backgroundColor: 'rgba(248,252,255,0.93)',
+    backgroundColor: '#f4f8fd',
   },
   quickActionPrimaryHead: {
     flexDirection: 'row',
@@ -3957,16 +3957,16 @@ const s = StyleSheet.create({
     backgroundColor: '#f7efe6',
   },
   healthAreaList: {
-    backgroundColor: 'rgba(255,255,255,0.92)',
+    backgroundColor: '#ffffff',
     borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(71,102,74,0.10)',
+    borderColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
     marginBottom: 28,
-    shadowColor: '#405248',
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
+    shadowColor: '#000',
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
   healthAreaCard: {
@@ -3974,7 +3974,7 @@ const s = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 16,
-    paddingVertical: 13,
+    paddingVertical: 15,
   },
   healthAreaCardBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,
@@ -4084,11 +4084,13 @@ const s = StyleSheet.create({
     fontWeight: '700',
     color: '#47664a',
   },
+  timelineFilterScrollOuter: {
+    marginBottom: 12,
+  },
   timelineFilterRowCompact: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: 8,
-    marginBottom: 12,
+    paddingRight: 4,
   },
   timelineTab: {
     flexDirection: 'row',
@@ -4115,15 +4117,61 @@ const s = StyleSheet.create({
   },
   timelinePreviewCard: {
     marginBottom: 24,
-    backgroundColor: 'rgba(255,255,255,0.72)',
-    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.80)',
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: 'rgba(71,102,74,0.08)',
     overflow: 'hidden',
   },
+  timelinePreviewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 15,
+    paddingBottom: 13,
+    backgroundColor: 'rgba(247,248,244,0.94)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(93,96,90,0.10)',
+  },
+  timelinePreviewHeaderCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  timelinePreviewHeaderTitle: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '800',
+    color: '#24342d',
+  },
+  timelinePreviewHeaderCaption: {
+    fontSize: 11.5,
+    lineHeight: 15,
+    fontWeight: '500',
+    color: '#6f776f',
+  },
+  timelinePreviewCountBadge: {
+    minWidth: 30,
+    height: 30,
+    paddingHorizontal: 8,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eef2ea',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+  },
+  timelinePreviewCountText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '800',
+    color: '#35533b',
+  },
   timelinePreviewRowModern: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
@@ -4132,16 +4180,26 @@ const s = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(93,96,90,0.10)',
   },
+  timelinePreviewLead: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minWidth: 0,
+  },
   timelinePreviewIconWrapModern: {
-    width: 30,
-    height: 30,
-    borderRadius: 10,
+    width: 34,
+    height: 34,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.06)',
   },
   timelinePreviewBodyModern: {
     flex: 1,
     gap: 2,
+    minWidth: 0,
   },
   timelinePreviewTitleModern: {
     fontSize: 14,
@@ -4154,6 +4212,23 @@ const s = StyleSheet.create({
     lineHeight: 16,
     fontWeight: '500',
     color: '#6b736d',
+  },
+  timelinePreviewDatePill: {
+    maxWidth: 96,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: '#f3f4ef',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timelinePreviewDateText: {
+    fontSize: 11.5,
+    lineHeight: 14,
+    fontWeight: '700',
+    color: '#5b655d',
   },
   timelinePreviewEmptyModern: {
     paddingHorizontal: 18,

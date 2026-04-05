@@ -54,10 +54,10 @@ export default function PetListCard({
   const gradientId = gradientIdRef.current;
   const progressColors = React.useMemo(() => {
     if (safePercent < 40) {
-      return { start: '#c48563', end: '#d69f78', badgeBg: '#fff4ea', badgeText: '#8f5f43' };
+      return { start: '#8e6d5a', end: '#b08c76', badgeBg: '#f7efe8', badgeText: '#735645' };
     }
     if (safePercent < 75) {
-      return { start: '#b0905f', end: '#d0ad74', badgeBg: '#fff8ec', badgeText: '#7f6338' };
+      return { start: '#7d7c57', end: '#a5a270', badgeBg: '#f7f5e8', badgeText: '#68653d' };
     }
     return { start: '#5b8b5f', end: '#8caf73', badgeBg: '#eef7ed', badgeText: '#416747' };
   }, [safePercent]);
@@ -95,7 +95,7 @@ export default function PetListCard({
                   height={ringRectSize}
                   rx={ringCornerRadius}
                   ry={ringCornerRadius}
-                  stroke="rgba(126, 95, 71, 0.18)"
+                  stroke="rgba(104,120,114,0.16)"
                   strokeWidth={ringStrokeWidth}
                   fill="none"
                 />
@@ -135,7 +135,7 @@ export default function PetListCard({
               </View>
 
               <Text numberOfLines={1} style={[styles.petUpdated, compact && styles.petUpdatedCompact]}>
-                {weightValue != null ? 'Updated recently' : (updatedLabel ?? 'No recent updates')}
+                {weightValue != null ? (updatedLabel ?? 'Updated recently') : (updatedLabel ?? 'No recent updates')}
               </Text>
             </View>
 
@@ -146,7 +146,7 @@ export default function PetListCard({
                 pressed && styles.chevronButtonPressed,
               ]}
             >
-              <ChevronRight size={22} color="#7f634f" strokeWidth={2.5} />
+              <ChevronRight size={22} color="#6c746f" strokeWidth={2.5} />
             </Pressable>
           </View>
         </BlurView>
@@ -159,22 +159,17 @@ const styles = StyleSheet.create({
   petCardWrap: {
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: 30,
+    borderRadius: 20,
   },
   petCard: {
     position: 'relative',
     overflow: 'hidden',
-    backgroundColor: 'rgba(255,250,244,0.74)',
-    borderRadius: 34,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderRadius: 22,
     paddingHorizontal: 18,
     paddingVertical: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.68)',
-    shadowColor: '#7e5f47',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 4,
+    borderColor: 'rgba(104,120,114,0.10)',
   },
   petCardHighlight: {
     position: 'absolute',
@@ -182,7 +177,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: 16,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.26)',
   },
   petCardCompact: {
     borderRadius: 24,
@@ -204,14 +199,13 @@ const styles = StyleSheet.create({
     position: 'absolute',
   },
   petCardActive: {
-    borderColor: 'rgba(227,190,154,0.38)',
-    backgroundColor: 'rgba(255,248,241,0.82)',
-    shadowOpacity: 0.1,
+    borderColor: 'rgba(71,102,74,0.18)',
+    backgroundColor: '#f7faf8',
   },
   petCardPressed: {
     transform: [{ scale: 0.985 }],
-    shadowOpacity: 0.03,
-    shadowRadius: 8,
+    shadowOpacity: 0.02,
+    shadowRadius: 6,
   },
   petImage: {
     width: 88,
@@ -219,10 +213,10 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.72)',
-    shadowColor: '#7e5f47',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: '#7c8d88',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
   petImageCompact: {
     width: 74,
@@ -233,15 +227,15 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 28,
-    backgroundColor: '#b69277',
+    backgroundColor: '#8f9b91',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 3,
     borderColor: 'rgba(255,255,255,0.72)',
-    shadowColor: '#7e5f47',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 4 },
+    shadowColor: '#7c8d88',
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
   },
   initialAvatarCompact: {
     width: 74,
@@ -268,14 +262,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fffaf4',
+    backgroundColor: '#fbfaf7',
     borderWidth: 1,
-    borderColor: 'rgba(171,143,116,0.26)',
+    borderColor: 'rgba(104,120,114,0.16)',
   },
   completionBadgeText: {
     fontSize: 10,
     lineHeight: 12,
-    color: '#6f5544',
+    color: '#5d605a',
     fontWeight: '700',
     letterSpacing: 0.1,
   },
@@ -290,7 +284,7 @@ const styles = StyleSheet.create({
     fontSize: 22,
     lineHeight: 26,
     fontWeight: '700',
-    color: '#2a1710',
+    color: '#26312f',
     letterSpacing: -0.5,
     marginBottom: 2,
   },
@@ -304,7 +298,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 19,
     fontWeight: '500',
-    color: 'rgba(86,67,55,0.88)',
+    color: '#646c68',
     marginBottom: 4,
   },
   petMetaCompact: {
@@ -322,7 +316,7 @@ const styles = StyleSheet.create({
     fontSize: 17,
     lineHeight: 20,
     fontWeight: '700',
-    color: '#5d463a',
+    color: '#47664a',
   },
   petWeightCompact: {
     fontSize: 15,
@@ -333,7 +327,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
     fontWeight: '600',
-    color: '#9a7a62',
+    color: '#7a827d',
   },
   petUpdatedCompact: {
     fontSize: 13,
@@ -348,7 +342,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: 'rgba(171,143,116,0.16)',
-    shadowColor: '#7e5f47',
+    shadowColor: '#7c8d88',
     shadowOpacity: 0.04,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },

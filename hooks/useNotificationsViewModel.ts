@@ -9,8 +9,11 @@ export function useNotificationsViewModel(args: {
   setNotificationInbox: Dispatch<SetStateAction<HealthNotification[]>>;
   setRemindersWithNotificationSync: (updater: (prev: ByPet<Reminder>) => ByPet<Reminder>) => void;
   setActivePetWithPersist: (petId: string) => void;
-  onOpenFollowup: () => void;
-  onOpenMissingData: (petId: string) => void;
+  onOpenVetVisitFollowup: () => void;
+  onOpenHealthRecordFollowup: () => void;
+  onOpenWeightTracking: (petId: string) => void;
+  onOpenVetVisitCreate: () => void;
+  onOpenHealthRecordCreate: () => void;
   onOpenReminderFlow: () => void;
   onSnoozeFeedback?: () => void;
 }) {
@@ -21,8 +24,11 @@ export function useNotificationsViewModel(args: {
     setNotificationInbox,
     setRemindersWithNotificationSync,
     setActivePetWithPersist,
-    onOpenFollowup,
-    onOpenMissingData,
+    onOpenVetVisitFollowup,
+    onOpenHealthRecordFollowup,
+    onOpenWeightTracking,
+    onOpenVetVisitCreate,
+    onOpenHealthRecordCreate,
     onOpenReminderFlow,
     onSnoozeFeedback,
   } = args;
@@ -67,20 +73,40 @@ export function useNotificationsViewModel(args: {
     if (!item) return;
     markNotificationRead(notificationId);
     setActivePetWithPersist(item.petId);
+
     if (item.type === 'followup') {
-      onOpenFollowup();
+      // notif-followup-{visit.id} = vet visit followup
+      // notif-record-followup-{event.id}-{dueDate} = health record followup
+      if (item.id.startsWith('notif-record-followup-')) {
+        onOpenHealthRecordFollowup();
+      } else {
+        onOpenVetVisitFollowup();
+      }
       return;
     }
+
     if (item.type === 'missing_data') {
-      onOpenMissingData(item.petId);
+      // relatedEntityId = "${petId}:${domain}" — weight | medical | vet
+      const domain = item.relatedEntityId.split(':')[1];
+      if (domain === 'weight') {
+        onOpenWeightTracking(item.petId);
+      } else if (domain === 'vet') {
+        onOpenVetVisitCreate();
+      } else {
+        onOpenHealthRecordCreate();
+      }
       return;
     }
+
     onOpenReminderFlow();
   }, [
     markNotificationRead,
-    onOpenFollowup,
-    onOpenMissingData,
+    onOpenHealthRecordCreate,
+    onOpenHealthRecordFollowup,
     onOpenReminderFlow,
+    onOpenVetVisitCreate,
+    onOpenVetVisitFollowup,
+    onOpenWeightTracking,
     setActivePetWithPersist,
     triggeredNotifications,
   ]);

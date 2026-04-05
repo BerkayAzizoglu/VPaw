@@ -150,37 +150,16 @@ export default function PetsScreen(props: PetsScreenProps) {
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={['#f8f4ed', '#f1e3d3', '#deccb9']}
-        locations={[0, 0.48, 1]}
-        start={{ x: 0.06, y: 0.02 }}
-        end={{ x: 0.96, y: 0.98 }}
-        style={StyleSheet.absoluteFillObject}
-      />
-      <LinearGradient
-        colors={['rgba(255,255,255,0)', 'rgba(255,252,247,0.94)', 'rgba(255,255,255,0)']}
+        colors={['#f7f5f1', '#f3f0ea', '#efebe4']}
         locations={[0, 0.5, 1]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.ribbonPrimary}
-      />
-      <LinearGradient
-        colors={['rgba(255,255,255,0)', 'rgba(255,248,236,0.72)', 'rgba(255,255,255,0)']}
-        locations={[0, 0.5, 1]}
-        start={{ x: 0, y: 0.1 }}
-        end={{ x: 1, y: 0.9 }}
-        style={styles.ribbonSecondary}
-      />
-      <LinearGradient
-        colors={['rgba(255,255,255,0)', 'rgba(255,243,224,0.68)', 'rgba(255,255,255,0)']}
-        locations={[0, 0.45, 1]}
         start={{ x: 0.1, y: 0 }}
         end={{ x: 0.9, y: 1 }}
-        style={styles.ribbonAccent}
+        style={StyleSheet.absoluteFillObject}
       />
 
       <SafeAreaView style={styles.safeArea} edges={['left', 'right']}>
         <View style={styles.screen} {...swipePanResponder.panHandlers}>
-          <AppleTopBar title={title} onBack={onBack} blurIntensity={20} backgroundColor="rgba(248, 244, 237, 0.62)" />
+          <AppleTopBar title={title} onBack={onBack} blurIntensity={20} backgroundColor="rgba(247, 245, 241, 0.72)" />
 
           <ScrollView
             contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 76, paddingBottom: 48 + insets.bottom }]}
@@ -190,8 +169,8 @@ export default function PetsScreen(props: PetsScreenProps) {
               <RefreshControl
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-                tintColor="#8b6a53"
-                colors={['#8b6a53']}
+                tintColor="#47664a"
+                colors={['#47664a']}
                 progressViewOffset={24}
               />
             }
@@ -253,7 +232,7 @@ export default function PetsScreen(props: PetsScreenProps) {
                   style={StyleSheet.absoluteFillObject}
                 />
                 <View style={styles.addIconShell}>
-                  <Plus size={19} color="#8b6a53" strokeWidth={2.1} />
+                  <Plus size={19} color="#47664a" strokeWidth={2.1} />
                 </View>
                 <View style={styles.addBody}>
                   <Text style={styles.addTitle}>{addTitle}</Text>
@@ -271,7 +250,7 @@ export default function PetsScreen(props: PetsScreenProps) {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#ead8c8',
+    backgroundColor: '#f7f5f1',
   },
   safeArea: {
     flex: 1,
@@ -280,33 +259,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
-  ribbonPrimary: {
-    position: 'absolute',
-    top: -40,
-    right: -40,
-    width: 240,
-    height: 1040,
-    opacity: 0.94,
-    transform: [{ rotate: '24deg' }],
-  },
-  ribbonSecondary: {
-    position: 'absolute',
-    top: 120,
-    left: 156,
-    width: 160,
-    height: 980,
-    opacity: 0.78,
-    transform: [{ rotate: '36deg' }],
-  },
-  ribbonAccent: {
-    position: 'absolute',
-    top: 280,
-    right: -20,
-    width: 110,
-    height: 680,
-    opacity: 0.52,
-    transform: [{ rotate: '17deg' }],
-  },
   scrollContent: {
     paddingHorizontal: 20,
     gap: 18,
@@ -314,24 +266,19 @@ const styles = StyleSheet.create({
   heroCard: {
     position: 'relative',
     overflow: 'hidden',
-    borderRadius: 34,
-    backgroundColor: 'rgba(255,250,244,0.72)',
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.84)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.68)',
-    shadowColor: '#7e5f47',
-    shadowOpacity: 0.09,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 4,
+    borderColor: 'rgba(104,120,114,0.10)',
   },
   heroCardGlow: {
     position: 'absolute',
-    top: -24,
-    right: -16,
-    width: 180,
-    height: 110,
-    borderRadius: 90,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    top: -12,
+    right: -10,
+    width: 150,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(255,255,255,0.22)',
     transform: [{ rotate: '-14deg' }],
   },
   heroBlock: {
@@ -341,17 +288,17 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   heroTitle: {
-    fontSize: 34,
-    lineHeight: 38,
+    fontSize: 32,
+    lineHeight: 36,
     fontWeight: '800',
-    color: '#2a1710',
+    color: '#26312f',
     letterSpacing: -1,
   },
   heroBody: {
     maxWidth: 300,
     fontSize: 15,
     lineHeight: 22,
-    color: 'rgba(73, 52, 40, 0.84)',
+    color: '#68706b',
     fontWeight: '500',
   },
   heroMetaRow: {
@@ -366,22 +313,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,249,243,0.76)',
+    backgroundColor: '#f5f3ee',
     borderWidth: 1,
-    borderColor: 'rgba(169,143,118,0.16)',
+    borderColor: 'rgba(104,120,114,0.10)',
   },
   metaPillPremium: {
-    backgroundColor: 'rgba(242,226,201,0.9)',
-    borderColor: 'rgba(174,138,91,0.16)',
+    backgroundColor: '#eef4ef',
+    borderColor: 'rgba(71,102,74,0.14)',
   },
   metaPillText: {
     fontSize: 12,
     lineHeight: 15,
-    color: '#5d473b',
+    color: '#5d605a',
     fontWeight: '700',
   },
   metaPillPremiumText: {
-    color: '#8a6e2f',
+    color: '#47664a',
   },
   listWrap: {
     gap: 14,
@@ -389,17 +336,12 @@ const styles = StyleSheet.create({
   },
   addCard: {
     minHeight: 108,
-    borderRadius: 34,
+    borderRadius: 22,
     paddingHorizontal: 18,
     paddingVertical: 18,
     borderWidth: 1,
-    borderColor: 'rgba(171,143,116,0.14)',
-    backgroundColor: 'rgba(255,250,244,0.76)',
-    shadowColor: '#7e5f47',
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
+    borderColor: 'rgba(104,120,114,0.10)',
+    backgroundColor: 'rgba(255,255,255,0.84)',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
@@ -412,12 +354,12 @@ const styles = StyleSheet.create({
   addIconShell: {
     width: 52,
     height: 52,
-    borderRadius: 18,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,248,239,0.78)',
+    backgroundColor: '#eef4ef',
     borderWidth: 1,
-    borderColor: 'rgba(169,143,118,0.14)',
+    borderColor: 'rgba(71,102,74,0.14)',
   },
   addBody: {
     flex: 1,
@@ -427,35 +369,35 @@ const styles = StyleSheet.create({
     fontSize: 19,
     lineHeight: 24,
     fontWeight: '700',
-    color: '#2b1810',
+    color: '#26312f',
     letterSpacing: -0.3,
   },
   addText: {
     fontSize: 14,
     lineHeight: 20,
-    color: '#7d6658',
+    color: '#68706b',
     fontWeight: '500',
   },
   emptyCard: {
-    borderRadius: 32,
+    borderRadius: 22,
     paddingHorizontal: 20,
     paddingVertical: 22,
-    backgroundColor: 'rgba(255,250,244,0.74)',
+    backgroundColor: 'rgba(255,255,255,0.84)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.7)',
+    borderColor: 'rgba(104,120,114,0.10)',
   },
   emptyTitle: {
     fontSize: 18,
     lineHeight: 22,
     fontWeight: '700',
-    color: '#2a1710',
+    color: '#26312f',
     letterSpacing: -0.3,
   },
   emptySub: {
     marginTop: 8,
     fontSize: 14,
     lineHeight: 20,
-    color: 'rgba(74, 56, 45, 0.72)',
+    color: '#68706b',
   },
 });
 

@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { Check, ChevronDown } from 'lucide-react-native';
 import { hap } from '../lib/haptics';
 import type { PetProfile } from '../lib/petProfileTypes';
@@ -225,23 +226,25 @@ export default function OnboardingPetCreateScreen({
               <Text style={styles.heroSubtitle}>{isTr ? 'Bir dakikada hazir.' : 'Ready in under a minute.'}</Text>
             </View>
 
-            <View style={styles.typeGrid}>
-              <PetTypeCard
-                label={isTr ? 'Kedi' : 'Cat'}
-                helper={isTr ? 'Sakin ve zarif' : 'Calm and graceful'}
-                imageSource={catSelectIllustration}
-                selected={petType === 'Cat'}
-                scale={catScale}
-                onPress={() => handleSelectPetType('Cat')}
-              />
-              <PetTypeCard
-                label={isTr ? 'Kopek' : 'Dog'}
-                helper={isTr ? 'Sadik ve enerjik' : 'Loyal and energetic'}
-                imageSource={dogSelectIllustration}
-                selected={petType === 'Dog'}
-                scale={dogScale}
-                onPress={() => handleSelectPetType('Dog')}
-              />
+            <View style={styles.typeGridShell}>
+              <View style={styles.typeGrid}>
+                <PetTypeCard
+                  label={isTr ? 'Kedi' : 'Cat'}
+                  helper={isTr ? 'Sakin ve zarif' : 'Calm and graceful'}
+                  imageSource={catSelectIllustration}
+                  selected={petType === 'Cat'}
+                  scale={catScale}
+                  onPress={() => handleSelectPetType('Cat')}
+                />
+                <PetTypeCard
+                  label={isTr ? 'Kopek' : 'Dog'}
+                  helper={isTr ? 'Sadik ve enerjik' : 'Loyal and energetic'}
+                  imageSource={dogSelectIllustration}
+                  selected={petType === 'Dog'}
+                  scale={dogScale}
+                  onPress={() => handleSelectPetType('Dog')}
+                />
+              </View>
             </View>
           </View>
 
@@ -419,7 +422,10 @@ function PetTypeCard({
 }) {
   return (
     <Animated.View style={{ flex: 1, transform: [{ scale }] }}>
-      <Pressable onPress={onPress} style={[styles.typeCard, selected ? styles.typeCardSelected : null]}>
+      <Pressable onPress={onPress} style={({ pressed }) => [styles.typeCard, selected ? styles.typeCardSelected : styles.typeCardUnselected, pressed ? styles.typeCardPressed : null]}>
+        {selected ? (
+          <BlurView intensity={20} tint="light" style={styles.typeCardGlass} />
+        ) : null}
         <View style={styles.typeThumbWrap}>
           <Image source={imageSource} style={styles.typeThumb} resizeMode="contain" />
         </View>
@@ -525,57 +531,77 @@ const styles = StyleSheet.create({
     color: '#6d6e72',
     textAlign: 'center',
   },
+  typeGridShell: {
+    borderRadius: 20,
+    padding: 6,
+    backgroundColor: 'rgba(255,255,255,0.36)',
+    borderWidth: 1,
+    borderColor: 'rgba(16, 24, 20, 0.08)',
+  },
   typeGrid: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   typeCard: {
-    minHeight: 136,
-    borderRadius: 22,
-    borderWidth: 1.2,
-    borderColor: '#e1e2e5',
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    minHeight: 140,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(31, 36, 42, 0.08)',
+    backgroundColor: 'rgba(255,255,255,0.86)',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    shadowColor: '#000',
-    shadowOpacity: 0.08,
-    shadowRadius: 11,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 3,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    overflow: 'hidden',
+    shadowColor: '#101614',
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+    position: 'relative',
+  },
+  typeCardGlass: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 18,
+  },
+  typeCardUnselected: {
+    opacity: 0.92,
   },
   typeCardSelected: {
-    borderColor: '#97bda0',
-    backgroundColor: '#edf5f0',
-    shadowColor: '#7ca38b',
+    borderColor: '#8fb69a',
+    backgroundColor: 'rgba(235,245,238,0.88)',
+    shadowColor: '#6e947a',
     shadowOpacity: 0.2,
-    shadowRadius: 12,
+    shadowRadius: 10,
     shadowOffset: { width: 0, height: 6 },
     elevation: 4,
   },
+  typeCardPressed: {
+    opacity: 0.95,
+  },
   typeThumbWrap: {
-    width: 88,
-    height: 88,
+    width: 84,
+    height: 84,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   typeThumb: {
-    width: 98,
-    height: 98,
+    width: 90,
+    height: 90,
   },
   typeTitle: {
-    fontSize: 22,
-    lineHeight: 27,
-    fontWeight: '700',
-    color: '#1f2125',
+    fontSize: 19,
+    lineHeight: 24,
+    fontWeight: '800',
+    color: '#1d2124',
     marginBottom: 1,
+    letterSpacing: -0.3,
   },
   typeHelper: {
-    fontSize: 13,
-    lineHeight: 17,
-    color: '#44464c',
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#4e5459',
     textAlign: 'center',
   },
   fieldWrap: {
@@ -591,10 +617,10 @@ const styles = StyleSheet.create({
   },
   inputBase: {
     minHeight: 54,
-    borderRadius: 20,
-    borderWidth: 1.2,
-    borderColor: '#d8d8da',
-    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(23, 30, 26, 0.16)',
+    backgroundColor: 'rgba(255,255,255,0.94)',
     paddingHorizontal: 18,
   },
   nameInput: {
@@ -604,11 +630,11 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   nameInputFocused: {
-    borderColor: '#a4bfa8',
-    shadowColor: '#9fba9f',
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
+    borderColor: '#95b29b',
+    shadowColor: '#7f9f88',
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 2,
   },
   selectField: {

@@ -1,15 +1,18 @@
 /**
- * AddRecordSheet — unified wizard-style health record entry sheet.
+ * AddRecordSheet — single-page progressive-disclosure health record entry.
  *
- * Step 0: Type picker (vetVisit / vaccine / record)
- * Then type-specific steps:
- *   vetVisit — 3 steps: reason → date+clinic → status+fee+notes
- *   vaccine  — 2 steps: name selection → dates+notes
- *   record   — 3 steps: record type → title+date → status+notes
+ * Type picker → form with sections that cascade in one by one as user fills them.
+ * No multi-step wizard. All on one scrollable page with animated section reveals.
+ *
+ * VetVisit:  status → reason → date → clinic+vet → notes+follow-up → fee (completed)
+ * Vaccine:   picker/custom → date → next-due+clinic+batch → atVet+notes
+ * Record:    type → title+date → status+files+notes (auto after title+date valid)
+ * Weight:    delegates to onSelectWeight immediately
  */
 
 import React, { useEffect, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
   Modal,
@@ -24,6 +27,9 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import * as Location from 'expo-location';
+import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import type { AddHealthRecordPayload, AddHealthRecordType } from '../screens/HealthHubScreen';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,12 +38,7 @@ export type AddRecordMode = 'vetVisit' | 'vaccine' | 'record' | 'typeSelect';
 export type AddRecordContext = 'quick' | 'detailed';
 
 type EntryType = 'vetVisit' | 'vaccine' | 'record';
-
-type WizardState =
-  | { type: null }
-  | { type: 'vetVisit'; step: 1 | 2 | 3 }
-  | { type: 'vaccine'; step: 1 | 2 }
-  | { type: 'record'; step: 1 | 2 | 3 };
+type TypeCardKey = EntryType | 'weight';
 
 type Props = {
   visible: boolean;
@@ -48,6 +49,7 @@ type Props = {
   locale: 'en' | 'tr';
   onClose: () => void;
   onSave: (payload: AddHealthRecordPayload) => void;
+  onSelectWeight?: () => void;
 };
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
@@ -73,31 +75,44 @@ const C = {
 const VISIT_REASONS = ['checkup', 'vaccine', 'illness', 'injury', 'follow_up', 'other'] as const;
 type VisitReason = (typeof VISIT_REASONS)[number];
 
-const VISIT_STATUS_OPTIONS = ['completed', 'planned', 'canceled'] as const;
-type VisitStatus = (typeof VISIT_STATUS_OPTIONS)[number];
-
-const RECORD_TYPES: AddHealthRecordType[] = ['diagnosis', 'procedure', 'prescription', 'test'];
+// 'canceled' is only settable when editing an existing visit; excluded from create flow
+const VISIT_STATUS_CREATE_OPTIONS = ['planned', 'completed'] as const;
+type VisitStatus = 'completed' | 'planned' | 'canceled';
 
 const STATUS_OPTIONS = ['active', 'resolved', 'normal', 'abnormal', 'completed'] as const;
 type RecordStatus = (typeof STATUS_OPTIONS)[number];
 
-const VACCINES_TR = ['Karma Aşı (DHPPi)', 'Kuduz', 'Leptospiroz', 'Bordetella', 'FeLV', 'FIV', 'Giardia', 'Klamidya'];
-const VACCINES_EN = ['Core Vaccine (DHPPi)', 'Rabies', 'Leptospirosis', 'Bordetella', 'FeLV', 'FIV', 'Giardia', 'Chlamydophila'];
+const VACCINES_TR = [
+  'Karma Aşı (DHPPi)', 'Kuduz', 'Leptospiroz', 'Bordetella',
+  'FeLV', 'FIV', 'Giardia', 'Klamidya',
+];
+const VACCINES_EN = [
+  'Core Vaccine (DHPPi)', 'Rabies', 'Leptospirosis', 'Bordetella',
+  'FeLV', 'FIV', 'Giardia', 'Chlamydophila',
+];
 
 const CURRENCIES = ['₺', '$', '€'] as const;
 
-const TOTAL_STEPS: Record<EntryType, number> = { vetVisit: 3, vaccine: 2, record: 3 };
+const VET_OUTCOME_KEYS = ['vaccine', 'diagnosis', 'procedure', 'lab', 'medication'] as const;
+type VetOutcomeKey = (typeof VET_OUTCOME_KEYS)[number];
+const VET_OUTCOME_LABELS: Record<VetOutcomeKey, { en: string; tr: string }> = {
+  vaccine:    { en: 'Vaccine given',      tr: 'Aşı yapıldı'    },
+  diagnosis:  { en: 'Diagnosis made',     tr: 'Teşhis konuldu' },
+  procedure:  { en: 'Procedure done',     tr: 'İşlem yapıldı'  },
+  lab:        { en: 'Lab / Test',         tr: 'Lab / Test'     },
+  medication: { en: 'Medication started', tr: 'İlaç başlandı'  },
+};
 
 // ─── Card configs ─────────────────────────────────────────────────────────────
 
 type ReasonCard = { value: VisitReason; symbol: string; labelEn: string; labelTr: string };
 const REASON_CARDS: ReasonCard[] = [
-  { value: 'checkup',  symbol: '🩺', labelEn: 'Checkup',   labelTr: 'Kontrol'   },
-  { value: 'vaccine',  symbol: '💉', labelEn: 'Vaccine',   labelTr: 'Aşı'       },
-  { value: 'illness',  symbol: '🌡', labelEn: 'Illness',   labelTr: 'Hastalık'  },
-  { value: 'injury',   symbol: '🩹', labelEn: 'Injury',    labelTr: 'Yaralanma' },
-  { value: 'follow_up',symbol: '📅', labelEn: 'Follow-up', labelTr: 'Takip'     },
-  { value: 'other',    symbol: '···', labelEn: 'Other',    labelTr: 'Diğer'     },
+  { value: 'checkup',   symbol: '🩺',  labelEn: 'Checkup',   labelTr: 'Kontrol'   },
+  { value: 'vaccine',   symbol: '💉',  labelEn: 'Vaccine',   labelTr: 'Aşı'       },
+  { value: 'illness',   symbol: '🌡',  labelEn: 'Illness',   labelTr: 'Hastalık'  },
+  { value: 'injury',    symbol: '🩹',  labelEn: 'Injury',    labelTr: 'Yaralanma' },
+  { value: 'follow_up', symbol: '📅',  labelEn: 'Follow-up', labelTr: 'Takip'     },
+  { value: 'other',     symbol: '···', labelEn: 'Other',     labelTr: 'Diğer'     },
 ];
 
 type RecTypeCard = {
@@ -109,14 +124,14 @@ type RecTypeCard = {
   descTr: string;
 };
 const REC_TYPE_CARDS: RecTypeCard[] = [
-  { type: 'diagnosis',   symbol: '🔍', labelEn: 'Diagnosis', labelTr: 'Teşhis',      descEn: 'Condition or illness',  descTr: 'Hastalık, durum'        },
-  { type: 'procedure',   symbol: '✂', labelEn: 'Procedure', labelTr: 'İşlem',       descEn: 'Surgery or operation',  descTr: 'Ameliyat, uygulama'     },
-  { type: 'prescription',symbol: '💊', labelEn: 'Treatment', labelTr: 'Tedavi',      descEn: 'Medication or therapy', descTr: 'İlaç, terapi'           },
-  { type: 'test',        symbol: '🧪', labelEn: 'Lab / Test', labelTr: 'Lab / Test', descEn: 'Blood work, imaging',   descTr: 'Tahlil, görüntüleme'    },
+  { type: 'diagnosis',    symbol: '🔍', labelEn: 'Diagnosis',  labelTr: 'Teşhis',     descEn: 'Condition or illness',  descTr: 'Hastalık, durum'    },
+  { type: 'procedure',    symbol: '✂',  labelEn: 'Procedure',  labelTr: 'İşlem',      descEn: 'Surgery or operation',  descTr: 'Ameliyat, uygulama' },
+  { type: 'prescription', symbol: '💊', labelEn: 'Treatment',  labelTr: 'Tedavi',     descEn: 'Medication or therapy', descTr: 'İlaç, terapi'       },
+  { type: 'test',         symbol: '🧪', labelEn: 'Lab / Test', labelTr: 'Lab / Test', descEn: 'Blood work, imaging',   descTr: 'Tahlil, görüntüleme'},
 ];
 
 type TypeCard = {
-  key: EntryType;
+  key: TypeCardKey;
   symbol: string;
   accent: string;
   labelEn: string;
@@ -125,9 +140,10 @@ type TypeCard = {
   descTr: string;
 };
 const TYPE_CARDS: TypeCard[] = [
-  { key: 'vetVisit', symbol: '⚕', accent: '#4a7c59', labelEn: 'Vet Visit',      labelTr: 'Veteriner Ziyareti', descEn: 'Clinic visit, checkup, examination', descTr: 'Klinik ziyareti, muayene, kontrol' },
-  { key: 'vaccine',  symbol: '💉', accent: '#3d6e9e', labelEn: 'Vaccine',        labelTr: 'Aşı',                descEn: 'Vaccination record and reminders',   descTr: 'Aşı kaydı ve hatırlatma tarihi'   },
-  { key: 'record',   symbol: '✚', accent: '#9b4040', labelEn: 'Health Record',  labelTr: 'Sağlık Kaydı',       descEn: 'Diagnosis, procedure, test, treatment', descTr: 'Tanı, işlem, test, reçete'       },
+  { key: 'vetVisit', symbol: '⚕',  accent: '#4a7c59', labelEn: 'Vet Visit',    labelTr: 'Veteriner Ziyareti', descEn: 'Clinic visit, checkup, examination',    descTr: 'Klinik ziyareti, muayene, kontrol' },
+  { key: 'vaccine',  symbol: '💉', accent: '#3d6e9e', labelEn: 'Vaccine',       labelTr: 'Aşı',                descEn: 'Vaccination record and reminders',      descTr: 'Aşı kaydı ve hatırlatma tarihi'   },
+  { key: 'record',   symbol: '✚',  accent: '#9b4040', labelEn: 'Health Record', labelTr: 'Sağlık Kaydı',       descEn: 'Diagnosis, procedure, test, treatment', descTr: 'Tanı, işlem, test, reçete'        },
+  { key: 'weight',   symbol: '⚖️', accent: '#3a4e7a', labelEn: 'Weight',        labelTr: 'Kilo',               descEn: 'Log a weigh-in for trend tracking',     descTr: 'Tartı girişi ve trend takibi'     },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -137,14 +153,89 @@ function isValidDate(v: string) {
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return toYmdLocal(new Date());
 }
 
-function modeToWizard(m: AddRecordMode): WizardState {
-  if (m === 'vetVisit') return { type: 'vetVisit', step: 1 };
-  if (m === 'vaccine')  return { type: 'vaccine',  step: 1 };
-  if (m === 'record')   return { type: 'record',   step: 1 };
-  return { type: null };
+function toYmdLocal(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseFlexibleDateToYmd(value: string) {
+  const raw = value.trim();
+  if (!raw) return null;
+  const ymd = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (ymd) {
+    const dt = new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]), 12, 0, 0, 0);
+    if (Number.isFinite(dt.getTime())) return toYmdLocal(dt);
+  }
+  const dmy = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (dmy) {
+    const dt = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]), 12, 0, 0, 0);
+    if (Number.isFinite(dt.getTime())) return toYmdLocal(dt);
+  }
+  const fallback = new Date(raw);
+  if (!Number.isFinite(fallback.getTime())) return null;
+  return toYmdLocal(fallback);
+}
+
+type ClinicSuggestion = { id: string; name: string; address: string };
+
+const GOOGLE_MAPS_WEB_API_KEY = (
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY ||
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_ANDROID ||
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY_IOS ||
+  ''
+).trim();
+
+async function fetchNearbyClinicSuggestions(latitude: number, longitude: number, locale: 'en' | 'tr') {
+  if (!GOOGLE_MAPS_WEB_API_KEY) return [];
+  const params = new URLSearchParams({
+    location: `${latitude},${longitude}`,
+    radius: '4500',
+    keyword: 'veterinary clinic',
+    language: locale === 'tr' ? 'tr' : 'en',
+    key: GOOGLE_MAPS_WEB_API_KEY,
+  });
+  const response = await fetch(`https://maps.googleapis.com/maps/api/place/nearbysearch/json?${params.toString()}`);
+  if (!response.ok) return [];
+  const data = await response.json() as {
+    status?: string;
+    results?: Array<{ place_id?: string; name?: string; vicinity?: string; formatted_address?: string }>;
+  };
+  if (data.status && data.status !== 'OK' && data.status !== 'ZERO_RESULTS') return [];
+  return (data.results ?? [])
+    .map((entry, idx) => ({
+      id: `nearby-${entry.place_id ?? idx}`,
+      name: (entry.name ?? '').trim(),
+      address: (entry.vicinity ?? entry.formatted_address ?? '').trim(),
+    }))
+    .filter((e) => e.name.length > 0);
+}
+
+async function fetchSearchClinicSuggestions(query: string, locale: 'en' | 'tr') {
+  if (!GOOGLE_MAPS_WEB_API_KEY || query.trim().length < 2) return [];
+  const params = new URLSearchParams({
+    query: `${query} veterinary clinic`,
+    language: locale === 'tr' ? 'tr' : 'en',
+    key: GOOGLE_MAPS_WEB_API_KEY,
+  });
+  const response = await fetch(`https://maps.googleapis.com/maps/api/place/textsearch/json?${params.toString()}`);
+  if (!response.ok) return [];
+  const data = await response.json() as {
+    status?: string;
+    results?: Array<{ place_id?: string; name?: string; formatted_address?: string }>;
+  };
+  if (data.status && data.status !== 'OK' && data.status !== 'ZERO_RESULTS') return [];
+  return (data.results ?? [])
+    .map((entry, idx) => ({
+      id: `search-${entry.place_id ?? idx}`,
+      name: (entry.name ?? '').trim(),
+      address: (entry.formatted_address ?? '').trim(),
+    }))
+    .filter((e) => e.name.length > 0);
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -158,15 +249,68 @@ export default function AddRecordSheet({
   locale,
   onClose,
   onSave,
+  onSelectWeight,
 }: Props) {
   const isTr = locale === 'tr';
   const { height: screenH } = useWindowDimensions();
   const sheetH = screenH * 0.93;
 
-  // ── Wizard state ────────────────────────────────────────────────────────────
-  const [wizard, setWizard] = useState<WizardState>(modeToWizard(mode));
+  // ── Section reveal animations (8 slots) ──────────────────────────────────────
+  // Shared across entry types (mutually exclusive; reset on type change)
+  const sec = useRef(Array.from({ length: 8 }, () => new Animated.Value(0))).current;
+  const mounted = useRef(true);
+  const revealTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  // ── Animations ─────────────────────────────────────────────────────────────
+  useEffect(() => () => {
+    mounted.current = false;
+    revealTimers.current.forEach(clearTimeout);
+  }, []);
+
+  const showSec = (i: number, delay = 0) => {
+    const run = () => {
+      if (!mounted.current) return;
+      sec[i].setValue(0);
+      Animated.spring(sec[i], { toValue: 1, damping: 20, stiffness: 240, useNativeDriver: true }).start();
+    };
+    if (delay > 0) {
+      const id = setTimeout(run, delay);
+      revealTimers.current.push(id);
+    } else {
+      run();
+    }
+  };
+
+  const resetSecs = () => {
+    revealTimers.current.forEach(clearTimeout);
+    revealTimers.current = [];
+    sec.forEach((a) => a.setValue(0));
+  };
+
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollToBottom = (delay = 0) => {
+    const id = setTimeout(() => {
+      if (mounted.current) scrollRef.current?.scrollToEnd({ animated: true });
+    }, delay);
+    revealTimers.current.push(id);
+  };
+
+  // ── Entry type ────────────────────────────────────────────────────────────────
+  const [entryType, setEntryType] = useState<EntryType | null>(
+    mode === 'typeSelect' ? null : (mode as EntryType),
+  );
+
+  // ── Per-type reveal levels ────────────────────────────────────────────────────
+  // vetVisit: 0=status shown, 1=+reason, 2=+date+rest cascade
+  const [vetLevel, setVetLevel] = useState(0);
+  // vaccine: 0=picker shown, 1=+date+rest cascade
+  const [vacLevel, setVacLevel] = useState(0);
+  // record: 0=type shown, 1=+title+date, 2=+details (auto when title+date valid)
+  const [recLevel, setRecLevel] = useState(0);
+
+  // Track whether fee section was triggered (avoid double-animate)
+  const feeRevealedRef = useRef(false);
+
+  // ── Sheet open/close animations ───────────────────────────────────────────────
   const translateY = useRef(new Animated.Value(sheetH)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(0)).current;
@@ -186,9 +330,13 @@ export default function AddRecordSheet({
     ]).start(() => { onClose(); cb?.(); });
   };
 
-  const animateStep = (direction: 'forward' | 'back') => {
-    const from = direction === 'forward' ? 60 : -60;
-    slideAnim.setValue(from);
+  const typeInAnim = () => {
+    slideAnim.setValue(48);
+    Animated.spring(slideAnim, { toValue: 0, damping: 24, stiffness: 280, useNativeDriver: true }).start();
+  };
+
+  const typeOutAnim = () => {
+    slideAnim.setValue(-40);
     Animated.spring(slideAnim, { toValue: 0, damping: 24, stiffness: 280, useNativeDriver: true }).start();
   };
 
@@ -197,11 +345,11 @@ export default function AddRecordSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
-  // ── Drag-to-dismiss ─────────────────────────────────────────────────────────
+  // ── Drag-to-dismiss ───────────────────────────────────────────────────────────
   const pan = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 4,
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) => gs.dy > 6 && Math.abs(gs.dy) > Math.abs(gs.dx),
       onPanResponderMove: (_, gs) => {
         if (gs.dy > 0) {
           translateY.setValue(gs.dy);
@@ -221,22 +369,33 @@ export default function AddRecordSheet({
     }),
   ).current;
 
-  // ── Form state ──────────────────────────────────────────────────────────────
+  // ── Form state ────────────────────────────────────────────────────────────────
 
   const [formDate, setFormDate] = useState(todayStr());
+  const [activeDatePickerField, setActiveDatePickerField] = useState<
+    'visitDate' | 'nextDueDate' | 'followUpDate' | 'dueDate' | null
+  >(null);
   const [notes, setNotes] = useState('');
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   // Vet Visit
   const [visitReason, setVisitReason] = useState<VisitReason>('checkup');
-  const [visitStatus, setVisitStatus] = useState<VisitStatus>('completed');
+  const [visitStatus, setVisitStatus] = useState<VisitStatus>('planned');
   const [clinicName, setClinicName] = useState('');
+  const [clinicPickedFromMap, setClinicPickedFromMap] = useState(false);
+  const [clinicPickerVisible, setClinicPickerVisible] = useState(false);
+  const [clinicPickerBusy, setClinicPickerBusy] = useState(false);
+  const [clinicSearchBusy, setClinicSearchBusy] = useState(false);
+  const [clinicSearchQuery, setClinicSearchQuery] = useState('');
+  const [clinicNearbyResults, setClinicNearbyResults] = useState<ClinicSuggestion[]>([]);
+  const [clinicSearchResults, setClinicSearchResults] = useState<ClinicSuggestion[]>([]);
   const [vetName, setVetName] = useState('');
   const [fee, setFee] = useState('');
   const [feeCurrency, setFeeCurrency] = useState<(typeof CURRENCIES)[number]>('₺');
   const [followUpEnabled, setFollowUpEnabled] = useState(false);
   const [followUpDate, setFollowUpDate] = useState('');
   const [followUpContext, setFollowUpContext] = useState('');
+  const [visitOutcomes, setVisitOutcomes] = useState<VetOutcomeKey[]>([]);
 
   // Vaccine
   const [vaccineName, setVaccineName] = useState('');
@@ -245,28 +404,40 @@ export default function AddRecordSheet({
   const [vaccineVet, setVaccineVet] = useState('');
   const [batchNumber, setBatchNumber] = useState('');
   const [atVet, setAtVet] = useState(false);
+  const [isCustomVaccine, setIsCustomVaccine] = useState(false);
   const vaccineNameInputRef = useRef<TextInput>(null);
-  const vaccineDateInputRef = useRef<TextInput>(null);
+  const clinicInputRef = useRef<TextInput>(null);
+  const vetInputRef = useRef<TextInput>(null);
 
   // Health Record
   const [recType, setRecType] = useState<AddHealthRecordType>(initialType);
   const [recTitle, setRecTitle] = useState(initialTitle);
   const [recStatus, setRecStatus] = useState<RecordStatus | null>(null);
-  const [valueNumber, setValueNumber] = useState('');
-  const [valueUnit, setValueUnit] = useState('');
   const [dueDate, setDueDate] = useState('');
+  const [attachedFileUris, setAttachedFileUris] = useState<string[]>([]);
 
-  // ── Reset on open ────────────────────────────────────────────────────────────
+  // ── Reset on open ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!visible) return;
-    setWizard(modeToWizard(mode));
-    slideAnim.setValue(0);
+    resetSecs();
+    const et = mode === 'typeSelect' ? null : (mode as EntryType);
+    setEntryType(et);
+    setVetLevel(0); setVacLevel(0); setRecLevel(0);
+    feeRevealedRef.current = false;
+    setActiveDatePickerField(null);
     setFormDate(todayStr());
     setNotes('');
     setFocusedField(null);
     setVisitReason('checkup');
-    setVisitStatus('completed');
+    setVisitStatus('planned');
     setClinicName('');
+    setClinicPickedFromMap(false);
+    setClinicPickerVisible(false);
+    setClinicPickerBusy(false);
+    setClinicSearchBusy(false);
+    setClinicSearchQuery('');
+    setClinicNearbyResults([]);
+    setClinicSearchResults([]);
     setVetName('');
     setFee('');
     setFeeCurrency('₺');
@@ -279,106 +450,143 @@ export default function AddRecordSheet({
     setVaccineVet('');
     setBatchNumber('');
     setAtVet(false);
+    setVisitOutcomes([]);
+    setIsCustomVaccine(false);
     setRecType(initialType);
     setRecTitle(mode === 'record' ? initialTitle : '');
     setRecStatus(null);
-    setValueNumber('');
-    setValueUnit('');
     setDueDate('');
-  }, [visible, initialTitle, initialType, mode]); // eslint-disable-line react-hooks/exhaustive-deps
+    setAttachedFileUris([]);
 
-  // ── Navigation ───────────────────────────────────────────────────────────────
-
-  const selectType = (entry: EntryType) => {
-    animateStep('forward');
-    setWizard({ type: entry, step: 1 });
-    if (entry === 'vaccine') {
-      requestAnimationFrame(() => vaccineNameInputRef.current?.focus());
+    // Pre-set type: reveal first section immediately
+    if (et !== null) {
+      showSec(0, 80);
+      // Vaccine direct mode with pre-filled name: cascade all sections
+      if (et === 'vaccine' && initialTitle) {
+        setVacLevel(1);
+        showSec(1, 300);
+        showSec(2, 580);
+        showSec(3, 860);
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, initialTitle, initialType, mode]);
+
+  // ── Navigation ────────────────────────────────────────────────────────────────
+
+  const selectType = (key: TypeCardKey) => {
+    if (key === 'weight') { closeAnim(() => onSelectWeight?.()); return; }
+    resetSecs();
+    setVetLevel(0); setVacLevel(0); setRecLevel(0);
+    feeRevealedRef.current = false;
+    setEntryType(key as EntryType);
+    setVisitStatus('planned');
+    typeInAnim();
+    showSec(0, 60);
   };
 
   const goBack = () => {
-    if (wizard.type === null) { closeAnim(); return; }
-    if (wizard.step === 1) {
-      if (mode === 'typeSelect') { animateStep('back'); setWizard({ type: null }); }
-      else closeAnim();
-      return;
+    if (entryType !== null && mode === 'typeSelect') {
+      setEntryType(null);
+      typeOutAnim();
+    } else {
+      closeAnim();
     }
-    animateStep('back');
-    setWizard((prev) => {
-      if (prev.type === null) return prev;
-      return { ...prev, step: (prev.step - 1) as never };
-    });
   };
 
-  const goNext = () => {
-    if (wizard.type === null) return;
-    const total = TOTAL_STEPS[wizard.type];
-    if (wizard.step >= total) { handleSave(); return; }
-    animateStep('forward');
-    setWizard((prev) => {
-      if (prev.type === null) return prev;
-      return { ...prev, step: (prev.step + 1) as never };
-    });
+  // ── VetVisit reveal handlers ──────────────────────────────────────────────────
+
+  const handleStatusSelect = (s: 'planned' | 'completed') => {
+    setVisitStatus(s);
+    if (vetLevel < 1) {
+      setVetLevel(1);
+      showSec(1, 200);
+      scrollToBottom(550);
+    }
   };
 
-  // Auto-advance when a reason or type card is tapped
-  const selectReasonAndAdvance = (r: VisitReason) => {
+  const handleReasonSelect = (r: VisitReason) => {
     setVisitReason(r);
-    animateStep('forward');
-    setWizard({ type: 'vetVisit', step: 2 });
+    if (vetLevel < 2) {
+      setVetLevel(2);
+      setActiveDatePickerField(null);
+      showSec(2, 200);   // date
+      showSec(3, 460);   // clinic + vet
+      showSec(4, 720);   // notes + follow-up + outcomes
+      if (visitStatus === 'completed') {
+        showSec(5, 980);  // fee
+        feeRevealedRef.current = true;
+      }
+      scrollToBottom(1100);
+    }
   };
 
-  const selectRecTypeAndAdvance = (t: AddHealthRecordType) => {
-    setRecType(t);
-    animateStep('forward');
-    setWizard({ type: 'record', step: 2 });
-  };
+  // When visitStatus changes to completed AFTER reason was already selected
+  useEffect(() => {
+    if (entryType !== 'vetVisit' || vetLevel < 2 || feeRevealedRef.current) return;
+    if (visitStatus === 'completed') {
+      feeRevealedRef.current = true;
+      showSec(5, 180);
+      scrollToBottom(500);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visitStatus]);
 
-  const selectVaccineAndAdvance = (name: string) => {
+  // ── Vaccine reveal handlers ───────────────────────────────────────────────────
+
+  const handleVaccineSelect = (name: string) => {
     setVaccineName(name);
-    animateStep('forward');
-    setWizard({ type: 'vaccine', step: 2 });
-    requestAnimationFrame(() => vaccineDateInputRef.current?.focus());
+    if (vacLevel < 1) {
+      setVacLevel(1);
+      showSec(1, 200);   // given date
+      showSec(2, 460);   // next due + clinic + batch
+      showSec(3, 720);   // atVet + notes
+      scrollToBottom(950);
+    }
   };
 
-  // ── Per-step validity ────────────────────────────────────────────────────────
+  const handleCustomVaccineAdvance = () => {
+    if (vaccineName.trim().length > 0) handleVaccineSelect(vaccineName.trim());
+  };
 
-  const isCurrentStepValid = (() => {
-    if (wizard.type === null) return false;
-    if (wizard.type === 'vetVisit') {
-      if (wizard.step === 1) return true; // reason has default, auto-advance
-      if (wizard.step === 2) return isValidDate(formDate);
-      return true; // step 3 optional
+  // ── Record reveal handlers ────────────────────────────────────────────────────
+
+  const handleRecTypeSelect = (t: AddHealthRecordType) => {
+    setRecType(t);
+    if (recLevel < 1) {
+      setRecLevel(1);
+      showSec(1, 200);   // title + date
+      scrollToBottom(500);
     }
-    if (wizard.type === 'vaccine') {
-      if (wizard.step === 1) return vaccineName.trim().length > 0;
-      return isValidDate(formDate);
+  };
+
+  const normalizedFormDate = parseFlexibleDateToYmd(formDate);
+
+  // Auto-reveal status+files+notes once title AND date are both valid
+  useEffect(() => {
+    if (entryType !== 'record' || recLevel < 1 || recLevel >= 2) return;
+    if (recTitle.trim().length > 0 && isValidDate(normalizedFormDate ?? '')) {
+      setRecLevel(2);
+      showSec(2, 220);
+      scrollToBottom(520);
     }
-    if (wizard.type === 'record') {
-      if (wizard.step === 1) return true; // type has default, auto-advance
-      if (wizard.step === 2) return recTitle.trim().length > 0 && isValidDate(formDate);
-      return true; // step 3 optional
-    }
-    return false;
-  })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recTitle, formDate]);
 
-  const isOnLastStep = wizard.type !== null && wizard.step === TOTAL_STEPS[wizard.type];
-
-  // ── Submit ───────────────────────────────────────────────────────────────────
-
+  // ── canSave ───────────────────────────────────────────────────────────────────
   const canSave =
-    wizard.type === 'vetVisit' ? isValidDate(formDate) :
-    wizard.type === 'vaccine'  ? (vaccineName.trim().length > 0 && isValidDate(formDate)) :
-    wizard.type === 'record'   ? (recTitle.trim().length > 0 && isValidDate(formDate)) :
+    entryType === 'vetVisit' ? isValidDate(normalizedFormDate ?? '') :
+    entryType === 'vaccine'  ? (vaccineName.trim().length > 0 && isValidDate(normalizedFormDate ?? '')) :
+    entryType === 'record'   ? (recTitle.trim().length > 0 && isValidDate(normalizedFormDate ?? '')) :
     false;
 
+  // ── handleSave ────────────────────────────────────────────────────────────────
   function handleSave() {
     if (!canSave) return;
-
+    const finalDate = normalizedFormDate ?? formDate;
     let payload: AddHealthRecordPayload;
 
-    if (wizard.type === 'vetVisit') {
+    if (entryType === 'vetVisit') {
       const rLabelTr: Record<VisitReason, string> = {
         checkup: 'Kontrol', vaccine: 'Aşı', illness: 'Hastalık',
         injury: 'Yaralanma', follow_up: 'Takip', other: 'Diğer',
@@ -388,11 +596,17 @@ export default function AddRecordSheet({
         injury: 'Injury', follow_up: 'Follow-up', other: 'Other',
       };
       const reasonStr = isTr ? rLabelTr[visitReason] : rLabelEn[visitReason];
+      const outcomeNote = visitOutcomes.length > 0
+        ? (isTr
+          ? `Yapılanlar: ${visitOutcomes.map((k) => VET_OUTCOME_LABELS[k].tr).join(', ')}`
+          : `Done: ${visitOutcomes.map((k) => VET_OUTCOME_LABELS[k].en).join(', ')}`)
+        : '';
+      const fullNote = [outcomeNote, notes.trim()].filter(Boolean).join('\n') || undefined;
       payload = {
         type: 'procedure',
         title: isTr ? `Veteriner Ziyareti – ${reasonStr}` : `Vet Visit – ${reasonStr}`,
-        date: formDate,
-        note: notes.trim() || undefined,
+        date: finalDate,
+        note: fullNote,
         visitReason,
         visitStatus,
         clinicName: clinicName.trim() || undefined,
@@ -402,11 +616,11 @@ export default function AddRecordSheet({
         dueDate: followUpEnabled && isValidDate(followUpDate) ? followUpDate : undefined,
         followUpContext: visitReason === 'follow_up' && followUpContext.trim() ? followUpContext.trim() : undefined,
       };
-    } else if (wizard.type === 'vaccine') {
+    } else if (entryType === 'vaccine') {
       payload = {
         type: 'vaccine',
         title: vaccineName.trim(),
-        date: formDate,
+        date: finalDate,
         note: notes.trim() || undefined,
         dueDate: isValidDate(nextDueDate) ? nextDueDate : undefined,
         clinicName: vaccineClinic.trim() || undefined,
@@ -418,32 +632,30 @@ export default function AddRecordSheet({
       payload = {
         type: recType,
         title: recTitle.trim(),
-        date: formDate,
+        date: finalDate,
         note: notes.trim() || undefined,
         status: recStatus ?? undefined,
-        valueNumber: valueNumber.trim() ? parseFloat(valueNumber.replace(',', '.')) : undefined,
-        valueUnit: valueUnit.trim() || undefined,
         dueDate: isValidDate(dueDate) ? dueDate : undefined,
+        attachedFileUris: attachedFileUris.length > 0 ? [...attachedFileUris] : undefined,
       };
     }
-
     onSave(payload);
     closeAnim();
   }
 
   // ── Label helpers ─────────────────────────────────────────────────────────────
 
-  function visitStatusLabel(s: VisitStatus) {
-    if (s === 'completed') return isTr ? 'Tamamlandı' : 'Completed';
-    if (s === 'planned')   return isTr ? 'Planlandı'  : 'Planned';
-    return isTr ? 'İptal' : 'Canceled';
+  function visitStatusLabel(s: 'planned' | 'completed') {
+    return s === 'completed'
+      ? (isTr ? 'Tamamlandı' : 'Completed')
+      : (isTr ? 'Planlandı' : 'Planned');
   }
 
   function statusLabel(s: RecordStatus) {
-    if (s === 'active')     return isTr ? 'Aktif'      : 'Active';
-    if (s === 'resolved')   return isTr ? 'Çözüldü'   : 'Resolved';
-    if (s === 'normal')     return 'Normal';
-    if (s === 'abnormal')   return isTr ? 'Anormal'   : 'Abnormal';
+    if (s === 'active')   return isTr ? 'Aktif'    : 'Active';
+    if (s === 'resolved') return isTr ? 'Çözüldü' : 'Resolved';
+    if (s === 'normal')   return 'Normal';
+    if (s === 'abnormal') return isTr ? 'Anormal' : 'Abnormal';
     return isTr ? 'Tamamlandı' : 'Completed';
   }
 
@@ -454,7 +666,7 @@ export default function AddRecordSheet({
     return isTr ? 'Örn: Tam kan sayımı, röntgen' : 'e.g. CBC blood panel, X-ray';
   }
 
-  // ── Reusable render helpers ────────────────────────────────────────────────────
+  // ── Reusable render helpers ───────────────────────────────────────────────────
 
   const renderLabel = (text: string, required?: boolean) => (
     <Text style={st.label}>
@@ -474,11 +686,18 @@ export default function AddRecordSheet({
       inputRef?: React.RefObject<TextInput | null>;
       returnKeyType?: 'done' | 'next';
       onSubmitEditing?: () => void;
+      editable?: boolean;
+      onFocus?: () => void;
     },
   ) => (
     <TextInput
       ref={opts?.inputRef}
-      style={[st.input, opts?.multiline && st.inputMultiline, focusedField === fieldKey && st.inputFocused]}
+      style={[
+        st.input,
+        opts?.multiline && st.inputMultiline,
+        focusedField === fieldKey && st.inputFocused,
+        (opts?.editable ?? true) ? null : st.inputDisabledShell,
+      ]}
       value={value}
       onChangeText={onChange}
       placeholder={placeholder}
@@ -488,8 +707,9 @@ export default function AddRecordSheet({
       keyboardType={opts?.numeric ? 'decimal-pad' : 'default'}
       autoCapitalize={opts?.noCapitalize ? 'none' : 'sentences'}
       returnKeyType={opts?.returnKeyType}
+      editable={opts?.editable ?? true}
       onSubmitEditing={opts?.onSubmitEditing}
-      onFocus={() => setFocusedField(fieldKey)}
+      onFocus={() => { setFocusedField(fieldKey); opts?.onFocus?.(); }}
       onBlur={() => setFocusedField(null)}
     />
   );
@@ -514,27 +734,141 @@ export default function AddRecordSheet({
     </ScrollView>
   );
 
-  // ── Step indicator ────────────────────────────────────────────────────────────
+  const renderDateSelector = (
+    fieldKey: 'visitDate' | 'nextDueDate' | 'followUpDate' | 'dueDate',
+    value: string,
+    setValue: (next: string) => void,
+    required = false,
+  ) => {
+    const normalizedValue = parseFlexibleDateToYmd(value);
+    const pickerValue = new Date(`${(normalizedValue ?? todayStr())}T12:00:00`);
+    const isOpen = activeDatePickerField === fieldKey;
 
-  const renderStepDots = () => {
-    if (wizard.type === null) return null;
-    const total = TOTAL_STEPS[wizard.type];
+    const handleDatePickerChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
+      if (!selectedDate || !Number.isFinite(selectedDate.getTime())) return;
+      setValue(toYmdLocal(selectedDate));
+      setActiveDatePickerField(null);
+    };
+
     return (
-      <View style={st.stepDotsRow}>
-        {Array.from({ length: total }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              st.stepDot,
-              i + 1 < wizard.step ? st.stepDotDone :
-              i + 1 === wizard.step ? st.stepDotCurrent :
-              st.stepDotFuture,
-            ]}
-          />
-        ))}
-      </View>
+      <>
+        {renderLabel(isTr ? 'TARİH' : 'DATE', required)}
+        <Pressable
+          style={[st.dateTapRow, focusedField === fieldKey && st.inputFocused]}
+          onPress={() => {
+            setFocusedField(fieldKey);
+            setActiveDatePickerField(isOpen ? null : fieldKey);
+          }}
+        >
+          <View style={st.dateTapMain}>
+            <Text style={st.dateTapEyebrow}>{isTr ? 'Takvimden seç' : 'Pick from calendar'}</Text>
+            <Text style={[st.dateTapText, !value.trim() && st.dateTapPlaceholder]}>
+              {(parseFlexibleDateToYmd(value) ?? value) || 'YYYY-MM-DD'}
+            </Text>
+          </View>
+          <View style={st.dateTapBadge}>
+            <Text style={st.dateTapBadgeText}>⌄</Text>
+          </View>
+        </Pressable>
+        {isOpen ? (
+          <View style={st.datePickerWrap}>
+            <DateTimePicker
+              value={pickerValue}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'inline' : 'calendar'}
+              onChange={handleDatePickerChange}
+              maximumDate={new Date(2100, 11, 31)}
+              minimumDate={new Date(2000, 0, 1)}
+            />
+          </View>
+        ) : null}
+      </>
     );
   };
+
+  // ── Clinic map helpers ────────────────────────────────────────────────────────
+
+  const loadNearbyClinicSuggestions = async () => {
+    setClinicPickerBusy(true);
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (permission.status !== 'granted') { setClinicNearbyResults([]); return; }
+      const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const items = await fetchNearbyClinicSuggestions(location.coords.latitude, location.coords.longitude, locale);
+      setClinicNearbyResults(items);
+    } finally {
+      setClinicPickerBusy(false);
+    }
+  };
+
+  const openClinicPicker = async () => {
+    setClinicPickerVisible(true);
+    setClinicSearchQuery('');
+    setClinicSearchResults([]);
+    if (clinicNearbyResults.length === 0 && !clinicPickerBusy) {
+      await loadNearbyClinicSuggestions();
+    }
+  };
+
+  const selectClinicSuggestion = (clinic: ClinicSuggestion) => {
+    setClinicName(clinic.name);
+    setClinicPickedFromMap(true);
+    setClinicPickerVisible(false);
+    setClinicSearchQuery('');
+    setFocusedField(null);
+    requestAnimationFrame(() => vetInputRef.current?.focus());
+  };
+
+  useEffect(() => {
+    if (!clinicPickerVisible) return;
+    const query = clinicSearchQuery.trim();
+    if (query.length < 2) { setClinicSearchResults([]); setClinicSearchBusy(false); return; }
+    let cancelled = false;
+    setClinicSearchBusy(true);
+    const timer = setTimeout(async () => {
+      const results = await fetchSearchClinicSuggestions(query, locale);
+      if (!cancelled) { setClinicSearchResults(results); setClinicSearchBusy(false); }
+    }, 260);
+    return () => { cancelled = true; clearTimeout(timer); setClinicSearchBusy(false); };
+  }, [clinicPickerVisible, clinicSearchQuery, locale]);
+
+  const toggleOutcome = (key: VetOutcomeKey) => {
+    setVisitOutcomes((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
+  };
+
+  const pickAttachment = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) return;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'livePhotos'],
+      allowsMultipleSelection: true,
+      quality: 0.85,
+    });
+    if (!result.canceled && result.assets.length > 0) {
+      setAttachedFileUris((prev) => [...prev, ...result.assets.map((a) => a.uri)]);
+    }
+  };
+
+  const visibleClinicResults = clinicSearchQuery.trim().length >= 2
+    ? clinicSearchResults
+    : clinicNearbyResults;
+
+  // ── Section animation wrapper ─────────────────────────────────────────────────
+  // Each section slides up and fades in using its sec[i] animated value
+  const S = (i: number, children: React.ReactNode) => (
+    <Animated.View
+      style={{
+        opacity: sec[i],
+        transform: [{ translateY: sec[i].interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+      }}
+    >
+      {children}
+    </Animated.View>
+  );
+
+  const SepLine = () => <View style={st.sectionSep} />;
 
   // ── Type picker ───────────────────────────────────────────────────────────────
 
@@ -564,301 +898,414 @@ export default function AddRecordSheet({
     </ScrollView>
   );
 
-  // ── Vet Visit steps ───────────────────────────────────────────────────────────
+  // ── VetVisit single-page form ─────────────────────────────────────────────────
 
-  const renderVetStep1 = () => (
+  const renderVetForm = () => (
     <>
-      <Text style={st.stepQuestion}>{isTr ? 'Neden geldiniz?' : 'What is the reason for the visit?'}</Text>
-      <View style={st.reasonGrid}>
-        {REASON_CARDS.map((card) => (
-          <Pressable
-            key={card.value}
-            style={[st.reasonCard, visitReason === card.value && st.reasonCardActive]}
-            onPress={() => selectReasonAndAdvance(card.value)}
-          >
-            <Text style={st.reasonSymbol}>{card.symbol}</Text>
-            <Text style={[st.reasonLabel, visitReason === card.value && st.reasonLabelActive]}>
-              {isTr ? card.labelTr : card.labelEn}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </>
-  );
-
-  const renderVetStep2 = () => (
-    <>
-      <Text style={st.stepHint}>{isTr ? 'Ziyaret bilgilerini girin' : 'Enter visit details'}</Text>
-      {visitReason === 'follow_up' ? (
+      {/* ── Section 0: Status ──────────────────────────────────────────────────── */}
+      {S(0, (
         <>
-          {renderLabel(isTr ? 'NE TAKİBİ?' : 'FOLLOWING UP ON?')}
-          {renderInput(
-            followUpContext,
-            setFollowUpContext,
-            isTr ? 'Örn: Kulak iltihabı tedavisi, geçen haftaki muayene...' : 'e.g. Otitis treatment, last week\'s exam...',
-            'followUpCtx',
-          )}
-        </>
-      ) : null}
-      {renderLabel(isTr ? 'TARİH' : 'DATE', true)}
-      {renderInput(formDate, setFormDate, 'YYYY-MM-DD', 'date', { noCapitalize: true })}
-
-      <View style={st.twoCol}>
-        <View style={{ flex: 1 }}>
-          {renderLabel(isTr ? 'KLİNİK' : 'CLINIC')}
-          {renderInput(clinicName, setClinicName, isTr ? 'Klinik adı' : 'Clinic name', 'clinic')}
-        </View>
-        <View style={{ flex: 1 }}>
-          {renderLabel(isTr ? 'VETERİNER' : 'VET')}
-          {renderInput(vetName, setVetName, isTr ? 'Veteriner adı' : 'Vet name', 'vet')}
-        </View>
-      </View>
-    </>
-  );
-
-  const renderVetStep3 = () => (
-    <>
-      <Text style={st.stepHint}>{isTr ? 'Ek bilgiler (opsiyonel)' : 'Additional info (optional)'}</Text>
-      {renderLabel(isTr ? 'ZİYARET DURUMU' : 'VISIT STATUS')}
-      {renderChips(VISIT_STATUS_OPTIONS, visitStatus, (v) => v && setVisitStatus(v as VisitStatus), visitStatusLabel)}
-
-      {renderLabel(isTr ? 'ÜCRET' : 'FEE')}
-      <View style={st.feeRow}>
-        <TextInput
-          style={[st.input, st.feeInput, focusedField === 'fee' && st.inputFocused]}
-          value={fee}
-          onChangeText={setFee}
-          placeholder="0.00"
-          placeholderTextColor={C.outlineVariant}
-          keyboardType="decimal-pad"
-          onFocus={() => setFocusedField('fee')}
-          onBlur={() => setFocusedField(null)}
-        />
-        <View style={st.currencyRow}>
-          {CURRENCIES.map((c) => (
-            <Pressable
-              key={c}
-              style={[st.currencyChip, feeCurrency === c && st.currencyChipActive]}
-              onPress={() => setFeeCurrency(c)}
-            >
-              <Text style={[st.currencyText, feeCurrency === c && st.currencyTextActive]}>{c}</Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      <View style={st.toggleRow}>
-        <Text style={st.label}>{isTr ? 'TAKİP RANDEVUSU' : 'FOLLOW-UP'}</Text>
-        <Switch
-          value={followUpEnabled}
-          onValueChange={setFollowUpEnabled}
-          trackColor={{ false: C.outlineVariant, true: C.primary }}
-          thumbColor="#fff"
-          ios_backgroundColor={C.outlineVariant}
-        />
-      </View>
-      {followUpEnabled
-        ? renderInput(followUpDate, setFollowUpDate, 'YYYY-MM-DD', 'followUp', { noCapitalize: true })
-        : null}
-
-      {renderLabel(isTr ? 'NOTLAR' : 'NOTES')}
-      {renderInput(notes, setNotes, isTr ? 'Muayene notu, bulgular...' : 'Exam notes, findings...', 'notes', { multiline: true })}
-    </>
-  );
-
-  // ── Vaccine steps ─────────────────────────────────────────────────────────────
-
-  const renderVaccineStep1 = () => {
-    const suggestions = isTr ? VACCINES_TR : VACCINES_EN;
-    const normalizedName = vaccineName.trim().toLocaleLowerCase(locale);
-    return (
-      <>
-        <Text style={st.stepQuestion}>{isTr ? 'Hangi aşı?' : 'Which vaccine?'}</Text>
-        <Text style={st.stepHint}>{isTr ? 'Listeden seçin veya kendiniz yazın' : 'Choose from the list or type a custom name'}</Text>
-        {renderInput(vaccineName, (v) => { setVaccineName(v); }, isTr ? 'Aşı adı' : 'Vaccine name', 'vaccineName', {
-          inputRef: vaccineNameInputRef,
-          returnKeyType: 'next',
-          onSubmitEditing: () => { if (vaccineName.trim()) goNext(); },
-        })}
-        <Text style={st.suggestSectionLabel}>{isTr ? 'YAYGIN AŞILAR' : 'COMMON VACCINES'}</Text>
-        <View style={st.vaccineGrid}>
-          {suggestions.map((s) => {
-            const isActive = normalizedName === s.toLocaleLowerCase(locale);
-            return (
+          <Text style={st.questionLabel}>
+            {isTr ? 'Bu ziyaret nasıl?' : 'How is this visit?'}
+          </Text>
+          <View style={st.statusBigRow}>
+            {VISIT_STATUS_CREATE_OPTIONS.map((s) => (
               <Pressable
                 key={s}
-                style={[st.vaccineChip, isActive && st.vaccineChipActive]}
-                onPress={() => selectVaccineAndAdvance(s)}
+                style={[st.bigStatusChip, visitStatus === s && st.bigStatusChipActive]}
+                onPress={() => handleStatusSelect(s)}
               >
-                <Text style={[st.vaccineChipText, isActive && st.vaccineChipTextActive]}>{s}</Text>
+                <Text style={st.bigStatusEmoji}>{s === 'completed' ? '✓' : '📅'}</Text>
+                <Text style={[st.bigStatusLabel, visitStatus === s && st.bigStatusLabelActive]}>
+                  {visitStatusLabel(s)}
+                </Text>
+                <Text style={[st.bigStatusSub, visitStatus === s && st.bigStatusSubActive]}>
+                  {s === 'completed'
+                    ? (isTr ? 'Gerçekleşti' : 'Already happened')
+                    : (isTr ? 'Yaklaşıyor' : 'Coming up')}
+                </Text>
               </Pressable>
-            );
+            ))}
+          </View>
+        </>
+      ))}
+
+      {/* ── Section 1: Reason ──────────────────────────────────────────────────── */}
+      {vetLevel >= 1 && S(1, (
+        <>
+          <SepLine />
+          <Text style={st.questionLabel}>
+            {isTr ? 'Ziyaret sebebi?' : 'Reason for visit?'}
+          </Text>
+          <View style={st.reasonGrid}>
+            {REASON_CARDS.map((card) => (
+              <Pressable
+                key={card.value}
+                style={[st.reasonCard, visitReason === card.value && st.reasonCardActive]}
+                onPress={() => handleReasonSelect(card.value)}
+              >
+                <Text style={st.reasonSymbol}>{card.symbol}</Text>
+                <Text style={[st.reasonLabel, visitReason === card.value && st.reasonLabelActive]}>
+                  {isTr ? card.labelTr : card.labelEn}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        </>
+      ))}
+
+      {/* ── Section 2: Date ────────────────────────────────────────────────────── */}
+      {vetLevel >= 2 && S(2, (
+        <>
+          <SepLine />
+          {renderDateSelector('visitDate', formDate, setFormDate, true)}
+        </>
+      ))}
+
+      {/* ── Section 3: Clinic + Vet ────────────────────────────────────────────── */}
+      {vetLevel >= 2 && S(3, (
+        <>
+          <SepLine />
+          {renderLabel(isTr ? 'KLİNİK' : 'CLINIC')}
+          <View style={st.mapInputShell}>
+            <TextInput
+              ref={clinicInputRef}
+              style={st.mapInputField}
+              value={clinicName}
+              onChangeText={(v) => {
+                setClinicName(v);
+                if (clinicPickedFromMap) setClinicPickedFromMap(false);
+              }}
+              placeholder={isTr ? 'Klinik adı yaz veya haritadan seç' : 'Type clinic or pick from map'}
+              placeholderTextColor={C.outlineVariant}
+              returnKeyType="next"
+              onSubmitEditing={() => {
+                if (clinicName.trim().length > 1)
+                  requestAnimationFrame(() => vetInputRef.current?.focus());
+              }}
+              onFocus={() => setFocusedField('clinic')}
+              onBlur={() => setFocusedField(null)}
+            />
+            <Pressable style={st.mapIndicatorBtn} onPress={openClinicPicker}>
+              <View style={st.mapIndicatorGlyph}>
+                <View style={st.mapIndicatorGlyphDot} />
+              </View>
+              <Text style={st.mapIndicatorText}>{isTr ? 'Haritadan' : 'Map'}</Text>
+              <Text style={st.mapIndicatorChevron}>›</Text>
+            </Pressable>
+          </View>
+          {clinicPickedFromMap ? (
+            <Text style={st.mapPickedCaption}>{isTr ? 'Haritadan seçildi' : 'Picked from map'}</Text>
+          ) : null}
+
+          {renderLabel(isTr ? 'VETERİNER' : 'VET')}
+          {renderInput(vetName, setVetName, isTr ? 'Veteriner adı' : 'Vet name', 'vet', {
+            inputRef: vetInputRef,
           })}
-        </View>
+        </>
+      ))}
+
+      {/* ── Section 4: Notes + Follow-up (+ outcomes for completed) ────────────── */}
+      {vetLevel >= 2 && S(4, (
+        <>
+          <SepLine />
+
+          {visitStatus === 'completed' ? (
+            <>
+              {renderLabel(isTr ? 'NE YAPILDI?' : 'WHAT WAS DONE?')}
+              <View style={st.outcomeChipsGrid}>
+                {VET_OUTCOME_KEYS.map((key) => {
+                  const active = visitOutcomes.includes(key);
+                  return (
+                    <Pressable
+                      key={key}
+                      style={[st.outcomeChip, active && st.outcomeChipActive]}
+                      onPress={() => toggleOutcome(key)}
+                    >
+                      <Text style={[st.outcomeChipText, active && st.outcomeChipTextActive]}>
+                        {isTr ? VET_OUTCOME_LABELS[key].tr : VET_OUTCOME_LABELS[key].en}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </>
+          ) : null}
+
+          {visitReason === 'follow_up' ? (
+            <>
+              {renderLabel(isTr ? 'NE TAKİBİ?' : 'FOLLOWING UP ON?')}
+              {renderInput(
+                followUpContext, setFollowUpContext,
+                isTr ? 'Örn: Kulak iltihabı tedavisi...' : 'e.g. Otitis treatment...',
+                'followUpCtx',
+              )}
+            </>
+          ) : null}
+
+          {renderLabel(isTr ? 'NOT' : 'NOTES')}
+          {renderInput(notes, setNotes,
+            isTr ? 'Muayene notu, bulgular...' : 'Exam notes, findings...',
+            'notes', { multiline: true })}
+
+          <View style={st.toggleRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={st.label}>{isTr ? 'TAKİP RANDEVUSU' : 'FOLLOW-UP'}</Text>
+              {visitStatus === 'completed' ? (
+                <Text style={st.toggleSubtext}>
+                  {isTr ? 'Tamamlanan ziyaret sonrası takip önerilir' : 'Recommended after completed visits'}
+                </Text>
+              ) : null}
+            </View>
+            <Switch
+              value={followUpEnabled}
+              onValueChange={setFollowUpEnabled}
+              trackColor={{ false: C.outlineVariant, true: C.primary }}
+              thumbColor="#fff"
+              ios_backgroundColor={C.outlineVariant}
+            />
+          </View>
+          {followUpEnabled
+            ? renderDateSelector('followUpDate', followUpDate, setFollowUpDate)
+            : null}
+        </>
+      ))}
+
+      {/* ── Section 5: Fee (completed visits only) ─────────────────────────────── */}
+      {visitStatus === 'completed' && S(5, (
+        <>
+          <SepLine />
+          {renderLabel(isTr ? 'ÜCRET' : 'FEE')}
+          <View style={st.feeRow}>
+            <TextInput
+              style={[st.input, st.feeInput, focusedField === 'fee' && st.inputFocused]}
+              value={fee}
+              onChangeText={setFee}
+              placeholder="0.00"
+              placeholderTextColor={C.outlineVariant}
+              keyboardType="decimal-pad"
+              onFocus={() => setFocusedField('fee')}
+              onBlur={() => setFocusedField(null)}
+            />
+            <View style={st.currencyRow}>
+              {CURRENCIES.map((c) => (
+                <Pressable
+                  key={c}
+                  style={[st.currencyChip, feeCurrency === c && st.currencyChipActive]}
+                  onPress={() => setFeeCurrency(c)}
+                >
+                  <Text style={[st.currencyText, feeCurrency === c && st.currencyTextActive]}>{c}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </>
+      ))}
+    </>
+  );
+
+  // ── Vaccine single-page form ──────────────────────────────────────────────────
+
+  const renderVaccineForm = () => {
+    const suggestions = isTr ? VACCINES_TR : VACCINES_EN;
+    return (
+      <>
+        {/* ── Section 0: Vaccine picker ─────────────────────────────────────────── */}
+        {S(0, (
+          <>
+            <Text style={st.questionLabel}>{isTr ? 'Hangi aşı?' : 'Which vaccine?'}</Text>
+            {isCustomVaccine ? (
+              <>
+                <Text style={st.stepHint}>{isTr ? 'Aşı adını yazın' : 'Type the vaccine name'}</Text>
+                {renderInput(vaccineName, setVaccineName,
+                  isTr ? 'Aşı adı' : 'Vaccine name', 'vaccineName', {
+                    inputRef: vaccineNameInputRef,
+                    returnKeyType: 'next',
+                    onSubmitEditing: handleCustomVaccineAdvance,
+                  })}
+                {vaccineName.trim().length > 0 && vacLevel < 1 ? (
+                  <Pressable style={st.continueBtn} onPress={handleCustomVaccineAdvance}>
+                    <Text style={st.continueBtnText}>{isTr ? 'Devam →' : 'Continue →'}</Text>
+                  </Pressable>
+                ) : null}
+                <Pressable hitSlop={8} onPress={() => { setIsCustomVaccine(false); setVaccineName(''); }}>
+                  <Text style={st.backToListText}>{isTr ? '← Listeye dön' : '← Back to list'}</Text>
+                </Pressable>
+              </>
+            ) : (
+              <>
+                <Text style={st.suggestSectionLabel}>{isTr ? 'YAYGIN AŞILAR' : 'COMMON VACCINES'}</Text>
+                <View style={st.vaccineGrid}>
+                  {suggestions.map((s) => (
+                    <Pressable
+                      key={s}
+                      style={[st.vaccineChip, vaccineName === s && st.vaccineChipActive]}
+                      onPress={() => handleVaccineSelect(s)}
+                    >
+                      <Text style={[st.vaccineChipText, vaccineName === s && st.vaccineChipTextActive]}>{s}</Text>
+                    </Pressable>
+                  ))}
+                  <Pressable
+                    style={[st.vaccineChip, st.vaccineChipOther]}
+                    onPress={() => {
+                      setIsCustomVaccine(true);
+                      requestAnimationFrame(() => vaccineNameInputRef.current?.focus());
+                    }}
+                  >
+                    <Text style={st.vaccineChipOtherText}>{isTr ? '+ Diğer' : '+ Other'}</Text>
+                  </Pressable>
+                </View>
+              </>
+            )}
+          </>
+        ))}
+
+        {/* ── Section 1: Given date ─────────────────────────────────────────────── */}
+        {vacLevel >= 1 && S(1, (
+          <>
+            <SepLine />
+            <Text style={st.sectionHeadline}>{vaccineName}</Text>
+            {renderDateSelector('visitDate', formDate, setFormDate, true)}
+          </>
+        ))}
+
+        {/* ── Section 2: Next due + Clinic + Batch ──────────────────────────────── */}
+        {vacLevel >= 1 && S(2, (
+          <>
+            <SepLine />
+            {renderLabel(isTr ? 'SONRAKİ DOZ TARİHİ' : 'NEXT DUE DATE')}
+            {renderDateSelector('nextDueDate', nextDueDate, setNextDueDate)}
+            <View style={st.twoCol}>
+              <View style={{ flex: 1 }}>
+                {renderLabel(isTr ? 'KLİNİK' : 'CLINIC')}
+                {renderInput(vaccineClinic, setVaccineClinic, isTr ? 'Klinik adı' : 'Clinic name', 'vClinic')}
+              </View>
+              <View style={{ flex: 1 }}>
+                {renderLabel(isTr ? 'SERİ NO' : 'BATCH NO')}
+                {renderInput(batchNumber, setBatchNumber, isTr ? 'Seri no' : 'Batch no', 'batch', { noCapitalize: true })}
+              </View>
+            </View>
+          </>
+        ))}
+
+        {/* ── Section 3: AtVet + Notes ───────────────────────────────────────────── */}
+        {vacLevel >= 1 && S(3, (
+          <>
+            <SepLine />
+            {renderLabel(isTr ? 'VETERİNERDE Mİ YAPILDI?' : 'DONE AT A VET?')}
+            <View style={st.atVetRow}>
+              {(['yes', 'no'] as const).map((v) => {
+                const isActive = atVet ? v === 'yes' : v === 'no';
+                return (
+                  <Pressable
+                    key={v}
+                    style={[st.atVetChip, isActive && st.atVetChipActive]}
+                    onPress={() => setAtVet(v === 'yes')}
+                  >
+                    <Text style={[st.atVetChipText, isActive && st.atVetChipTextActive]}>
+                      {v === 'yes' ? (isTr ? 'Evet' : 'Yes') : (isTr ? 'Hayır' : 'No')}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {renderLabel(isTr ? 'NOT' : 'NOTES')}
+            {renderInput(notes, setNotes,
+              isTr ? 'Reaksiyon, hekim notu...' : 'Reaction, vet notes...',
+              'notes', { multiline: true })}
+          </>
+        ))}
       </>
     );
   };
 
-  const renderVaccineStep2 = () => (
+  // ── Health Record single-page form ────────────────────────────────────────────
+
+  const renderRecordForm = () => (
     <>
-      <Text style={st.stepHint}>{isTr ? `${vaccineName} — tarihleri girin` : `${vaccineName} — enter dates`}</Text>
-      {renderLabel(isTr ? 'AŞI TARİHİ' : 'DATE GIVEN', true)}
-      {renderInput(formDate, setFormDate, 'YYYY-MM-DD', 'date', {
-        noCapitalize: true,
-        inputRef: vaccineDateInputRef,
-      })}
-
-      {renderLabel(isTr ? 'SONRAKİ DOZ TARİHİ' : 'NEXT DUE DATE')}
-      {renderInput(nextDueDate, setNextDueDate, 'YYYY-MM-DD', 'nextDue', { noCapitalize: true })}
-
-      <View style={st.twoCol}>
-        <View style={{ flex: 1 }}>
-          {renderLabel(isTr ? 'KLİNİK' : 'CLINIC')}
-          {renderInput(vaccineClinic, setVaccineClinic, isTr ? 'Klinik adı' : 'Clinic name', 'vClinic')}
-        </View>
-        <View style={{ flex: 1 }}>
-          {renderLabel(isTr ? 'SERİ NO' : 'BATCH NO')}
-          {renderInput(batchNumber, setBatchNumber, isTr ? 'Seri no' : 'Batch no', 'batch', { noCapitalize: true })}
-        </View>
-      </View>
-
-      {renderLabel(isTr ? 'VETERİNERDE Mİ YAPILDI?' : 'DONE AT A VET?')}
-      <View style={st.atVetRow}>
-        {(['yes', 'no'] as const).map((v) => {
-          const isActive = atVet ? v === 'yes' : v === 'no';
-          return (
-            <Pressable
-              key={v}
-              style={[st.atVetChip, isActive && st.atVetChipActive]}
-              onPress={() => setAtVet(v === 'yes')}
-            >
-              <Text style={[st.atVetChipText, isActive && st.atVetChipTextActive]}>
-                {v === 'yes' ? (isTr ? 'Evet' : 'Yes') : (isTr ? 'Hayır' : 'No')}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {renderLabel(isTr ? 'NOTLAR' : 'NOTES')}
-      {renderInput(notes, setNotes, isTr ? 'Reaksiyon, hekim notu...' : 'Reaction, vet notes...', 'notes', { multiline: true })}
-    </>
-  );
-
-  // ── Health Record steps ───────────────────────────────────────────────────────
-
-  const renderRecordStep1 = () => (
-    <>
-      <Text style={st.stepQuestion}>{isTr ? 'Kayıt türü?' : 'What type of record?'}</Text>
-      <View style={st.recTypeGrid}>
-        {REC_TYPE_CARDS.map((card) => (
-          <Pressable
-            key={card.type}
-            style={[st.recTypeCard, recType === card.type && st.recTypeCardActive]}
-            onPress={() => selectRecTypeAndAdvance(card.type)}
-          >
-            <Text style={st.recTypeSymbol}>{card.symbol}</Text>
-            <Text style={[st.recTypeLabel, recType === card.type && st.recTypeLabelActive]}>
-              {isTr ? card.labelTr : card.labelEn}
-            </Text>
-            <Text style={st.recTypeDesc}>{isTr ? card.descTr : card.descEn}</Text>
-          </Pressable>
-        ))}
-      </View>
-    </>
-  );
-
-  const renderRecordStep2 = () => (
-    <>
-      <Text style={st.stepHint}>{isTr ? 'Başlık ve tarih girin' : 'Enter title and date'}</Text>
-      {renderLabel(isTr ? 'BAŞLIK' : 'TITLE', true)}
-      {renderInput(recTitle, setRecTitle, recTitlePlaceholder(), 'title')}
-
-      {renderLabel(isTr ? 'TARİH' : 'DATE', true)}
-      {renderInput(formDate, setFormDate, 'YYYY-MM-DD', 'date', { noCapitalize: true })}
-
-      {recType === 'test' ? (
+      {/* ── Section 0: Record type ────────────────────────────────────────────── */}
+      {S(0, (
         <>
-          {renderLabel(isTr ? 'SONUÇ DEĞERİ' : 'TEST RESULT')}
-          <View style={st.valueRow}>
-            <TextInput
-              style={[st.input, st.valueNumInput, focusedField === 'value' && st.inputFocused]}
-              value={valueNumber}
-              onChangeText={setValueNumber}
-              placeholder="0.0"
-              placeholderTextColor={C.outlineVariant}
-              keyboardType="decimal-pad"
-              onFocus={() => setFocusedField('value')}
-              onBlur={() => setFocusedField(null)}
-            />
-            <TextInput
-              style={[st.input, st.valueUnitInput, focusedField === 'unit' && st.inputFocused]}
-              value={valueUnit}
-              onChangeText={setValueUnit}
-              placeholder={isTr ? 'Birim (mg/dL, IU/L...)' : 'Unit (mg/dL, IU/L...)'}
-              placeholderTextColor={C.outlineVariant}
-              autoCapitalize="none"
-              onFocus={() => setFocusedField('unit')}
-              onBlur={() => setFocusedField(null)}
-            />
+          <Text style={st.questionLabel}>{isTr ? 'Kayıt türü?' : 'What type of record?'}</Text>
+          <View style={st.recTypeGrid}>
+            {REC_TYPE_CARDS.map((card) => (
+              <Pressable
+                key={card.type}
+                style={[st.recTypeCard, recType === card.type && st.recTypeCardActive]}
+                onPress={() => handleRecTypeSelect(card.type)}
+              >
+                <Text style={st.recTypeSymbol}>{card.symbol}</Text>
+                <Text style={[st.recTypeLabel, recType === card.type && st.recTypeLabelActive]}>
+                  {isTr ? card.labelTr : card.labelEn}
+                </Text>
+                <Text style={st.recTypeDesc}>{isTr ? card.descTr : card.descEn}</Text>
+              </Pressable>
+            ))}
           </View>
         </>
-      ) : null}
+      ))}
+
+      {/* ── Section 1: Title + Date ───────────────────────────────────────────── */}
+      {recLevel >= 1 && S(1, (
+        <>
+          <SepLine />
+          {renderLabel(isTr ? 'BAŞLIK' : 'TITLE', true)}
+          {renderInput(recTitle, setRecTitle, recTitlePlaceholder(), 'title')}
+          {renderDateSelector('visitDate', formDate, setFormDate, true)}
+        </>
+      ))}
+
+      {/* ── Section 2: Status + Files + Notes (auto after title+date valid) ───── */}
+      {recLevel >= 2 && S(2, (
+        <>
+          <SepLine />
+          {renderLabel(isTr ? 'DURUM' : 'STATUS')}
+          {renderChips(STATUS_OPTIONS, recStatus, setRecStatus, statusLabel, true)}
+
+          {renderLabel(isTr ? 'TAKİP TARİHİ' : 'FOLLOW-UP DATE')}
+          {renderDateSelector('dueDate', dueDate, setDueDate)}
+
+          {renderLabel(isTr ? 'BELGELER / DOSYALAR' : 'DOCUMENTS / FILES')}
+          <Pressable style={st.attachBtn} onPress={pickAttachment}>
+            <Text style={st.attachBtnIcon}>📎</Text>
+            <Text style={st.attachBtnText}>
+              {isTr ? 'Fotoğraf veya belge ekle' : 'Attach photo or document'}
+            </Text>
+          </Pressable>
+          {attachedFileUris.length > 0 ? (
+            <View style={st.attachList}>
+              {attachedFileUris.map((uri, idx) => (
+                <View key={uri} style={st.attachItem}>
+                  <Text style={st.attachItemName} numberOfLines={1}>
+                    {`📄 ${uri.split('/').pop() ?? `File ${idx + 1}`}`}
+                  </Text>
+                  <Pressable
+                    hitSlop={10}
+                    onPress={() => setAttachedFileUris((prev) => prev.filter((_, i) => i !== idx))}
+                  >
+                    <Text style={st.attachItemRemove}>✕</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {renderLabel(isTr ? 'NOTLAR' : 'NOTES')}
+          {renderInput(notes, setNotes,
+            isTr ? 'Teşhis detayı, bulgular...' : 'Diagnosis details, findings...',
+            'notes', { multiline: true })}
+        </>
+      ))}
     </>
   );
 
-  const renderRecordStep3 = () => (
-    <>
-      <Text style={st.stepHint}>{isTr ? 'Durum ve notlar (opsiyonel)' : 'Status and notes (optional)'}</Text>
-      {renderLabel(isTr ? 'DURUM' : 'STATUS')}
-      {renderChips(STATUS_OPTIONS, recStatus, setRecStatus, statusLabel, true)}
+  // ── Header title ──────────────────────────────────────────────────────────────
 
-      {renderLabel(isTr ? 'TAKİP TARİHİ' : 'FOLLOW-UP DATE')}
-      {renderInput(dueDate, setDueDate, 'YYYY-MM-DD', 'dueDate', { noCapitalize: true })}
-
-      {renderLabel(isTr ? 'NOTLAR' : 'NOTES')}
-      {renderInput(notes, setNotes, isTr ? 'Teşhis detayı, bulgular...' : 'Diagnosis details, findings...', 'notes', { multiline: true })}
-    </>
-  );
-
-  // ── Current step content ──────────────────────────────────────────────────────
-
-  const renderStepContent = () => {
-    if (wizard.type === null) return null;
-    if (wizard.type === 'vetVisit') {
-      if (wizard.step === 1) return renderVetStep1();
-      if (wizard.step === 2) return renderVetStep2();
-      return renderVetStep3();
-    }
-    if (wizard.type === 'vaccine') {
-      if (wizard.step === 1) return renderVaccineStep1();
-      return renderVaccineStep2();
-    }
-    if (wizard.type === 'record') {
-      if (wizard.step === 1) return renderRecordStep1();
-      if (wizard.step === 2) return renderRecordStep2();
-      return renderRecordStep3();
-    }
-    return null;
-  };
-
-  // ── Header titles ─────────────────────────────────────────────────────────────
-
-  const headerTitle = (() => {
-    if (wizard.type === null) return isTr ? 'Kayıt Ekle' : 'Add Record';
-    if (wizard.type === 'vetVisit') {
-      if (wizard.step === 1) return isTr ? 'Veteriner Ziyareti' : 'Vet Visit';
-      if (wizard.step === 2) return isTr ? 'Ziyaret Detayı' : 'Visit Details';
-      return isTr ? 'Ek Bilgi' : 'Additional Info';
-    }
-    if (wizard.type === 'vaccine') {
-      if (wizard.step === 1) return isTr ? 'Aşı Seçimi' : 'Select Vaccine';
-      return isTr ? 'Aşı Tarihleri' : 'Vaccine Dates';
-    }
-    if (wizard.step === 1) return isTr ? 'Kayıt Türü' : 'Record Type';
-    if (wizard.step === 2) return isTr ? 'Kayıt Detayı' : 'Record Details';
-    return isTr ? 'Ek Bilgi' : 'Additional Info';
-  })();
+  const headerTitle =
+    entryType === 'vetVisit' ? (isTr ? 'Veteriner Ziyareti' : 'Vet Visit') :
+    entryType === 'vaccine'  ? (isTr ? 'Aşı' : 'Vaccine') :
+    entryType === 'record'   ? (isTr ? 'Sağlık Kaydı' : 'Health Record') :
+    (isTr ? 'Kayıt Ekle' : 'Add Record');
 
   // ── Render ────────────────────────────────────────────────────────────────────
 
@@ -881,9 +1328,8 @@ export default function AddRecordSheet({
               <View style={st.handle} />
             </View>
             <View style={st.header}>
-              {/* Left: back or cancel */}
               <Pressable onPress={goBack} hitSlop={16} style={st.headerSideBtn}>
-                {wizard.type !== null && (wizard.step > 1 || mode === 'typeSelect') ? (
+                {entryType !== null && mode === 'typeSelect' ? (
                   <Text style={st.backText}>‹ {isTr ? 'Geri' : 'Back'}</Text>
                 ) : (
                   <Text style={st.cancelText}>{isTr ? 'İptal' : 'Cancel'}</Text>
@@ -892,54 +1338,116 @@ export default function AddRecordSheet({
 
               <Text style={st.headerTitle}>{headerTitle}</Text>
 
-              {/* Right: next or save, or close on picker */}
-              {wizard.type === null ? (
+              {entryType === null ? (
                 <Pressable onPress={() => closeAnim()} hitSlop={16} style={[st.headerSideBtn, st.headerSideBtnRight]}>
                   <Text style={st.cancelText}>{isTr ? 'Kapat' : 'Close'}</Text>
                 </Pressable>
-              ) : isOnLastStep ? (
+              ) : (
                 <Pressable
                   onPress={handleSave}
                   hitSlop={16}
                   style={[st.headerSideBtn, st.headerSideBtnRight, !canSave && st.btnDisabled]}
                   disabled={!canSave}
                 >
-                  <Text style={[st.saveText, !canSave && st.saveTextDisabled]}>{isTr ? 'Kaydet' : 'Save'}</Text>
-                </Pressable>
-              ) : (
-                <Pressable
-                  onPress={goNext}
-                  hitSlop={16}
-                  style={[st.headerSideBtn, st.headerSideBtnRight, !isCurrentStepValid && st.btnDisabled]}
-                  disabled={!isCurrentStepValid}
-                >
-                  <Text style={[st.nextText, !isCurrentStepValid && st.saveTextDisabled]}>{isTr ? 'İleri' : 'Next'}</Text>
+                  <Text style={[st.saveText, !canSave && st.saveTextDisabled]}>
+                    {isTr ? 'Kaydet' : 'Save'}
+                  </Text>
                 </Pressable>
               )}
             </View>
-
-            {/* Step dots */}
-            {renderStepDots()}
             <View style={st.divider} />
           </View>
 
           {/* Content */}
-          {wizard.type === null ? (
+          {entryType === null ? (
             renderTypePicker()
           ) : (
             <ScrollView
+              ref={scrollRef}
               style={{ flex: 1 }}
               contentContainerStyle={st.body}
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
             >
               <Animated.View style={{ transform: [{ translateX: slideAnim }] }}>
-                {renderStepContent()}
+                {entryType === 'vetVisit' ? renderVetForm()
+                  : entryType === 'vaccine' ? renderVaccineForm()
+                  : renderRecordForm()}
               </Animated.View>
-              <View style={{ height: 48 }} />
+              <View style={{ height: 64 }} />
             </ScrollView>
           )}
         </Animated.View>
+
+        {/* Clinic picker modal */}
+        <Modal
+          visible={clinicPickerVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setClinicPickerVisible(false)}
+        >
+          <View style={st.pickerModalRoot}>
+            <Pressable style={st.pickerModalBackdrop} onPress={() => setClinicPickerVisible(false)} />
+            <View style={st.pickerModalCard}>
+              <View style={st.pickerModalHandle} />
+              <Text style={st.pickerModalTitle}>
+                {isTr ? 'Haritadan klinik seç' : 'Select clinic from map'}
+              </Text>
+              <Text style={st.pickerModalHint}>
+                {isTr ? 'Yakındakiler veya aramayla seçebilirsiniz' : 'Pick nearby clinics or search by name'}
+              </Text>
+              <View style={st.pickerSearchRow}>
+                <TextInput
+                  style={[st.input, st.pickerSearchInput]}
+                  value={clinicSearchQuery}
+                  onChangeText={setClinicSearchQuery}
+                  placeholder={isTr ? 'Klinik ara' : 'Search clinic'}
+                  placeholderTextColor={C.outlineVariant}
+                  autoCapitalize="words"
+                />
+                <Pressable style={st.pickerNearbyBtn} onPress={loadNearbyClinicSuggestions}>
+                  {clinicPickerBusy ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={st.pickerNearbyBtnText}>{isTr ? 'Yakın' : 'Nearby'}</Text>
+                  )}
+                </Pressable>
+              </View>
+              <View style={st.pickerMapNotice}>
+                <View style={st.pickerMapNoticeDot} />
+                <Text style={st.pickerMapNoticeText}>
+                  {isTr ? 'Harita göstergesi aktif' : 'Map indicator enabled'}
+                </Text>
+              </View>
+              <ScrollView style={st.pickerResultList} keyboardShouldPersistTaps="handled">
+                {clinicSearchBusy ? (
+                  <View style={st.pickerBusyRow}>
+                    <ActivityIndicator size="small" color={C.primary} />
+                  </View>
+                ) : null}
+                {visibleClinicResults.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    style={st.pickerResultItem}
+                    onPress={() => selectClinicSuggestion(item)}
+                  >
+                    <Text style={st.pickerResultName}>{item.name}</Text>
+                    {item.address ? (
+                      <Text style={st.pickerResultAddress}>{item.address}</Text>
+                    ) : null}
+                  </Pressable>
+                ))}
+                {!clinicSearchBusy && visibleClinicResults.length === 0 ? (
+                  <Text style={st.pickerEmptyText}>
+                    {isTr ? 'Klinik bulunamadı. Aramayı değiştirin.' : 'No clinic found. Try another query.'}
+                  </Text>
+                ) : null}
+                <View style={{ height: 20 }} />
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -963,17 +1471,9 @@ const st = StyleSheet.create({
   cancelText: { fontSize: 15, color: C.onSurfaceVariant },
   backText: { fontSize: 15, color: C.primary, fontWeight: '500' },
   saveText: { fontSize: 15, fontWeight: '600', color: C.primary },
-  nextText: { fontSize: 15, fontWeight: '600', color: C.primary },
   saveTextDisabled: { color: C.outlineVariant },
   btnDisabled: {},
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(0,0,0,0.08)' },
-
-  // Step dots
-  stepDotsRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, paddingVertical: 8 },
-  stepDot: { width: 6, height: 6, borderRadius: 3 },
-  stepDotCurrent: { backgroundColor: C.primary, width: 18, borderRadius: 3 },
-  stepDotDone: { backgroundColor: C.outlineVariant },
-  stepDotFuture: { backgroundColor: C.surfaceContainer, borderWidth: 1, borderColor: C.outlineVariant },
 
   // Type picker
   pickerBody: { paddingHorizontal: 20, paddingTop: 16 },
@@ -989,15 +1489,60 @@ const st = StyleSheet.create({
   pickerDesc: { fontSize: 12, color: C.onSurfaceVariant, lineHeight: 16 },
   pickerChevron: { fontSize: 20, color: C.outlineVariant, marginRight: 2 },
 
-  // Body
-  body: { paddingHorizontal: 20, paddingTop: 18, paddingBottom: 48 },
+  // Body (form scroll container)
+  body: { paddingHorizontal: 20, paddingTop: 22, paddingBottom: 48 },
 
-  // Step headings
-  stepQuestion: { fontSize: 18, fontWeight: '700', color: C.onSurface, letterSpacing: -0.4, marginBottom: 6 },
+  // Section separator
+  sectionSep: { height: 1, backgroundColor: 'rgba(0,0,0,0.06)', marginVertical: 22 },
+
+  // Question label (prominent prompt at top of each section)
+  questionLabel: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: C.onSurface,
+    letterSpacing: -0.4,
+    marginBottom: 16,
+  },
+
+  // Section headline (e.g. vaccine name echo after selection)
+  sectionHeadline: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.primary,
+    letterSpacing: -0.2,
+    marginBottom: 6,
+  },
+
+  // Step hint (small subtext)
   stepHint: { fontSize: 13, color: C.onSurfaceVariant, marginBottom: 4, letterSpacing: -0.1 },
 
+  // Status big chips (Planned / Completed)
+  statusBigRow: { flexDirection: 'row', gap: 12 },
+  bigStatusChip: {
+    flex: 1,
+    backgroundColor: C.surface,
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    gap: 5,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  bigStatusChipActive: { borderColor: C.primary, backgroundColor: C.primaryTint },
+  bigStatusEmoji: { fontSize: 24, marginBottom: 2 },
+  bigStatusLabel: { fontSize: 15, fontWeight: '700', color: C.onSurface, letterSpacing: -0.2, textAlign: 'center' },
+  bigStatusLabelActive: { color: C.primary },
+  bigStatusSub: { fontSize: 11, color: C.onSurfaceVariant, fontWeight: '400', textAlign: 'center' },
+  bigStatusSubActive: { color: C.primary, opacity: 0.75 },
+
   // Reason grid (2-column)
-  reasonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
+  reasonGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   reasonCard: {
     width: '47%',
     backgroundColor: C.surface,
@@ -1014,7 +1559,7 @@ const st = StyleSheet.create({
   reasonLabelActive: { color: C.primary },
 
   // Record type grid (2-column)
-  recTypeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 },
+  recTypeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   recTypeCard: {
     width: '47%',
     backgroundColor: C.surface,
@@ -1030,8 +1575,8 @@ const st = StyleSheet.create({
   recTypeLabelActive: { color: C.primary },
   recTypeDesc: { fontSize: 11, color: C.onSurfaceVariant, lineHeight: 15 },
 
-  // Vaccine chips (wrapped grid)
-  suggestSectionLabel: { fontSize: 10, fontWeight: '700', color: C.outlineVariant, letterSpacing: 0.8, marginTop: 20, marginBottom: 10 },
+  // Vaccine chips
+  suggestSectionLabel: { fontSize: 10, fontWeight: '700', color: C.outlineVariant, letterSpacing: 0.8, marginTop: 16, marginBottom: 10 },
   vaccineGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   vaccineChip: {
     paddingHorizontal: 12,
@@ -1044,6 +1589,22 @@ const st = StyleSheet.create({
   vaccineChipActive: { backgroundColor: C.primaryTint, borderColor: C.primary },
   vaccineChipText: { fontSize: 13, color: C.onSurfaceVariant, fontWeight: '500' },
   vaccineChipTextActive: { color: C.primary, fontWeight: '600' },
+  vaccineChipOther: { borderStyle: 'dashed', borderColor: C.primary },
+  vaccineChipOtherText: { fontSize: 13, color: C.primary, fontWeight: '600' },
+
+  // Continue button (custom vaccine advance)
+  continueBtn: {
+    alignSelf: 'flex-end',
+    marginTop: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: C.primary,
+  },
+  continueBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
+
+  // Back-to-list link
+  backToListText: { fontSize: 13, color: C.primary, fontWeight: '500', marginTop: 10, marginBottom: 2 },
 
   // Fields
   label: { fontSize: 11, fontWeight: '600', color: C.onSurfaceVariant, letterSpacing: 0.7, marginTop: 18, marginBottom: 8 },
@@ -1061,8 +1622,86 @@ const st = StyleSheet.create({
   },
   inputFocused: { borderColor: C.primary },
   inputMultiline: { height: 96, textAlignVertical: 'top', paddingTop: 12 },
+  inputDisabledShell: { backgroundColor: '#f2f2ef', borderColor: '#d4d5cf' },
+  inputDisabledText: { color: C.outlineVariant },
 
-  // Chips
+  // Date tap row
+  dateTapRow: {
+    minHeight: 54,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.16)',
+    backgroundColor: '#fafbf8',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  dateTapMain: { flex: 1, gap: 3 },
+  dateTapEyebrow: { fontSize: 11, color: C.onSurfaceVariant, fontWeight: '600', letterSpacing: 0.2 },
+  dateTapText: { fontSize: 17, lineHeight: 22, color: C.onSurface, fontWeight: '600' },
+  dateTapPlaceholder: { color: C.outlineVariant, fontWeight: '500' },
+  dateTapBadge: {
+    width: 32, height: 32, borderRadius: 999,
+    backgroundColor: 'rgba(71,102,74,0.10)',
+    borderWidth: 1, borderColor: 'rgba(71,102,74,0.16)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dateTapBadgeText: { fontSize: 16, color: C.primary, fontWeight: '800', marginTop: -1 },
+  datePickerWrap: {
+    marginTop: 8,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+    backgroundColor: '#fbfcfa',
+    paddingHorizontal: 10,
+    paddingVertical: Platform.OS === 'ios' ? 10 : 6,
+    alignSelf: 'stretch',
+  },
+
+  // Clinic map input
+  mapInputShell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: C.outlineVariant,
+    borderRadius: 12,
+    backgroundColor: '#fff',
+    minHeight: 48,
+    paddingLeft: 12,
+    paddingRight: 6,
+    gap: 8,
+  },
+  mapInputField: {
+    flex: 1,
+    fontSize: 15,
+    color: C.onSurface,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+  },
+  mapIndicatorBtn: {
+    height: 36,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    backgroundColor: C.primaryTint,
+    borderWidth: 1,
+    borderColor: C.primary,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  mapIndicatorGlyph: {
+    width: 10, height: 10, borderRadius: 5,
+    borderWidth: 2, borderColor: C.primary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  mapIndicatorGlyphDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: C.primary },
+  mapIndicatorText: { fontSize: 12, color: C.primary, fontWeight: '700' },
+  mapIndicatorChevron: { fontSize: 14, color: C.primary, fontWeight: '700', marginLeft: -2 },
+  mapPickedCaption: { marginTop: 6, fontSize: 12, color: C.primary, fontWeight: '600' },
+
+  // Chips (horizontal scroll)
   chipsRow: { flexDirection: 'row', gap: 8, paddingBottom: 2 },
   chip: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: C.surfaceContainer, borderWidth: 1, borderColor: 'transparent' },
   chipActive: { backgroundColor: C.primary, borderColor: C.primaryDim },
@@ -1083,24 +1722,58 @@ const st = StyleSheet.create({
 
   // Toggle
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 18, marginBottom: 8 },
+  toggleSubtext: { fontSize: 11, lineHeight: 15, color: C.onSurfaceVariant, fontWeight: '400', marginTop: 1 },
 
-  // At-vet toggle
+  // At-vet
   atVetRow: { flexDirection: 'row', gap: 10 },
-  atVetChip: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: 10,
-    backgroundColor: C.surfaceContainer,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-  },
+  atVetChip: { flex: 1, paddingVertical: 11, borderRadius: 10, backgroundColor: C.surfaceContainer, alignItems: 'center', borderWidth: 1.5, borderColor: 'transparent' },
   atVetChipActive: { backgroundColor: C.primaryTint, borderColor: C.primary },
   atVetChipText: { fontSize: 14, fontWeight: '600', color: C.onSurfaceVariant },
   atVetChipTextActive: { color: C.primary },
 
-  // Test result
-  valueRow: { flexDirection: 'row', gap: 10 },
-  valueNumInput: { flex: 1 },
-  valueUnitInput: { flex: 1.6 },
+  // Outcome chips
+  outcomeChipsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  outcomeChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: C.surfaceContainer, borderWidth: 1.5, borderColor: 'transparent' },
+  outcomeChipActive: { backgroundColor: C.primaryTint, borderColor: C.primary },
+  outcomeChipText: { fontSize: 13, fontWeight: '500', color: C.onSurfaceVariant },
+  outcomeChipTextActive: { color: C.primary, fontWeight: '600' },
+
+  // File attachments
+  attachBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    borderRadius: 12, borderWidth: 1, borderColor: C.outlineVariant, borderStyle: 'dashed',
+    backgroundColor: C.surfaceLow, paddingHorizontal: 14, paddingVertical: 12,
+  },
+  attachBtnIcon: { fontSize: 18 },
+  attachBtnText: { fontSize: 14, lineHeight: 19, color: C.onSurfaceVariant, fontWeight: '500' },
+  attachList: { gap: 6, marginTop: 6 },
+  attachItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderRadius: 10, backgroundColor: C.surfaceContainer, paddingHorizontal: 12, paddingVertical: 9 },
+  attachItemName: { flex: 1, fontSize: 13, lineHeight: 17, color: C.onSurface, fontWeight: '500' },
+  attachItemRemove: { fontSize: 14, color: C.outlineVariant, fontWeight: '600' },
+
+  // Clinic picker modal
+  pickerModalRoot: { flex: 1, justifyContent: 'flex-end' },
+  pickerModalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.32)' },
+  pickerModalCard: {
+    backgroundColor: C.bg,
+    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: 18, paddingTop: 8, paddingBottom: 20,
+    maxHeight: '78%',
+  },
+  pickerModalHandle: { width: 44, height: 5, borderRadius: 3, backgroundColor: C.outlineVariant, alignSelf: 'center', marginBottom: 12 },
+  pickerModalTitle: { fontSize: 20, fontWeight: '700', color: C.onSurface, letterSpacing: -0.3 },
+  pickerModalHint: { marginTop: 4, fontSize: 13, color: C.onSurfaceVariant },
+  pickerSearchRow: { marginTop: 12, flexDirection: 'row', gap: 8, alignItems: 'center' },
+  pickerSearchInput: { flex: 1, marginTop: 0, marginBottom: 0 },
+  pickerNearbyBtn: { height: 46, minWidth: 86, borderRadius: 12, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
+  pickerNearbyBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  pickerMapNotice: { marginTop: 10, borderRadius: 12, backgroundColor: '#edf1eb', borderWidth: 1, borderColor: '#d7dfd2', paddingVertical: 9, paddingHorizontal: 11, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pickerMapNoticeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
+  pickerMapNoticeText: { fontSize: 12, color: '#47664a', fontWeight: '600' },
+  pickerResultList: { marginTop: 12 },
+  pickerBusyRow: { paddingVertical: 10 },
+  pickerResultItem: { borderRadius: 14, backgroundColor: '#fff', borderWidth: 1, borderColor: C.separator, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 8 },
+  pickerResultName: { fontSize: 15, fontWeight: '700', color: C.onSurface },
+  pickerResultAddress: { marginTop: 3, fontSize: 12, color: C.onSurfaceVariant, lineHeight: 17 },
+  pickerEmptyText: { fontSize: 13, color: C.onSurfaceVariant, paddingVertical: 10 },
 });

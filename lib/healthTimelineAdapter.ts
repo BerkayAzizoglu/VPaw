@@ -45,12 +45,12 @@ function formatShortDate(raw: unknown, locale: TimelineLocale) {
 }
 
 function mapRecordSubtype(rawType: unknown, locale: TimelineLocale) {
-  if (rawType === 'diagnosis') return locale === 'tr' ? 'Teshis' : 'Diagnosis';
-  if (rawType === 'procedure') return locale === 'tr' ? 'Prosedur' : 'Procedure';
+  if (rawType === 'diagnosis') return locale === 'tr' ? 'Teşhis' : 'Diagnosis';
+  if (rawType === 'procedure') return locale === 'tr' ? 'Prosedür' : 'Procedure';
   if (rawType === 'test') return locale === 'tr' ? 'Lab sonucu' : 'Lab result';
   if (rawType === 'prescription') return locale === 'tr' ? 'Tedavi' : 'Treatment';
   if (rawType === 'note') return locale === 'tr' ? 'Klinik not' : 'Clinical note';
-  return locale === 'tr' ? 'Saglik kaydi' : 'Health record';
+  return locale === 'tr' ? 'Sağlık kaydı' : 'Health record';
 }
 
 function resolveStatus(item: UnifiedHealthEvent, nowMs: number): SharedHealthStatus {
@@ -95,8 +95,8 @@ function buildMetaLine(item: UnifiedHealthEvent, locale: TimelineLocale) {
   if (item.type === 'vaccine') {
     const dueDate = typeof item.metadata?.dueDate === 'string' ? item.metadata.dueDate : undefined;
     return dueDate
-      ? `${locale === 'tr' ? 'Next due' : 'Next due'} · ${formatShortDate(dueDate, locale) ?? dueDate}`
-      : (locale === 'tr' ? 'Asi takibi' : 'Vaccination log');
+      ? `${locale === 'tr' ? 'Sonraki doz' : 'Next due'} · ${formatShortDate(dueDate, locale) ?? dueDate}`
+      : (locale === 'tr' ? 'Aşı takibi' : 'Vaccination log');
   }
 
   if (item.type === 'weight') {
@@ -128,7 +128,7 @@ export function buildHubTimelinePreview({
     sourceEventId: item.id,
     type: toPreviewType(item.type),
     date: formatDateLabel(item.date, locale),
-    title: item.title || (locale === 'tr' ? 'Saglik olayi' : 'Health event'),
+    title: item.title || (locale === 'tr' ? 'Sağlık olayı' : 'Health event'),
     notes: item.notes,
     metaLine: buildMetaLine(item, locale),
     statusLabel: resolveStatus(item, nowMs),
@@ -146,7 +146,7 @@ export function buildHomeTimelinePreview({
     id: item.id,
     sourceEventId: item.id,
     eventType: toPreviewType(item.type),
-    title: item.title || (locale === 'tr' ? 'Saglik kaydi' : 'Health record'),
+    title: item.title || (locale === 'tr' ? 'Sağlık kaydı' : 'Health record'),
     subtitle: item.type === 'record' ? mapRecordSubtype(item.metadata?.originalType, locale) : undefined,
     date: formatDateLabel(item.date, locale),
   }));

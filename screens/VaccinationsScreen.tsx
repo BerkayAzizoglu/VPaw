@@ -17,7 +17,8 @@ import { getWording } from '../lib/wording';
 import { localizeVaccine } from '../lib/vaccineI18n';
 import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenStateCard';
 import StickyBlurTopBar, { getStickyHeaderContentTop } from '../components/StickyBlurTopBar';
-import type { VaccinationsHistoryItem, VaccinationsAttentionCounts, VaccinationsNextUpData } from '../lib/healthMvpModel';
+import type { VaccinationsHistoryItem, VaccinationsAttentionCounts, VaccinationsNextUpData, VetVisit } from '../lib/healthMvpModel';
+const vaccinesHeaderLogo = require('../assets/illustrations/vaccines-logo.png');
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,7 @@ type VaccinationsScreenProps = {
   historyItems?: VaccinationsHistoryItem[];
   attentionCounts?: VaccinationsAttentionCounts;
   nextUpData?: VaccinationsNextUpData;
+  vetVisits?: VetVisit[];
 };
 
 // ─── Icons ───────────────────────────────────────────────────────────────────
@@ -127,7 +129,7 @@ function FeaturedVaccineCard({ data, locale }: { data: VaccinationsNextUpData; l
     <View style={styles.featuredCard}>
       <View style={styles.featuredTop}>
         <View style={styles.featuredLeft}>
-          <Text style={styles.featuredTag}>{isTr ? 'YAKLAŞAN' : 'UPCOMING'}</Text>
+          <Text style={styles.featuredTag}>{isTr ? 'Sıradaki doz' : 'Next dose'}</Text>
           <Text style={styles.featuredTitle}>{localized.name}</Text>
           <Text style={styles.featuredSub}>{localized.subtitle}</Text>
         </View>
@@ -218,6 +220,7 @@ export default function VaccinationsScreen({
   historyItems,
   attentionCounts,
   nextUpData,
+  vetVisits,
 }: VaccinationsScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).vaccinations;
@@ -240,6 +243,45 @@ export default function VaccinationsScreen({
   const dueSoonCount = attentionCounts?.dueSoonCount ?? history.filter((h) => h.status === 'dueSoon').length;
   const upToDateCount = history.filter((h) => h.status === 'upToDate').length;
   const hasAttention = overdueCount > 0 || dueSoonCount > 0;
+  const spendVisits = vetVisits ?? [];
+  const now = new Date();
+  const nowMs = now.getTime();
+  const currentYear = String(now.getFullYear());
+  const currentYearStartMs = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0).getTime();
+  const prevYearSamePointMs = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+  const prevYearStartMs = new Date(now.getFullYear() - 1, 0, 1, 0, 0, 0, 0).getTime();
+  const spendCurrency = spendVisits.find((visit) => typeof visit.currency === 'string' && visit.currency.trim().length > 0)?.currency ?? 'TL';
+
+  const yearlySpend = spendVisits
+    .filter((visit) => {
+      if (visit.status === 'planned' || visit.status === 'canceled') return false;
+      if (visit.amount == null || visit.amount <= 0) return false;
+      const visitMs = new Date(visit.visitDate).getTime();
+      if (!Number.isFinite(visitMs)) return false;
+      return visitMs >= currentYearStartMs && visitMs <= nowMs;
+    })
+    .reduce((sum, visit) => sum + (visit.amount ?? 0), 0);
+
+  const prevYearSpend = spendVisits
+    .filter((visit) => {
+      if (visit.status === 'planned' || visit.status === 'canceled') return false;
+      if (visit.amount == null || visit.amount <= 0) return false;
+      const visitMs = new Date(visit.visitDate).getTime();
+      if (!Number.isFinite(visitMs)) return false;
+      return visitMs >= prevYearStartMs && visitMs <= prevYearSamePointMs;
+    })
+    .reduce((sum, visit) => sum + (visit.amount ?? 0), 0);
+
+  const annualSpendText = yearlySpend > 0
+    ? `${yearlySpend.toLocaleString(isTr ? 'tr-TR' : 'en-US')} ${spendCurrency}`
+    : copy.totalCost;
+  const annualSpendDeltaText = (() => {
+    if (prevYearSpend <= 0 && yearlySpend <= 0) return isTr ? 'BU YIL' : 'THIS YEAR';
+    if (prevYearSpend <= 0) return isTr ? 'BU YIL' : 'THIS YEAR';
+    const pct = Math.round(((yearlySpend - prevYearSpend) / prevYearSpend) * 100);
+    const arrow = pct >= 0 ? '↑' : '↓';
+    return isTr ? `${arrow} %${Math.abs(pct)} GECEN YILA GORE` : `${arrow} ${Math.abs(pct)}% VS LAST YEAR`;
+  })();
 
   // ── screen state ──
   const screenState = status;
@@ -395,6 +437,19 @@ export default function VaccinationsScreen({
                 </View>
               </View>
 
+              <View style={styles.annualSpendCard}>
+                <View style={styles.annualSpendHeader}>
+                  <Text style={styles.annualSpendLabel}>{isTr ? 'YILLIK HARCAMA' : 'ANNUAL SPEND'}</Text>
+                  <View style={styles.annualSpendYearPill}>
+                    <Text style={styles.annualSpendYearText}>{currentYear}</Text>
+                  </View>
+                </View>
+                <Text style={styles.annualSpendValue}>{annualSpendText}</Text>
+                <Text style={[styles.annualSpendSub, prevYearSpend > 0 && yearlySpend !== prevYearSpend ? styles.annualSpendSubActive : null]}>
+                  {annualSpendDeltaText}
+                </Text>
+              </View>
+
             </View>
           ) : (
             <ScreenStateCard
@@ -417,12 +472,17 @@ export default function VaccinationsScreen({
         </Animated.ScrollView>
 
         <StickyBlurTopBar
-          title={isTr ? 'ASILAR' : 'VACCINATIONS'}
+          title={isTr ? 'ASILAR' : 'VACCINES'}
           topInset={topInset}
           scrollY={scrollY}
+          titleVariant="hub"
           titleColor="#30332e"
           overlayColors={['rgba(86,117,124,0.56)', 'rgba(86,117,124,0.38)', 'rgba(86,117,124,0.18)', 'rgba(86,117,124,0)']}
           borderColor="rgba(39,67,75,0.20)"
+          centerLogoSource={vaccinesHeaderLogo}
+          centerLogoWidth={102}
+          centerLogoHeight={102}
+          centerLogoOffsetY={-8}
           leftSlot={(
             <Pressable style={styles.backBtn} onPress={onBack} hitSlop={8}>
               <Icon kind="back" size={20} color="#30332e" />
@@ -480,14 +540,16 @@ const styles = StyleSheet.create({
   backBtn: {
     width: 42,
     height: 42,
-    borderRadius: 21,
-    backgroundColor: '#fff',
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+    shadowColor: '#7c877f',
     shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
     elevation: 2,
   },
   headerTitle: {
@@ -500,7 +562,7 @@ const styles = StyleSheet.create({
     width: 76,
   },
   addPill: {
-    height: 34,
+    height: 36,
     paddingHorizontal: 14,
     borderRadius: 8,
     backgroundColor: '#47664a',
@@ -519,13 +581,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 11,
-    marginBottom: 20,
+    paddingVertical: 12,
+    marginBottom: 22,
     borderWidth: 1,
-    borderColor: 'rgba(93,96,90,0.10)',
+    borderColor: 'rgba(71,102,74,0.10)',
   },
   attentionLeft: {
     flexDirection: 'row',
@@ -534,9 +596,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   attentionPill: {
-    height: 26,
-    paddingHorizontal: 8,
-    borderRadius: 6,
+    height: 28,
+    paddingHorizontal: 9,
+    borderRadius: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
@@ -562,28 +624,29 @@ const styles = StyleSheet.create({
   },
   attentionCta: {
     fontSize: 13,
-    fontWeight: '700',
-    color: '#56757c',
+    fontWeight: '600',
+    color: '#47664a',
   },
 
   // ── Section label ──
   sectionLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#5d605a',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
-    marginBottom: 12,
-    marginLeft: 2,
+    fontSize: 22,
+    lineHeight: 28,
+    fontWeight: '800',
+    color: '#26312f',
+    letterSpacing: -0.5,
+    marginBottom: 14,
+    marginLeft: 1,
+    marginTop: 4,
   },
 
   // ── Featured card ──
   featuredCard: {
-    borderRadius: 12,
-    backgroundColor: '#fff',
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.94)',
     padding: 18,
     borderWidth: 1,
-    borderColor: 'rgba(93,96,90,0.10)',
+    borderColor: 'rgba(71,102,74,0.10)',
   },
   featuredTop: {
     flexDirection: 'row',
@@ -593,56 +656,57 @@ const styles = StyleSheet.create({
   },
   featuredLeft: {
     flex: 1,
-    paddingRight: 12,
-    gap: 4,
+    paddingRight: 14,
+    gap: 5,
   },
   featuredTag: {
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 1.2,
-    color: '#56757c',
-    marginBottom: 4,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '600',
+    color: '#6c756f',
+    marginBottom: 2,
   },
   featuredTitle: {
-    fontSize: 19,
+    fontSize: 22,
     fontWeight: '800',
-    color: '#30332e',
-    letterSpacing: -0.3,
-    lineHeight: 25,
-  },
-  featuredSub: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#5d605a',
-  },
-  featuredDateBox: {
-    backgroundColor: '#f4f4ee',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 64,
-    borderWidth: 1,
-    borderColor: 'rgba(93,96,90,0.10)',
-  },
-  featuredDateNum: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#30332e',
+    color: '#26312f',
+    letterSpacing: -0.6,
     lineHeight: 28,
   },
+  featuredSub: {
+    fontSize: 14,
+    lineHeight: 19,
+    fontWeight: '500',
+    color: '#66706b',
+  },
+  featuredDateBox: {
+    backgroundColor: '#f3f5f0',
+    borderRadius: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 72,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+  },
+  featuredDateNum: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#26312f',
+    lineHeight: 30,
+  },
   featuredDateSub: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '700',
-    color: '#5d605a',
-    letterSpacing: 0.5,
+    color: '#6a726d',
     marginTop: 2,
     textAlign: 'center',
   },
   featuredMeta: {
     flexDirection: 'row',
     gap: 16,
+    paddingTop: 2,
   },
   featuredMetaItem: {
     flexDirection: 'row',
@@ -650,53 +714,55 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   featuredMetaText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
-    color: '#5d605a',
+    color: '#66706b',
   },
 
   // ── Vaccine card ──
   historyList: {
-    gap: 10,
+    gap: 11,
   },
   vaccineCard: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderRadius: 16,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(93,96,90,0.10)',
+    borderColor: 'rgba(71,102,74,0.10)',
   },
   vaccineIconBox: {
     width: 40,
     height: 40,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
   },
   vaccineMain: {
     flex: 1,
-    gap: 3,
+    gap: 4,
+    paddingTop: 1,
   },
   vaccineName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '700',
-    color: '#30332e',
-    lineHeight: 21,
+    color: '#26312f',
+    lineHeight: 22,
   },
   vaccineMetaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexWrap: 'wrap',
   },
   vaccineSub: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
-    color: '#5d605a',
+    color: '#66706b',
   },
   vaccineDot: {
     width: 3,
@@ -705,23 +771,23 @@ const styles = StyleSheet.create({
     backgroundColor: '#b1b3ab',
   },
   vaccineDueText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
-    color: '#5d605a',
+    color: '#66706b',
   },
   vaccinePill: {
-    height: 24,
-    paddingHorizontal: 8,
-    borderRadius: 6,
+    minHeight: 26,
+    paddingHorizontal: 9,
+    borderRadius: 8,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
+    marginTop: 4,
   },
   vaccinePillText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
-    letterSpacing: 0.3,
   },
 
   // ── Stats bento grid ──
@@ -732,27 +798,26 @@ const styles = StyleSheet.create({
   },
   statsCard: {
     flex: 1,
-    backgroundColor: '#f4f4ee',
-    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderRadius: 16,
     padding: 16,
-    gap: 2,
+    gap: 4,
     borderWidth: 1,
-    borderColor: 'rgba(93,96,90,0.08)',
+    borderColor: 'rgba(71,102,74,0.10)',
   },
   statsLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: '#5d605a',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: 6,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600',
+    color: '#6a726d',
+    marginBottom: 4,
   },
   statsValue: {
-    fontSize: 36,
+    fontSize: 34,
     fontWeight: '800',
-    color: '#30332e',
+    color: '#26312f',
     letterSpacing: -1,
-    lineHeight: 42,
+    lineHeight: 40,
   },
   statsSubRow: {
     flexDirection: 'row',
@@ -766,9 +831,61 @@ const styles = StyleSheet.create({
     borderRadius: 3,
   },
   statsSub: {
-    fontSize: 9,
+    fontSize: 11,
     fontWeight: '700',
-    color: '#5d605a',
-    letterSpacing: 0.8,
+    color: '#6a726d',
+  },
+  annualSpendCard: {
+    marginTop: 14,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.94)',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.10)',
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+  },
+  annualSpendHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  annualSpendLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6a726d',
+  },
+  annualSpendYearPill: {
+    minWidth: 40,
+    paddingHorizontal: 8,
+    height: 24,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.12)',
+    backgroundColor: '#f3f5f0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  annualSpendYearText: {
+    fontSize: 10.5,
+    fontWeight: '700',
+    color: '#596058',
+  },
+  annualSpendValue: {
+    marginTop: 8,
+    fontSize: 28,
+    lineHeight: 34,
+    fontWeight: '800',
+    color: '#26312f',
+    letterSpacing: -0.7,
+  },
+  annualSpendSub: {
+    marginTop: 4,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '600',
+    color: '#6f746e',
+  },
+  annualSpendSubActive: {
+    color: '#4b6a54',
   },
 });

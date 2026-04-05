@@ -321,6 +321,7 @@ function PremiumHeroScene() {
 export default function PremiumScreen({ onBack, onUpgrade }: PremiumScreenProps) {
   const { locale } = useLocale();
   const copy = getWording(locale).premium;
+  const isTr = locale === 'tr';
   const features: Array<{ title: string; desc: string; icon: FeatureIcon; tall?: boolean }> = [
     { title: copy.features.unlimitedPetsTitle, desc: copy.features.unlimitedPetsDesc, icon: 'pets' },
     { title: copy.features.fullHealthTitle, desc: copy.features.fullHealthDesc, icon: 'shield' },
@@ -336,6 +337,10 @@ export default function PremiumScreen({ onBack, onUpgrade }: PremiumScreenProps)
     { label: copy.table.healthRecords, free: copy.table.threeMonths, pro: copy.table.lifetime, proAccent: true },
     { label: copy.table.pdfExport, free: 'dot', pro: 'check' },
     { label: copy.table.aiInsights, free: 'dot', pro: 'check' },
+    { label: isTr ? 'Asi ve veteriner gecmisi' : 'Vaccine & vet history', free: copy.table.threeMonths, pro: copy.table.lifetime, proAccent: true },
+    { label: isTr ? 'Agirlik trend gecmisi' : 'Weight trend history', free: copy.table.threeMonths, pro: copy.table.lifetime, proAccent: true },
+    { label: isTr ? 'Health Passport disa aktarim' : 'Health Passport export', free: 'dot', pro: 'check' },
+    { label: isTr ? 'Akilli bakim hatirlaticilari' : 'Smart care reminders', free: 'dot', pro: 'check' },
   ];
 
   return (
@@ -406,13 +411,13 @@ export default function PremiumScreen({ onBack, onUpgrade }: PremiumScreenProps)
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
-    backgroundColor: '#faf9f8',
+    backgroundColor: '#f6f4f0',
   },
   content: {
     paddingBottom: 170,
   },
   heroImage: {
-    height: 384,
+    height: 356,
     width: '100%',
     overflow: 'hidden',
     backgroundColor: '#7aa05e',
@@ -590,7 +595,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(32, 40, 21, 0.10)',
   },
   mainContent: {
-    marginTop: -80,
+    marginTop: -62,
     paddingHorizontal: 24,
     alignItems: 'center',
   },
@@ -614,21 +619,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   heading: {
-    marginTop: 16,
+    marginTop: 12,
     textAlign: 'center',
     fontSize: 32,
     lineHeight: 35,
-    color: '#2d2d2d',
+    color: '#24342d',
     fontWeight: '800',
     letterSpacing: -0.8,
   },
   subHeading: {
-    marginTop: 10,
+    marginTop: 8,
     textAlign: 'center',
     fontSize: 15,
     lineHeight: 24,
-    color: '#787878',
-    fontWeight: '400',
+    color: '#646d66',
+    fontWeight: '500',
   },
   featureList: {
     marginTop: 20,
@@ -637,10 +642,10 @@ const styles = StyleSheet.create({
   },
   featureCard: {
     minHeight: 82,
-    borderRadius: 20,
-    backgroundColor: '#fff',
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.88)',
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.02)',
+    borderColor: 'rgba(71,102,74,0.12)',
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingTop: 17,
@@ -686,12 +691,12 @@ const styles = StyleSheet.create({
     maxWidth: 196,
   },
   tableCard: {
-    marginTop: 24,
+    marginTop: 20,
     width: '100%',
-    backgroundColor: '#fff',
-    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.02)',
+    borderColor: 'rgba(71,102,74,0.12)',
     overflow: 'hidden',
     shadowColor: '#000',
     shadowOpacity: 0.05,
@@ -748,7 +753,7 @@ const styles = StyleSheet.create({
     flex: 1.25,
     fontSize: 13,
     lineHeight: 20,
-    color: 'rgba(45,45,45,0.8)',
+    color: '#2f3a33',
     fontWeight: '600',
   },
   rowCellCenter: {

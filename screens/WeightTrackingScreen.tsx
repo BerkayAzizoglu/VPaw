@@ -15,6 +15,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import Svg, { Circle, Defs, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocale } from '../hooks/useLocale';
@@ -37,13 +38,18 @@ type WeightTrackingScreenProps = {
   petType?: 'Dog' | 'Cat';
   petBreed?: string;
   microchip?: string;
-  entries: WeightPoint[];
+  entries?: WeightPoint[];
   onAddEntry: (value: number, options?: { date?: string; note?: string }) => void;
   onUpdateEntry?: (entryIndex: number, value: number, options?: { date?: string; note?: string }) => void;
+  onDeleteEntry?: (entryIndex: number) => void;
   weightGoal?: number;
   onSetWeightGoal?: (goal: number) => void;
   totalExpenses?: { total: number; currency: string };
   initialShowAdd?: boolean;
+  /** True if user has an active premium subscription */
+  isPremium?: boolean;
+  /** Called when user taps the upgrade CTA inside the premium gate */
+  onUpgrade?: () => void;
 };
 
 type WeightReference = {
@@ -54,19 +60,21 @@ type WeightReference = {
 
 // ─── Chart constants ──────────────────────────────────────────────────────────
 
-const CHART_HEIGHT = 172;
-const CHART_INSET = 10;
+const CHART_HEIGHT = 204;
+const CHART_INSET = 12;
+const PREMIUM_LOCKED_RANGES: ChartRange[] = ['all', '1y', '6m'];
 const PW_ROW_HEIGHT = 34;
 const PW_WHEEL_HEIGHT = 136;
 const PW_ROW_PADDING = (PW_WHEEL_HEIGHT - PW_ROW_HEIGHT) / 2;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
-const WEIGHT_CARD_BG = '#c99272';
+const WEIGHT_CARD_BG = '#47664a';
 const WEIGHT_HEADER_OVERLAY: [string, string, string, string] = [
-  'rgba(201,146,114,0.34)',
-  'rgba(201,146,114,0.22)',
-  'rgba(201,146,114,0.10)',
-  'rgba(201,146,114,0)',
+  'rgba(63,93,71,0.56)',
+  'rgba(63,93,71,0.38)',
+  'rgba(63,93,71,0.18)',
+  'rgba(63,93,71,0)',
 ];
+const weightHeaderLogo = require('../assets/illustrations/weight-logo.png');
 
 // ─── Unit conversion ─────────────────────────────────────────────────────────
 
@@ -166,11 +174,26 @@ function dateFromParts(parts: DateParts) {
   return new Date(parts.year, parts.month - 1, parts.day, 12, 0, 0, 0);
 }
 
-function splitWeightParts(displayWeight: number) {
-  const safe = Math.max(0, Math.round(displayWeight * 10) / 10);
-  const whole = Math.floor(safe);
-  const decimal = Math.round((safe - whole) * 10);
-  return { whole, decimal };
+function endOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+}
+
+function toTenths(displayWeight: number) {
+  return Math.max(0, Math.round(displayWeight * 10));
+}
+
+function toWeightDisplay(tenths: number) {
+  return (tenths / 10).toFixed(1);
+}
+
+function toDatePartsFromStored(raw: string) {
+  const ymd = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (ymd) {
+    return { year: Number(ymd[1]), month: Number(ymd[2]), day: Number(ymd[3]) };
+  }
+  const parsed = new Date(raw);
+  if (Number.isFinite(parsed.getTime())) return toDateParts(parsed);
+  return toDateParts(new Date());
 }
 
 function formatPickerDateLabel(date: Date, isTr: boolean) {
@@ -181,13 +204,24 @@ function formatPickerDateLabel(date: Date, isTr: boolean) {
   });
 }
 
+function formatWeightDateLabel(raw: string | undefined, isTr: boolean) {
+  if (!raw) return isTr ? 'Tarih yok' : 'No date';
+  const parsed = parseEntryDate(raw);
+  if (!parsed || !Number.isFinite(parsed.getTime())) return raw;
+  return parsed.toLocaleDateString(isTr ? 'tr-TR' : 'en-US', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
 function formatTemplate(template: string, params: Record<string, string>) {
   return template.replace(/\{(\w+)\}/g, (_, key: string) => params[key] ?? '');
 }
 
 // ─── Icon component ───────────────────────────────────────────────────────────
 
-function Icon({ kind, size = 20, color = '#787878' }: { kind: 'back' | 'plus' | 'up' | 'check' | 'left' | 'calendar' | 'spark' | 'trendline' | 'close'; size?: number; color?: string }) {
+function Icon({ kind, size = 20, color = '#787878' }: { kind: 'back' | 'plus' | 'up' | 'check' | 'left' | 'right' | 'calendar' | 'spark' | 'trendline' | 'close'; size?: number; color?: string }) {
   if (kind === 'back') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -224,6 +258,14 @@ function Icon({ kind, size = 20, color = '#787878' }: { kind: 'back' | 'plus' | 
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
         <Path d="M15.5 12H8.5M8.5 12L11.5 9M8.5 12L11.5 15" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
+
+  if (kind === 'right') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M8.5 12H15.5M15.5 12L12.5 9M15.5 12L12.5 15" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
     );
   }
@@ -333,13 +375,16 @@ export default function WeightTrackingScreen({
   petType,
   petBreed,
   microchip: _microchip,
-  entries,
+  entries = [],
   onAddEntry,
   onUpdateEntry,
+  onDeleteEntry,
   weightGoal,
   onSetWeightGoal,
   totalExpenses: _totalExpenses,
   initialShowAdd,
+  isPremium = false,
+  onUpgrade,
 }: WeightTrackingScreenProps) {
   const { locale } = useLocale();
   const isTr = locale === 'tr';
@@ -361,10 +406,8 @@ export default function WeightTrackingScreen({
   }, []);
   const [entryFormMode, setEntryFormMode] = useState<'add' | 'edit'>('add');
   const [editingEntryIndex, setEditingEntryIndex] = useState<number | null>(null);
-  const [newWeight, setNewWeight] = useState('');
-  const [entryDate, setEntryDate] = useState(toYmd(new Date()));
-  const [weightWhole, setWeightWhole] = useState('0');
-  const [weightDecimal, setWeightDecimal] = useState('0');
+  const [weightTenths, setWeightTenths] = useState(0);
+  const [showAddDatePicker, setShowAddDatePicker] = useState(false);
   const [entryDateParts, setEntryDateParts] = useState<DateParts>(toDateParts(new Date()));
   const [entryNote, setEntryNote] = useState('');
   const [focusedField, setFocusedField] = useState<'note' | 'goal' | null>(null);
@@ -372,19 +415,24 @@ export default function WeightTrackingScreen({
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [goalInput, setGoalInput] = useState('');
   const [goalError, setGoalError] = useState<string | null>(null);
+  const [showPremiumBanner, setShowPremiumBanner] = useState(false);
 
   const lineAnim = useRef(new Animated.Value(0)).current;
   const savePressScale = useRef(new Animated.Value(1)).current;
   const addSheetTranslateY = useRef(new Animated.Value(680)).current;
   const addSheetBackdropOpacity = useRef(new Animated.Value(0)).current;
   const addSheetHeightRef = useRef(680);
+  const goalSheetTranslateY = useRef(new Animated.Value(420)).current;
+  const goalSheetBackdropOpacity = useRef(new Animated.Value(0)).current;
+  const goalSheetHeightRef = useRef(420);
   const { width } = useWindowDimensions();
-  const chartWidth = Math.max(250, width - 84);
+  // 20px paddingH * 2 = 40, chartCard paddingH 12 * 2 = 24, yAxis 36 + gap 4 = 40, total ~104
+  const chartWidth = Math.max(200, width - 104);
   const chartHeight = CHART_HEIGHT;
 
   const edgeSwipeResponder = useEdgeSwipeBack({
     onBack,
-    enabled: !previewMode && !isScrubbing && !focusedField,
+    enabled: !previewMode && !isScrubbing && !focusedField && !showAdd && !showAddDatePicker && !showGoalModal,
   });
 
   // ─── Derived / memoized ─────────────────────────────────────────────────────
@@ -525,7 +573,9 @@ export default function WeightTrackingScreen({
 
   const selectedWeight = safeChartEntries[Math.min(selectedIndex, Math.max(safeChartEntries.length - 1, 0))];
   const displayedValue = interpolatedSample?.value ?? selectedWeight?.value ?? 0;
-  const displayedDate = hasEntries ? (interpolatedSample?.date ?? selectedWeight?.date ?? copy.noDate) : (isTr ? 'Kayit yok' : 'No records yet');
+  const displayedDate = hasEntries
+    ? formatWeightDateLabel(interpolatedSample?.date ?? selectedWeight?.date, isTr)
+    : (isTr ? 'Kayit yok' : 'No records yet');
 
   const displayedY = toY(displayedValue);
   const displayedX = interpolatedSample?.x ?? chart.selected.x;
@@ -727,6 +777,31 @@ export default function WeightTrackingScreen({
     };
   }, [entries, isTr, weightUnit]);
 
+  const toneLabel = React.useCallback((tone: 'good' | 'warn' | 'neutral') => {
+    if (tone === 'good') return isTr ? 'İyi' : 'Good';
+    if (tone === 'warn') return isTr ? 'Dikkat' : 'Watch';
+    return isTr ? 'Nötr' : 'Neutral';
+  }, [isTr]);
+
+  const toneStyles = React.useCallback((tone: 'good' | 'warn' | 'neutral') => {
+    if (tone === 'good') {
+      return {
+        pill: styles.insightToneGood,
+        pillText: styles.insightToneGoodText,
+      };
+    }
+    if (tone === 'warn') {
+      return {
+        pill: styles.insightToneWarn,
+        pillText: styles.insightToneWarnText,
+      };
+    }
+    return {
+      pill: styles.insightToneNeutral,
+      pillText: styles.insightToneNeutralText,
+    };
+  }, []);
+
   // ─── Goal progress ──────────────────────────────────────────────────────────
   const closeAddSheet = (onClosed?: () => void) => {
     Animated.parallel([
@@ -745,10 +820,8 @@ export default function WeightTrackingScreen({
       setShowAdd(false);
       setEntryFormMode('add');
       setEditingEntryIndex(null);
-      setNewWeight('');
-      setEntryDate(toYmd(new Date()));
-      setWeightWhole('0');
-      setWeightDecimal('0');
+      setWeightTenths(0);
+      setShowAddDatePicker(false);
       setEntryDateParts(toDateParts(new Date()));
       setEntryNote('');
       setFormError(null);
@@ -758,15 +831,12 @@ export default function WeightTrackingScreen({
 
   const openAddSheet = (mode: 'add' | 'edit', nextWeight: number, nextDate: Date, nextNote: string, entryIndex: number | null) => {
     const displayWeight = toDisplayVal(nextWeight, weightUnit);
-    const parts = splitWeightParts(displayWeight);
     const safeDate = clampDateParts(toDateParts(nextDate), toDateParts(new Date()));
 
     setEntryFormMode(mode);
     setEditingEntryIndex(entryIndex);
-    setNewWeight(displayWeight.toFixed(1));
-    setEntryDate(toYmd(dateFromParts(safeDate)));
-    setWeightWhole(String(parts.whole));
-    setWeightDecimal(String(parts.decimal));
+    setWeightTenths(toTenths(displayWeight));
+    setShowAddDatePicker(false);
     setEntryDateParts(safeDate);
     setEntryNote(nextNote);
     setFormError(null);
@@ -832,35 +902,87 @@ export default function WeightTrackingScreen({
     ? Math.min(1, Math.max(0, currentWeightForGoal / weightGoal))
     : null;
 
-  const addPickerToday = useMemo(() => toDateParts(new Date()), []);
-  const addWeightWholeItems = useMemo(() => Array.from({ length: 201 }, (_, index) => ({
+  const closeGoalSheet = React.useCallback((cb?: () => void) => {
+    Animated.parallel([
+      Animated.spring(goalSheetTranslateY, {
+        toValue: goalSheetHeightRef.current,
+        damping: 28,
+        stiffness: 380,
+        useNativeDriver: true,
+      }),
+      Animated.timing(goalSheetBackdropOpacity, {
+        toValue: 0,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      setShowGoalModal(false);
+      cb?.();
+    });
+  }, [goalSheetBackdropOpacity, goalSheetTranslateY]);
+
+  useEffect(() => {
+    if (!showGoalModal) return;
+    goalSheetTranslateY.setValue(goalSheetHeightRef.current);
+    goalSheetBackdropOpacity.setValue(0);
+    Animated.parallel([
+      Animated.spring(goalSheetTranslateY, {
+        toValue: 0,
+        damping: 24,
+        stiffness: 300,
+        mass: 0.86,
+        useNativeDriver: true,
+      }),
+      Animated.timing(goalSheetBackdropOpacity, {
+        toValue: 1,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [goalSheetBackdropOpacity, goalSheetHeightRef, goalSheetTranslateY, showGoalModal]);
+
+  const goalSheetPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, g: DragGesture) => g.dy > 6 && Math.abs(g.dy) > Math.abs(g.dx),
+      onMoveShouldSetPanResponderCapture: (_, g: DragGesture) => g.dy > 2 && Math.abs(g.dy) > Math.abs(g.dx),
+      onPanResponderMove: (_, g: DragGesture) => {
+        if (g.dy > 0) {
+          goalSheetTranslateY.setValue(g.dy);
+          goalSheetBackdropOpacity.setValue(Math.max(0, 1 - g.dy / Math.max(goalSheetHeightRef.current, 1)));
+        }
+      },
+      onPanResponderRelease: (_, g: DragGesture) => {
+        if (g.dy > 80 || g.vy > 0.6) {
+          closeGoalSheet();
+          return;
+        }
+        Animated.parallel([
+          Animated.spring(goalSheetTranslateY, {
+            toValue: 0,
+            damping: 24,
+            stiffness: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(goalSheetBackdropOpacity, {
+            toValue: 1,
+            duration: 130,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      },
+    }),
+  ).current;
+
+  const addPickerToday = toDateParts(new Date());
+  const addWeightItems = useMemo(() => Array.from({ length: 2001 }, (_, index) => ({
     value: String(index),
-    label: String(index),
+    label: (index / 10).toFixed(1),
   })), []);
-  const addWeightDecimalItems = useMemo(() => Array.from({ length: 10 }, (_, index) => ({
-    value: String(index),
-    label: String(index),
-  })), []);
-  const addMonthItems = useMemo(() => {
-    const localeCode = isTr ? 'tr-TR' : 'en-US';
-    return Array.from({ length: 12 }, (_, index) => ({
-      value: String(index + 1),
-      label: new Date(2000, index, 1).toLocaleDateString(localeCode, { month: 'short' }),
-    }));
-  }, [isTr]);
-  const addYearItems = useMemo(() => Array.from({ length: 21 }, (_, index) => {
-    const year = addPickerToday.year - index;
-    return { value: String(year), label: String(year) };
-  }), [addPickerToday.year]);
-  const addDayLimit = daysInMonth(entryDateParts.year, entryDateParts.month);
-  const addDayItems = useMemo(() => Array.from({ length: addDayLimit }, (_, index) => ({
-    value: String(index + 1),
-    label: String(index + 1),
-  })), [addDayLimit]);
 
   // ─── Save entry ─────────────────────────────────────────────────────────────
   const saveEntry = () => {
-    const parsed = Number(`${weightWhole}.${weightDecimal}`);
+    const parsed = weightTenths / 10;
     if (!Number.isFinite(parsed) || parsed <= 0) {
       setFormError(copy.enterValidWeight);
       return;
@@ -870,8 +992,8 @@ export default function WeightTrackingScreen({
       setFormError(isTr ? 'Lütfen geçerli bir tarih seçin.' : 'Please choose a valid date.');
       return;
     }
-    const now = new Date();
-    if (parsedDate.getTime() > now.getTime()) {
+    const todayEnd = endOfDay(new Date());
+    if (parsedDate.getTime() > todayEnd.getTime()) {
       setFormError(isTr ? 'Gelecekteki bir tarih seçemezsiniz.' : 'Future dates are not allowed.');
       return;
     }
@@ -887,14 +1009,32 @@ export default function WeightTrackingScreen({
         note: entryNote.trim() || undefined,
       });
     }
-    setNewWeight('');
-    setEntryDate(toYmd(new Date()));
-    setWeightWhole('0');
-    setWeightDecimal('0');
+    setWeightTenths(0);
+    setShowAddDatePicker(false);
     setEntryDateParts(toDateParts(new Date()));
     setEntryNote('');
     setFormError(null);
     closeAddSheet();
+  };
+
+  const deleteEntry = () => {
+    if (entryFormMode !== 'edit' || editingEntryIndex == null || !onDeleteEntry) return;
+    Alert.alert(
+      isTr ? 'Kaydı Sil' : 'Delete Entry',
+      isTr ? 'Bu kilo kaydı kalıcı olarak silinecek. Emin misiniz?' : 'This weight entry will be removed permanently. Are you sure?',
+      [
+        { text: isTr ? 'Vazgeç' : 'Cancel', style: 'cancel' },
+        {
+          text: isTr ? 'Sil' : 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            onDeleteEntry(editingEntryIndex);
+            closeAddSheet();
+          },
+        },
+      ],
+      { cancelable: true },
+    );
   };
 
   // ─── Save goal ──────────────────────────────────────────────────────────────
@@ -909,7 +1049,7 @@ export default function WeightTrackingScreen({
     }
     setGoalInput('');
     setGoalError(null);
-    setShowGoalModal(false);
+    closeGoalSheet();
   };
 
   return (
@@ -950,7 +1090,7 @@ export default function WeightTrackingScreen({
                   <Text style={styles.currentUnit}>{weightUnit}</Text>
                 </Text>
                 <View style={styles.changePill}>
-                  <Icon kind="spark" size={10} color="#8f5d42" />
+                  <Icon kind="spark" size={10} color="#47664a" />
                   <Text style={styles.changePillText}>{comparisonText}</Text>
                 </View>
               </View>
@@ -991,7 +1131,7 @@ export default function WeightTrackingScreen({
                     <Text style={styles.goalDiffLabel}>{isTr ? 'Fark' : 'Gap'}</Text>
                     <Text style={[
                       styles.goalDiffValue,
-                      { color: currentWeightForGoal <= weightGoal ? '#8f5d42' : '#c96a6a' },
+                      { color: currentWeightForGoal <= weightGoal ? '#47664a' : '#c96a6a' },
                     ]}>
                       {currentWeightForGoal <= weightGoal ? '' : '+'}{toDisplayVal(currentWeightForGoal - weightGoal, weightUnit).toFixed(1)} {weightUnit}
                     </Text>
@@ -1013,7 +1153,7 @@ export default function WeightTrackingScreen({
                 }}
               >
                 <View style={styles.setGoalLeft}>
-                  <Icon kind="up" size={16} color="#c99272" />
+                  <Icon kind="up" size={16} color="#47664a" />
                   <Text style={styles.setGoalTitle}>{isTr ? 'Hedef Kilo Belirle' : 'Set Weight Goal'}</Text>
                 </View>
                 <Text style={styles.setGoalArrow}>→</Text>
@@ -1030,119 +1170,245 @@ export default function WeightTrackingScreen({
           <View style={styles.chartHeaderRow}>
             <View style={styles.chartHeaderTitleWrap}>
               <View style={styles.chartHeaderIcon}>
-                <Icon kind="trendline" size={16} color="#8f5d42" />
+                <Icon kind="trendline" size={16} color="#47664a" />
               </View>
               <Text style={styles.sectionTitle}>{copy.last90Days}</Text>
             </View>
+            {!isPremium ? (
+              <View style={styles.freeLimitBadge}>
+                <Text style={styles.freeLimitBadgeText}>{isTr ? 'Free · 90 gün' : 'Free · 90 days'}</Text>
+              </View>
+            ) : (
+              <View style={styles.premiumBadge}>
+                <Text style={styles.premiumBadgeText}>{isTr ? '✦ Premium' : '✦ Premium'}</Text>
+              </View>
+            )}
           </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.rangeRow}
           >
-            {[
-              { key: 'all', label: 'All' },
-              { key: '1y', label: '1 Yıl' },
-              { key: '6m', label: '6 Ay' },
-              { key: '3m', label: '3 Ay' },
-              { key: '1m', label: '1 Ay' },
-              { key: '1w', label: '1 Hafta' },
-            ].map((option) => {
+            {([
+              { key: 'all', labelEn: 'All',    labelTr: 'Tümü'   },
+              { key: '1y',  labelEn: '1 Year', labelTr: '1 Yıl'  },
+              { key: '6m',  labelEn: '6 Mo',   labelTr: '6 Ay'   },
+              { key: '3m',  labelEn: '3 Mo',   labelTr: '3 Ay'   },
+              { key: '1m',  labelEn: '1 Mo',   labelTr: '1 Ay'   },
+              { key: '1w',  labelEn: '1 Week', labelTr: '1 Hafta' },
+            ] as Array<{ key: ChartRange; labelEn: string; labelTr: string }>).map((option) => {
               const isActive = chartRange === option.key;
+              const isLocked = !isPremium && PREMIUM_LOCKED_RANGES.includes(option.key);
+              const label = isTr ? option.labelTr : option.labelEn;
               return (
                 <Pressable
                   key={option.key}
-                  onPress={() => setChartRange(option.key as ChartRange)}
-                  style={[styles.rangeChip, isActive && styles.rangeChipActive]}
+                  onPress={() => {
+                    if (isLocked) {
+                      setShowPremiumBanner(true);
+                      return;
+                    }
+                    setShowPremiumBanner(false);
+                    setChartRange(option.key);
+                  }}
+                  style={[
+                    styles.rangeChip,
+                    isActive && styles.rangeChipActive,
+                    isLocked && styles.rangeChipLocked,
+                  ]}
                 >
-                  <Text style={[styles.rangeChipText, isActive && styles.rangeChipTextActive]}>{option.label}</Text>
+                  {isLocked ? (
+                    <Svg width={10} height={10} viewBox="0 0 24 24" fill="none">
+                      <Path d="M17 11H7V8a5 5 0 1 1 10 0v3ZM7 11h10v10H7V11Z" stroke="#a3a9a6" strokeWidth={2} strokeLinejoin="round"/>
+                    </Svg>
+                  ) : null}
+                  <Text style={[
+                    styles.rangeChipText,
+                    isActive && styles.rangeChipTextActive,
+                    isLocked && styles.rangeChipTextLocked,
+                  ]}>{label}</Text>
                 </Pressable>
               );
             })}
           </ScrollView>
 
+          {/* ── Premium gate banner ──────────────────────────────────────────── */}
+          {showPremiumBanner && (
+            <View style={styles.premiumGateBanner}>
+              <View style={styles.premiumGateLeft}>
+                <Text style={styles.premiumGateTitle}>
+                  {isTr ? 'Sınırsız geçmiş' : 'Unlimited history'}
+                </Text>
+                <Text style={styles.premiumGateBody}>
+                  {isTr
+                    ? 'Tüm kilo kayıtlarına erişmek için Premium planına geç.'
+                    : 'Upgrade to Premium to view your full weight history.'}
+                </Text>
+              </View>
+              <Pressable
+                style={styles.premiumGateBtn}
+                onPress={() => { setShowPremiumBanner(false); onUpgrade?.(); }}
+              >
+                <Text style={styles.premiumGateBtnText}>{isTr ? 'Geç' : 'Upgrade'}</Text>
+              </Pressable>
+            </View>
+          )}
+
           {/* ── Chart card ──────────────────────────────────────────────────── */}
           <View style={styles.chartCard}>
-            <View style={styles.chartWrap}>
-              <View
-                style={[styles.chartTouchLayer, { width: chartWidth, height: chartHeight }]}
-                onStartShouldSetResponder={() => !previewMode}
-                onMoveShouldSetResponder={() => !previewMode}
-                onResponderGrant={(e) => {
-                  setIsScrubbing(true);
-                  updateSelectionFromX(e.nativeEvent.locationX);
-                }}
-                onResponderMove={(e) => updateSelectionFromX(e.nativeEvent.locationX)}
-                onResponderRelease={() => {
-                  setIsScrubbing(false);
-                  setScrubX(null);
-                }}
-                onResponderTerminate={() => {
-                  setIsScrubbing(false);
-                  setScrubX(null);
-                }}
-              >
-                <Svg width={chartWidth} height={chartHeight}>
-                  <Defs>
-                    <LinearGradient id="areaFade" x1="0" y1="0" x2="0" y2="1">
-                      <Stop offset="0" stopColor="#c99272" stopOpacity="0.22" />
-                      <Stop offset="1" stopColor="#c99272" stopOpacity="0" />
-                    </LinearGradient>
-                  </Defs>
 
-                  <Rect
-                    x={CHART_INSET}
-                    y={refBandY}
-                    width={chartWidth - CHART_INSET * 2}
-                    height={Math.max(2, refBandH)}
-                    fill="rgba(201,146,114,0.10)"
-                    rx={6}
-                  />
+            {/* Y-axis + chart row */}
+            <View style={styles.chartRow}>
+              {/* Y-axis labels */}
+              {hasEntries ? (
+                <View style={[styles.yAxis, { height: chartHeight }]}>
+                  <Text style={styles.yAxisLabel}>
+                    {toDisplayVal(yBounds.max, weightUnit).toFixed(1)}
+                  </Text>
+                  <View style={styles.yAxisSpacer} />
+                  <Text style={styles.yAxisLabel}>
+                    {toDisplayVal(yBounds.min, weightUnit).toFixed(1)}
+                  </Text>
+                  <Text style={styles.yAxisUnit}>{weightUnit}</Text>
+                </View>
+              ) : (
+                <View style={styles.yAxisPlaceholder} />
+              )}
 
-                  {[0.2, 0.4, 0.6, 0.8].map((n) => (
-                    <Line
-                      key={n}
-                      x1={CHART_INSET}
-                      y1={CHART_INSET + (chartHeight - CHART_INSET * 2) * n}
-                      x2={chartWidth - CHART_INSET}
-                      y2={CHART_INSET + (chartHeight - CHART_INSET * 2) * n}
-                      stroke="rgba(0,0,0,0.05)"
-                      strokeDasharray="2 6"
-                    />
-                  ))}
+              {/* Chart SVG */}
+              <View style={{ flex: 1 }}>
+                <View
+                  style={[styles.chartTouchLayer, { width: chartWidth, height: chartHeight }]}
+                  onStartShouldSetResponder={() => !previewMode}
+                  onMoveShouldSetResponder={() => !previewMode}
+                  onResponderGrant={(e) => {
+                    setIsScrubbing(true);
+                    updateSelectionFromX(e.nativeEvent.locationX);
+                  }}
+                  onResponderMove={(e) => updateSelectionFromX(e.nativeEvent.locationX)}
+                  onResponderRelease={() => {
+                    setIsScrubbing(false);
+                    setScrubX(null);
+                  }}
+                  onResponderTerminate={() => {
+                    setIsScrubbing(false);
+                    setScrubX(null);
+                  }}
+                >
+                  <Svg width={chartWidth} height={chartHeight}>
+                    <Defs>
+                      <LinearGradient id="areaFade" x1="0" y1="0" x2="0" y2="1">
+                        <Stop offset="0" stopColor="#47664a" stopOpacity="0.22" />
+                        <Stop offset="0.7" stopColor="#47664a" stopOpacity="0.05" />
+                        <Stop offset="1" stopColor="#47664a" stopOpacity="0" />
+                      </LinearGradient>
+                      <LinearGradient id="refBandFade" x1="0" y1="0" x2="1" y2="0">
+                        <Stop offset="0" stopColor="#47664a" stopOpacity="0.07" />
+                        <Stop offset="1" stopColor="#47664a" stopOpacity="0.12" />
+                      </LinearGradient>
+                    </Defs>
 
-                  {hasEntries ? (
-                    <>
-                      <Path d={chart.areaPath} fill="url(#areaFade)" />
-                      <AnimatedPath
-                        d={chart.linePath}
-                        fill="none"
-                        stroke="#c99272"
-                        strokeWidth={4}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeDasharray={`${chart.lineLength} ${chart.lineLength}`}
-                        strokeDashoffset={lineDashOffset as unknown as number}
-                      />
-
+                    {/* Subtle horizontal grid lines */}
+                    {[0.25, 0.5, 0.75].map((n) => (
                       <Line
-                        x1={displayedX}
-                        y1={displayedY}
-                        x2={displayedX}
-                        y2={chartHeight - CHART_INSET}
-                        stroke="rgba(201,146,114,0.24)"
+                        key={n}
+                        x1={CHART_INSET}
+                        y1={CHART_INSET + (chartHeight - CHART_INSET * 2) * n}
+                        x2={chartWidth - CHART_INSET}
+                        y2={CHART_INSET + (chartHeight - CHART_INSET * 2) * n}
+                        stroke="rgba(0,0,0,0.06)"
                         strokeWidth={1}
-                        strokeDasharray="4 4"
                       />
+                    ))}
 
-                      <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 8.5 : 7.2} fill="#ffffff" stroke="#c99272" strokeWidth={2} />
-                      <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 3.6 : 3} fill="#c99272" />
-                    </>
-                  ) : null}
-                </Svg>
+                    {/* Healthy reference band */}
+                    <Rect
+                      x={CHART_INSET}
+                      y={refBandY}
+                      width={chartWidth - CHART_INSET * 2}
+                      height={Math.max(3, refBandH)}
+                      fill="url(#refBandFade)"
+                      rx={8}
+                    />
+                    {/* Reference band top & bottom borders */}
+                    <Line
+                      x1={CHART_INSET}
+                      y1={refBandY}
+                      x2={chartWidth - CHART_INSET}
+                      y2={refBandY}
+                      stroke="rgba(71,102,74,0.20)"
+                      strokeWidth={1}
+                      strokeDasharray="3 5"
+                    />
+                    <Line
+                      x1={CHART_INSET}
+                      y1={refBandY + Math.max(3, refBandH)}
+                      x2={chartWidth - CHART_INSET}
+                      y2={refBandY + Math.max(3, refBandH)}
+                      stroke="rgba(71,102,74,0.14)"
+                      strokeWidth={1}
+                      strokeDasharray="3 5"
+                    />
+
+                    {hasEntries ? (
+                      <>
+                        {/* Area fill */}
+                        <Path d={chart.areaPath} fill="url(#areaFade)" />
+
+                        {/* Main line */}
+                        <AnimatedPath
+                          d={chart.linePath}
+                          fill="none"
+                          stroke="#47664a"
+                          strokeWidth={3}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeDasharray={`${chart.lineLength} ${chart.lineLength}`}
+                          strokeDashoffset={lineDashOffset as unknown as number}
+                        />
+
+                        {/* Scrub vertical guide */}
+                        <Line
+                          x1={displayedX}
+                          y1={CHART_INSET}
+                          x2={displayedX}
+                          y2={chartHeight - CHART_INSET}
+                          stroke="rgba(71,102,74,0.12)"
+                          strokeWidth={1}
+                          strokeDasharray="3 4"
+                        />
+
+                        {/* Data point: outer glow ring */}
+                        {isScrubbing && (
+                          <Circle cx={displayedX} cy={displayedY} r={14} fill="rgba(71,102,74,0.08)" />
+                        )}
+                        {/* Data point: white bg */}
+                        <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 9 : 7} fill="#ffffff" stroke="#47664a" strokeWidth={2.2} />
+                        {/* Data point: inner fill */}
+                        <Circle cx={displayedX} cy={displayedY} r={isScrubbing ? 4 : 3} fill="#47664a" />
+                      </>
+                    ) : null}
+                  </Svg>
+                </View>
+
+                {/* Healthy range label — overlaid on the reference band */}
+                {hasEntries && refBandH > 14 ? (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.refBandLabelWrap,
+                      { top: refBandY + 4, right: CHART_INSET + 6 },
+                    ]}
+                  >
+                    <Text style={styles.refBandLabelText}>
+                      {isTr ? 'Sağlıklı' : 'Healthy'}
+                    </Text>
+                  </View>
+                ) : null}
               </View>
             </View>
 
+            {/* X-axis date labels */}
             {hasEntries && chartEdgeLabels ? (
               <View style={styles.xLabelsCompact}>
                 <View style={styles.xLabelsCompactRow}>
@@ -1158,15 +1424,15 @@ export default function WeightTrackingScreen({
 
             {!hasEntries ? (
               <View style={styles.chartEmptyState}>
-                <Text style={styles.chartEmptyTitle}>{isTr ? 'Grafik hazir' : 'Chart is ready'}</Text>
+                <Text style={styles.chartEmptyTitle}>{isTr ? 'Grafik hazır' : 'Chart is ready'}</Text>
                 <Text style={styles.chartEmptyText}>
-                  {isTr ? 'Ilk kaydi ekleyin, ilerleme aninda gorunsun.' : 'Add your first entry to see progress instantly.'}
+                  {isTr ? 'İlk kaydı ekleyin, ilerleme anında görünsün.' : 'Add your first entry to see progress instantly.'}
                 </Text>
                 <Pressable
                   style={styles.historyAddBtn}
                   onPress={() => openAddSheet('add', latestWeight?.value ?? 1, new Date(), '', null)}
                 >
-                  <Text style={styles.historyAddBtnText}>{isTr ? 'Ilk Kaydi Ekle' : 'Add First Entry'}</Text>
+                  <Text style={styles.historyAddBtnText}>{isTr ? 'İlk Kaydı Ekle' : 'Add First Entry'}</Text>
                 </Pressable>
               </View>
             ) : null}
@@ -1174,8 +1440,9 @@ export default function WeightTrackingScreen({
 
           {/* ── Smart insights ──────────────────────────────────────────────── */}
           <Text style={styles.sectionTitle}>{copy.smartInsights}</Text>
+          <View style={styles.insightStack}>
           <Pressable
-            style={styles.insightCard}
+            style={({ pressed }) => [styles.insightCard, pressed && styles.insightCardPressed]}
             onPress={onOpenHealthRecords}
           >
             <View style={[styles.insightIconBox, rangeStatus === 'within' ? styles.insightIconGood : styles.insightIconWarn]}>
@@ -1186,12 +1453,36 @@ export default function WeightTrackingScreen({
               />
             </View>
             <View style={styles.insightBody}>
-              <Text style={styles.insightTitle}>{resolvedPrimaryInsightTitle}</Text>
+              <View style={styles.insightTitleRow}>
+                <Text style={styles.insightTitle}>{resolvedPrimaryInsightTitle}</Text>
+                <View
+                  style={[
+                    styles.insightTonePill,
+                    ...(rangeStatus === 'within'
+                      ? [styles.insightToneGood]
+                      : [styles.insightToneWarn]),
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.insightToneText,
+                      ...(rangeStatus === 'within'
+                        ? [styles.insightToneGoodText]
+                        : [styles.insightToneWarnText]),
+                    ]}
+                  >
+                    {toneLabel(rangeStatus === 'within' ? 'good' : 'warn')}
+                  </Text>
+                </View>
+              </View>
               <Text style={styles.insightText}>{resolvedPrimaryInsightText}</Text>
+            </View>
+            <View style={styles.insightChevron}>
+              <Icon kind="right" size={16} color="#9ca39a" />
             </View>
           </Pressable>
 
-          <Pressable style={styles.insightCard} onPress={onOpenVetVisits}>
+          <Pressable style={({ pressed }) => [styles.insightCard, pressed && styles.insightCardPressed]} onPress={onOpenVetVisits}>
             <View style={[
               styles.insightIconBox,
               trendInsight.kind === 'positive' ? styles.insightIconGood
@@ -1205,8 +1496,46 @@ export default function WeightTrackingScreen({
               />
             </View>
             <View style={styles.insightBody}>
-              <Text style={styles.insightTitle}>{trendInsight.title}</Text>
+              <View style={styles.insightTitleRow}>
+                <Text style={styles.insightTitle}>{trendInsight.title}</Text>
+                <View
+                  style={[
+                    styles.insightTonePill,
+                    toneStyles(
+                      trendInsight.kind === 'positive'
+                        ? 'good'
+                        : trendInsight.kind === 'warning'
+                          ? 'warn'
+                          : 'neutral',
+                    ).pill,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.insightToneText,
+                      toneStyles(
+                        trendInsight.kind === 'positive'
+                          ? 'good'
+                          : trendInsight.kind === 'warning'
+                            ? 'warn'
+                            : 'neutral',
+                      ).pillText,
+                    ]}
+                  >
+                    {toneLabel(
+                      trendInsight.kind === 'positive'
+                        ? 'good'
+                        : trendInsight.kind === 'warning'
+                          ? 'warn'
+                          : 'neutral',
+                    )}
+                  </Text>
+                </View>
+              </View>
               <Text style={styles.insightText}>{trendInsight.body}</Text>
+            </View>
+            <View style={styles.insightChevron}>
+              <Icon kind="right" size={16} color="#9ca39a" />
             </View>
           </Pressable>
 
@@ -1225,11 +1554,47 @@ export default function WeightTrackingScreen({
                 />
               </View>
               <View style={styles.insightBody}>
-                <Text style={styles.insightTitle}>{recencyInsight.title}</Text>
+                <View style={styles.insightTitleRow}>
+                  <Text style={styles.insightTitle}>{recencyInsight.title}</Text>
+                  <View
+                    style={[
+                      styles.insightTonePill,
+                      toneStyles(
+                        recencyInsight.kind === 'positive'
+                          ? 'good'
+                          : recencyInsight.kind === 'warning'
+                            ? 'warn'
+                            : 'neutral',
+                      ).pill,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.insightToneText,
+                        toneStyles(
+                          recencyInsight.kind === 'positive'
+                            ? 'good'
+                            : recencyInsight.kind === 'warning'
+                              ? 'warn'
+                              : 'neutral',
+                        ).pillText,
+                      ]}
+                    >
+                      {toneLabel(
+                        recencyInsight.kind === 'positive'
+                          ? 'good'
+                          : recencyInsight.kind === 'warning'
+                            ? 'warn'
+                            : 'neutral',
+                      )}
+                    </Text>
+                  </View>
+                </View>
                 <Text style={styles.insightText}>{recencyInsight.body}</Text>
               </View>
             </View>
           ) : null}
+          </View>
 
           {/* ── History ─────────────────────────────────────────────────────── */}
           <Text style={styles.sectionTitle}>{copy.history}</Text>
@@ -1241,13 +1606,16 @@ export default function WeightTrackingScreen({
                 <Pressable
                   key={`${item.date}-${idx}`}
                   style={[styles.historyRow, idx !== allEntriesSorted.length - 1 && styles.historyDivider]}
-                  onPress={() => openAddSheet('edit', item.value, new Date(item.date), item.note ?? '', sortedIndex)}
+                  onPress={() => {
+                    const safeParts = clampDateParts(toDatePartsFromStored(item.date), addPickerToday);
+                    openAddSheet('edit', item.value, dateFromParts(safeParts), item.note ?? '', sortedIndex);
+                  }}
                 >
                   <View style={styles.historyLeft}>
                     <View style={styles.historyDateIconBox}>
                       <Icon kind="calendar" size={16} color="#5d605a" />
                     </View>
-                    <Text style={styles.historyDate}>{item.date}</Text>
+                    <Text style={styles.historyDate}>{formatWeightDateLabel(item.date, isTr)}</Text>
                   </View>
                   <View style={styles.historyRight}>
                     <Text style={styles.historyWeight}>{toDisplayVal(item.value, weightUnit).toFixed(1)} {weightUnit}</Text>
@@ -1279,9 +1647,14 @@ export default function WeightTrackingScreen({
           title={isTr ? 'KILO PROFILI' : 'WEIGHT PROFILE'}
           topInset={topInset}
           scrollY={scrollY}
-          titleColor={WEIGHT_CARD_BG}
+          titleColor="#2f352f"
           overlayColors={WEIGHT_HEADER_OVERLAY}
-          borderColor="rgba(151,98,69,0.16)"
+          borderColor="rgba(49,73,56,0.24)"
+          titleVariant="hub"
+          centerLogoSource={weightHeaderLogo}
+          centerLogoWidth={102}
+          centerLogoHeight={102}
+          centerLogoOffsetY={-8}
           leftSlot={(
             <Pressable style={styles.backCircle} onPress={onBack}>
               <Icon kind="back" size={22} color="#5d605a" />
@@ -1332,7 +1705,7 @@ export default function WeightTrackingScreen({
                   <View style={styles.addSheetSummaryBlock}>
                     <Text style={styles.addSheetSummaryLabel}>{isTr ? 'SEÇİLİ KİLO' : 'SELECTED WEIGHT'}</Text>
                     <Text style={styles.addSheetSummaryValue}>
-                      {`${weightWhole}.${weightDecimal}`} <Text style={styles.addSheetSummaryUnit}>{weightUnit}</Text>
+                      {toWeightDisplay(weightTenths)} <Text style={styles.addSheetSummaryUnit}>{weightUnit}</Text>
                     </Text>
                   </View>
                   <View style={styles.addSheetSummaryBlockRight}>
@@ -1345,17 +1718,10 @@ export default function WeightTrackingScreen({
                   <Text style={styles.fieldLabel}>{isTr ? `AĞIRLIK (${weightUnit})` : `WEIGHT (${weightUnit})`}</Text>
                   <View style={styles.weightPickerRow}>
                     <PickerWheelColumn
-                      items={addWeightWholeItems}
-                      selectedValue={weightWhole}
-                      onValueChange={setWeightWhole}
-                      width={76}
-                    />
-                    <Text style={styles.weightPickerDot}>.</Text>
-                    <PickerWheelColumn
-                      items={addWeightDecimalItems}
-                      selectedValue={weightDecimal}
-                      onValueChange={setWeightDecimal}
-                      width={64}
+                      items={addWeightItems}
+                      selectedValue={String(weightTenths)}
+                      onValueChange={(value) => setWeightTenths(Number(value))}
+                      width={168}
                     />
                     <Text style={styles.weightPickerUnit}>{weightUnit}</Text>
                   </View>
@@ -1363,31 +1729,31 @@ export default function WeightTrackingScreen({
 
                 <View style={styles.addSheetBlock}>
                   <Text style={styles.fieldLabel}>{isTr ? 'TARİH' : 'DATE'}</Text>
-                  <View style={styles.datePickerRow}>
-                    <PickerWheelColumn
-                      items={addDayItems}
-                      selectedValue={String(entryDateParts.day)}
-                      onValueChange={(value) => {
-                        setEntryDateParts((prev) => clampDateParts({ ...prev, day: Number(value) }, addPickerToday));
-                      }}
-                      width={60}
-                    />
-                    <PickerWheelColumn
-                      items={addMonthItems}
-                      selectedValue={String(entryDateParts.month)}
-                      onValueChange={(value) => {
-                        setEntryDateParts((prev) => clampDateParts({ ...prev, month: Number(value) }, addPickerToday));
-                      }}
-                      width={84}
-                    />
-                    <PickerWheelColumn
-                      items={addYearItems}
-                      selectedValue={String(entryDateParts.year)}
-                      onValueChange={(value) => {
-                        setEntryDateParts((prev) => clampDateParts({ ...prev, year: Number(value) }, addPickerToday));
-                      }}
-                      width={76}
-                    />
+                  <View style={styles.addDateRow}>
+                    <Pressable style={styles.addDateButton} onPress={() => setShowAddDatePicker((prev) => !prev)}>
+                      <Icon kind="calendar" size={16} color="#5d605a" />
+                      <Text style={styles.addDateButtonText}>{formatPickerDateLabel(dateFromParts(entryDateParts), isTr)}</Text>
+                    </Pressable>
+                  </View>
+                  {showAddDatePicker ? (
+                    <View style={styles.addDatePickerWrap}>
+                      <DateTimePicker
+                        value={dateFromParts(entryDateParts)}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'compact' : 'default'}
+                        maximumDate={endOfDay(new Date())}
+                        onChange={(_event: DateTimePickerEvent, selectedDate?: Date) => {
+                          if (Platform.OS === 'android') setShowAddDatePicker(false);
+                          if (!selectedDate || !Number.isFinite(selectedDate.getTime())) return;
+                          setEntryDateParts(clampDateParts(toDateParts(selectedDate), addPickerToday));
+                        }}
+                      />
+                    </View>
+                  ) : null}
+                  <View style={styles.datePickerRowCompact}>
+                    <Text style={styles.datePickerHint}>
+                      {isTr ? 'Tarih seçildikten sonra not ekleyip kaydet.' : 'Pick date, add note, then save.'}
+                    </Text>
                   </View>
                 </View>
 
@@ -1406,6 +1772,12 @@ export default function WeightTrackingScreen({
                 </View>
 
                 {formError ? <Text style={styles.formError}>{formError}</Text> : null}
+
+                {entryFormMode === 'edit' && onDeleteEntry ? (
+                  <Pressable style={styles.sheetDeleteBtn} onPress={deleteEntry}>
+                    <Text style={styles.sheetDeleteBtnText}>{isTr ? 'Kaydı Sil' : 'Delete Entry'}</Text>
+                  </Pressable>
+                ) : null}
 
                 <Animated.View style={{ transform: [{ scale: savePressScale }] }}>
                   <Pressable
@@ -1426,19 +1798,23 @@ export default function WeightTrackingScreen({
         <Modal
           visible={showGoalModal}
           transparent
-          animationType="slide"
-          onRequestClose={() => setShowGoalModal(false)}
+          animationType="none"
+          onRequestClose={() => closeGoalSheet()}
         >
           <KeyboardAvoidingView
             style={{ flex: 1 }}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           >
-          <Pressable style={styles.sheetBackdrop} onPress={() => setShowGoalModal(false)} />
-          <View style={styles.sheet}>
-            <View style={styles.sheetHandle} />
+          <Animated.View pointerEvents="none" style={[styles.sheetBackdrop, { opacity: goalSheetBackdropOpacity }]} />
+          <Pressable style={styles.sheetBackdrop} onPress={() => closeGoalSheet()} />
+          <Animated.View
+            style={[styles.sheet, { transform: [{ translateY: goalSheetTranslateY }] }]}
+            onLayout={(event) => { goalSheetHeightRef.current = event.nativeEvent.layout.height; }}
+          >
+            <View style={styles.sheetHandle} {...goalSheetPan.panHandlers} />
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>{isTr ? 'Hedef Kilo Belirle' : 'Set Weight Goal'}</Text>
-              <Pressable onPress={() => setShowGoalModal(false)} style={styles.sheetCloseBtn}>
+              <Pressable onPress={() => closeGoalSheet()} style={styles.sheetCloseBtn}>
                 <Icon kind="close" size={18} color="#5d605a" />
               </Pressable>
             </View>
@@ -1466,7 +1842,7 @@ export default function WeightTrackingScreen({
             >
               <Text style={styles.sheetSaveBtnText}>{isTr ? 'Hedefi Kaydet' : 'Save Goal'}</Text>
             </Pressable>
-          </View>
+          </Animated.View>
           </KeyboardAvoidingView>
         </Modal>
       </Animated.View>
@@ -1523,7 +1899,7 @@ const styles = StyleSheet.create({
   expenseBadgeValue: {
     fontSize: 15,
     lineHeight: 20,
-    color: '#c99272',
+    color: '#47664a',
     fontWeight: '800',
   },
   goalPill: {
@@ -1600,9 +1976,9 @@ const styles = StyleSheet.create({
   changePill: {
     height: 24,
     borderRadius: 6,
-    backgroundColor: '#faede2',
+    backgroundColor: '#eef4ef',
     borderWidth: 1,
-    borderColor: '#e8c4a0',
+    borderColor: 'rgba(71,102,74,0.18)',
     paddingHorizontal: 8,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1612,14 +1988,14 @@ const styles = StyleSheet.create({
   changePillText: {
     fontSize: 12,
     lineHeight: 14,
-    color: '#8f5d42',
+    color: '#47664a',
     fontWeight: '700',
   },
   currentSub: {
     marginTop: 6,
     fontSize: 15,
     lineHeight: 20,
-    color: '#6a5a50',
+    color: '#56625a',
     fontWeight: '500',
   },
 
@@ -1645,9 +2021,9 @@ const styles = StyleSheet.create({
   goalBarTrack: {
     height: 8,
     borderRadius: 999,
-    backgroundColor: 'rgba(143,93,66,0.12)',
+    backgroundColor: 'rgba(71,102,74,0.10)',
     borderWidth: 1,
-    borderColor: 'rgba(201,146,114,0.16)',
+    borderColor: 'rgba(71,102,74,0.14)',
     overflow: 'hidden',
   },
   goalBarFill: {
@@ -1660,7 +2036,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 13,
     lineHeight: 18,
-    color: '#6f5a4d',
+    color: '#47664a',
     fontWeight: '700',
   },
   microchipLine: {
@@ -1674,7 +2050,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontSize: 12,
     lineHeight: 17,
-    color: '#7b685e',
+    color: '#69706b',
     fontWeight: '400',
   },
 
@@ -1690,7 +2066,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 2,
+    marginBottom: 6,
   },
   chartHeaderTitleWrap: {
     flexDirection: 'row',
@@ -1701,7 +2077,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 10,
-    backgroundColor: 'rgba(201,146,114,0.16)',
+    backgroundColor: 'rgba(71,102,74,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1713,24 +2089,108 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 16,
     paddingHorizontal: 12,
-    backgroundColor: '#f2eee8',
+    backgroundColor: '#f1f0ea',
     borderWidth: 1,
-    borderColor: 'rgba(143,93,66,0.12)',
+    borderColor: 'rgba(71,102,74,0.10)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   rangeChipActive: {
-    backgroundColor: '#faede2',
-    borderColor: '#d7ad90',
+    backgroundColor: '#eef4ef',
+    borderColor: 'rgba(71,102,74,0.20)',
   },
   rangeChipText: {
     fontSize: 12,
     lineHeight: 15,
-    color: '#6f5a4d',
+    color: '#5d605a',
     fontWeight: '600',
   },
   rangeChipTextActive: {
-    color: '#8f5d42',
+    color: '#47664a',
+    fontWeight: '700',
+  },
+  rangeChipLocked: {
+    opacity: 0.55,
+    borderStyle: 'dashed',
+  },
+  rangeChipTextLocked: {
+    color: '#9a9f98',
+  },
+
+  // Chart header badges
+  freeLimitBadge: {
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#f3f1eb',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.07)',
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  freeLimitBadgeText: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#7a7f78',
+    fontWeight: '600',
+  },
+  premiumBadge: {
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#edf5ea',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.18)',
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  premiumBadgeText: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#47664a',
+    fontWeight: '700',
+  },
+
+  // Premium gate banner
+  premiumGateBanner: {
+    borderRadius: 18,
+    backgroundColor: '#f9f7f2',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.14)',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  premiumGateLeft: {
+    flex: 1,
+    gap: 3,
+  },
+  premiumGateTitle: {
+    fontSize: 14,
+    lineHeight: 18,
+    color: '#30332e',
+    fontWeight: '700',
+  },
+  premiumGateBody: {
+    fontSize: 12,
+    lineHeight: 17,
+    color: '#6a706b',
+    fontWeight: '400',
+  },
+  premiumGateBtn: {
+    height: 36,
+    borderRadius: 14,
+    backgroundColor: '#47664a',
+    paddingHorizontal: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  premiumGateBtnText: {
+    fontSize: 13,
+    lineHeight: 16,
+    color: '#ffffff',
     fontWeight: '700',
   },
 
@@ -1738,20 +2198,73 @@ const styles = StyleSheet.create({
   chartCard: {
     borderRadius: 24,
     backgroundColor: '#fff',
-    paddingVertical: 14,
-    paddingHorizontal: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 3 },
-    elevation: 2,
+    paddingTop: 16,
+    paddingBottom: 14,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(93,96,90,0.09)',
+    shadowColor: '#47664a',
+    shadowOpacity: 0.07,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 3,
+  },
+  chartRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 4,
+  },
+  yAxis: {
+    width: 36,
+    paddingTop: 2,
+    paddingBottom: 2,
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    flexDirection: 'column',
+    gap: 0,
+  },
+  yAxisSpacer: {
+    flex: 1,
+  },
+  yAxisLabel: {
+    fontSize: 10,
+    lineHeight: 13,
+    color: '#9a9f98',
+    fontWeight: '600',
+    textAlign: 'right',
+  },
+  yAxisUnit: {
+    fontSize: 9,
+    lineHeight: 12,
+    color: '#b1b3ab',
+    fontWeight: '500',
+    textAlign: 'right',
+    marginTop: 2,
+  },
+  yAxisPlaceholder: {
+    width: 36,
   },
   chartWrap: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   chartTouchLayer: {
-    borderRadius: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  refBandLabelWrap: {
+    position: 'absolute',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: 'rgba(71,102,74,0.10)',
+  },
+  refBandLabelText: {
+    fontSize: 9,
+    lineHeight: 12,
+    color: '#47664a',
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   xLabelsCompact: {
     marginTop: 10,
@@ -1780,16 +2293,16 @@ const styles = StyleSheet.create({
     minHeight: 24,
     borderRadius: 12,
     paddingHorizontal: 10,
-    backgroundColor: 'rgba(201,146,114,0.13)',
+    backgroundColor: 'rgba(71,102,74,0.10)',
     borderWidth: 1,
-    borderColor: 'rgba(201,146,114,0.24)',
+    borderColor: 'rgba(71,102,74,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   xLabelSelectedText: {
     fontSize: 11,
     lineHeight: 14,
-    color: '#8f5d42',
+    color: '#47664a',
     fontWeight: '700',
   },
   xLabelsRow: {
@@ -1810,7 +2323,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   xLabelActive: {
-    color: '#c99272',
+    color: '#47664a',
   },
   chartEmptyState: {
     marginTop: 14,
@@ -1837,20 +2350,32 @@ const styles = StyleSheet.create({
   },
 
   // Insight cards
+  insightStack: {
+    gap: 10,
+  },
   insightCard: {
-    borderRadius: 12,
+    borderRadius: 16,
     backgroundColor: '#fff',
     paddingVertical: 14,
     paddingHorizontal: 14,
     flexDirection: 'row',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(93,96,90,0.10)',
+    borderColor: 'rgba(93,96,90,0.12)',
+    shadowColor: '#28362d',
+    shadowOpacity: 0.05,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  insightCardPressed: {
+    transform: [{ scale: 0.995 }],
+    opacity: 0.94,
   },
   insightIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     backgroundColor: '#eeeee8',
     alignItems: 'center',
     justifyContent: 'center',
@@ -1869,17 +2394,59 @@ const styles = StyleSheet.create({
     paddingTop: 2,
     gap: 4,
   },
+  insightTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
   insightTitle: {
     fontSize: 15,
     lineHeight: 20,
     color: '#30332e',
     fontWeight: '700',
+    flexShrink: 1,
+  },
+  insightTonePill: {
+    paddingHorizontal: 8,
+    height: 22,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  insightToneText: {
+    fontSize: 11,
+    lineHeight: 13,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+  },
+  insightToneGood: {
+    backgroundColor: '#eaf5ed',
+  },
+  insightToneGoodText: {
+    color: '#47664a',
+  },
+  insightToneWarn: {
+    backgroundColor: '#fff3e2',
+  },
+  insightToneWarnText: {
+    color: '#a36e1e',
+  },
+  insightToneNeutral: {
+    backgroundColor: '#eeefeb',
+  },
+  insightToneNeutralText: {
+    color: '#64695f',
   },
   insightText: {
     fontSize: 14,
     lineHeight: 20,
     color: '#5d605a',
     fontWeight: '400',
+  },
+  insightChevron: {
+    alignSelf: 'center',
+    paddingLeft: 2,
   },
 
   // History card
@@ -1945,15 +2512,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   historyEmptyCard: {
-    borderRadius: 20,
+    borderRadius: 16,
     backgroundColor: '#fff',
     paddingHorizontal: 18,
     paddingVertical: 18,
-    shadowColor: '#000',
-    shadowOpacity: 0.04,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    borderWidth: 1,
+    borderColor: 'rgba(93,96,90,0.10)',
     gap: 6,
   },
   historyEmptyTitle: {
@@ -1973,15 +2537,15 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(112,132,126,0.24)',
-    backgroundColor: '#eef4f1',
+    borderColor: 'rgba(71,102,74,0.18)',
+    backgroundColor: '#eef4ef',
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   historyAddBtnText: {
     fontSize: 12,
     lineHeight: 16,
-    color: '#4a6a62',
+    color: '#47664a',
     fontWeight: '700',
     letterSpacing: 0.2,
   },
@@ -2017,10 +2581,10 @@ const styles = StyleSheet.create({
   addSheetSummary: {
     marginTop: 0,
     marginBottom: 6,
-    borderRadius: 20,
-    backgroundColor: '#f7f5f0',
+    borderRadius: 16,
+    backgroundColor: '#f3f1eb',
     borderWidth: 1,
-    borderColor: '#ece7de',
+    borderColor: '#e4e0d6',
     paddingHorizontal: 14,
     paddingVertical: 11,
     flexDirection: 'row',
@@ -2144,13 +2708,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#f6f4f0',
   },
   fieldInputFocused: {
-    borderColor: '#c99272',
+    borderColor: '#47664a',
     backgroundColor: '#fff',
-    shadowColor: '#c99272',
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 2,
+    shadowColor: '#47664a',
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 1 },
+    elevation: 1,
   },
   fieldInputNote: {
     height: 68,
@@ -2186,7 +2750,7 @@ const styles = StyleSheet.create({
   sheetSaveBtn: {
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#c99272',
+    backgroundColor: '#47664a',
     alignItems: 'center',
     justifyContent: 'center',
     marginTop: 2,
@@ -2195,6 +2759,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 18,
     color: '#fff',
+    fontWeight: '700',
+  },
+  sheetDeleteBtn: {
+    height: 42,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e5b6b6',
+    backgroundColor: '#fff4f4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sheetDeleteBtnText: {
+    fontSize: 13,
+    lineHeight: 17,
+    color: '#b95252',
     fontWeight: '700',
   },
 
@@ -2220,7 +2799,7 @@ const styles = StyleSheet.create({
     opacity: 0.82,
   },
   rowActive: {
-    backgroundColor: 'rgba(201,146,114,0.10)',
+    backgroundColor: 'rgba(71,102,74,0.10)',
   },
   rowText: {
     fontSize: 16,
@@ -2252,9 +2831,9 @@ const styles = StyleSheet.create({
   setGoalCard: {
     marginTop: 14,
     borderRadius: 14,
-    backgroundColor: '#f7ede5',
+    backgroundColor: '#eef4ef',
     borderWidth: 1,
-    borderColor: 'rgba(201,146,114,0.22)',
+    borderColor: 'rgba(71,102,74,0.18)',
     paddingHorizontal: 14,
     paddingVertical: 12,
     flexDirection: 'row',
@@ -2269,12 +2848,12 @@ const styles = StyleSheet.create({
   setGoalTitle: {
     fontSize: 14,
     lineHeight: 18,
-    color: '#8f5d42',
+    color: '#47664a',
     fontWeight: '700',
   },
   setGoalArrow: {
     fontSize: 16,
-    color: '#8f5d42',
+    color: '#47664a',
     fontWeight: '700',
   },
 
@@ -2282,9 +2861,9 @@ const styles = StyleSheet.create({
   goalSection: {
     marginTop: 14,
     borderRadius: 14,
-    backgroundColor: '#f7e8dc',
+    backgroundColor: '#eef4ef',
     borderWidth: 1,
-    borderColor: 'rgba(201,146,114,0.30)',
+    borderColor: 'rgba(71,102,74,0.20)',
     paddingHorizontal: 14,
     paddingTop: 12,
     paddingBottom: 10,
@@ -2305,7 +2884,7 @@ const styles = StyleSheet.create({
   goalSectionLabel: {
     fontSize: 10,
     lineHeight: 14,
-    color: '#8f5d42',
+    color: '#47664a',
     fontWeight: '800',
     letterSpacing: 0.6,
   },
@@ -2318,12 +2897,12 @@ const styles = StyleSheet.create({
   goalSectionUnit: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#6f5a4d',
+    color: '#5d605a',
   },
   goalDiffLabel: {
     fontSize: 11,
     lineHeight: 14,
-    color: '#6f5a4d',
+    color: '#5d605a',
     fontWeight: '600',
   },
   goalDiffValue: {
@@ -2334,7 +2913,7 @@ const styles = StyleSheet.create({
   goalEditHint: {
     fontSize: 11,
     lineHeight: 14,
-    color: '#8f5d42',
+    color: '#47664a',
     fontWeight: '600',
     textAlign: 'right',
   },

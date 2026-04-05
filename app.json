@@ -37,6 +37,11 @@
           "photosPermission": "Select a profile photo for your VPaw profile."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ccf9306b-65b1-48f8-8c0c-68c62278dd14"
+      }
+    }
   }
 }

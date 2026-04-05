@@ -15,8 +15,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Edit2,
+  FileText,
   HeartPulse,
   Mars,
+  Stethoscope,
   Syringe,
   Venus,
 } from 'lucide-react-native';
@@ -91,6 +93,8 @@ export default function PetDetailScreen({
   onBack,
   onEdit,
   onOpenWeightTracking,
+  onOpenHealthRecords,
+  onOpenVetVisits,
   onOpenVaccinations,
   onOpenHealthHub,
 }: PetDetailScreenProps) {
@@ -116,6 +120,12 @@ export default function PetDetailScreen({
   )[0];
   const displayLastVaccine: { name: string; rawDate: string } | null =
     latestVaccineOverride ?? (legacyLastVaccine ? { name: legacyLastVaccine.name, rawDate: legacyLastVaccine.date } : null);
+  const facts = [
+    { key: 'type', label: isTr ? 'Tur' : 'Type', value: pet.petType === 'Dog' ? (isTr ? 'Kopek' : 'Dog') : (isTr ? 'Kedi' : 'Cat') },
+    { key: 'breed', label: isTr ? 'Irk' : 'Breed', value: pet.breed || (isTr ? 'Belirtilmedi' : 'Not set') },
+    { key: 'age', label: isTr ? 'Yas' : 'Age', value: formatAge(pet.birthDate, isTr) },
+    { key: 'chip', label: isTr ? 'Chip' : 'Microchip', value: pet.microchip || (isTr ? 'Eklenmedi' : 'Not added') },
+  ];
 
   const topInset = Math.max(insets.top, 14);
   const topBarHeight = topInset + HEADER_BAR_HEIGHT;
@@ -150,32 +160,11 @@ export default function PetDetailScreen({
   return (
     <View style={styles.root}>
       <LinearGradient
-        colors={['#f8f4ed', '#f1e3d3', '#deccb9']}
+        colors={['#f7f5f1', '#f3f0ea', '#efebe4']}
         locations={[0, 0.48, 1]}
         start={{ x: 0.06, y: 0.02 }}
         end={{ x: 0.96, y: 0.98 }}
         style={StyleSheet.absoluteFillObject}
-      />
-      <LinearGradient
-        colors={['rgba(255,255,255,0)', 'rgba(255,252,247,0.94)', 'rgba(255,255,255,0)']}
-        locations={[0, 0.5, 1]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.ribbonPrimary}
-      />
-      <LinearGradient
-        colors={['rgba(255,255,255,0)', 'rgba(255,248,236,0.72)', 'rgba(255,255,255,0)']}
-        locations={[0, 0.5, 1]}
-        start={{ x: 0, y: 0.1 }}
-        end={{ x: 1, y: 0.9 }}
-        style={styles.ribbonSecondary}
-      />
-      <LinearGradient
-        colors={['rgba(255,255,255,0)', 'rgba(255,243,224,0.68)', 'rgba(255,255,255,0)']}
-        locations={[0, 0.45, 1]}
-        start={{ x: 0.1, y: 0 }}
-        end={{ x: 0.9, y: 1 }}
-        style={styles.ribbonAccent}
       />
 
       <View style={styles.screen} {...swipePanResponder.panHandlers}>
@@ -224,7 +213,58 @@ export default function PetDetailScreen({
           </View>
 
           <View style={styles.section}>
-            <SectionHeader title={isTr ? 'KİLO' : 'WEIGHT'} />
+            <SectionHeader title={isTr ? 'PROFILE' : 'PROFILE'} />
+            <View style={styles.factsGrid}>
+              {facts.map((item) => (
+                <View key={item.key} style={styles.factCard}>
+                  <Text style={styles.factLabel}>{item.label}</Text>
+                  <Text style={styles.factValue} numberOfLines={2}>{item.value}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <SectionHeader title={isTr ? 'HEALTH SHORTCUTS' : 'HEALTH SHORTCUTS'} />
+            <View style={styles.shortcutsGrid}>
+              <Pressable onPress={onOpenWeightTracking} style={({ pressed }) => [styles.shortcutCard, pressed && styles.cardPressed]}>
+                <View style={styles.shortcutIconShell}>
+                  <Activity size={18} color="#47664a" strokeWidth={2} />
+                </View>
+                <Text style={styles.shortcutTitle}>{isTr ? 'Kilo' : 'Weight'}</Text>
+                <Text style={styles.shortcutValue}>
+                  {currentKg != null ? `${currentKg.toFixed(1)} kg` : (isTr ? 'Kayit yok' : 'No record')}
+                </Text>
+              </Pressable>
+
+              <Pressable onPress={onOpenVaccinations} style={({ pressed }) => [styles.shortcutCard, pressed && styles.cardPressed]}>
+                <View style={styles.shortcutIconShell}>
+                  <Syringe size={18} color="#47664a" strokeWidth={2} />
+                </View>
+                <Text style={styles.shortcutTitle}>{isTr ? 'Asilar' : 'Vaccines'}</Text>
+                <Text style={styles.shortcutValue}>{String(vaccineCount)}</Text>
+              </Pressable>
+
+              <Pressable onPress={onOpenVetVisits} style={({ pressed }) => [styles.shortcutCard, pressed && styles.cardPressed]}>
+                <View style={styles.shortcutIconShell}>
+                  <Stethoscope size={18} color="#47664a" strokeWidth={2} />
+                </View>
+                <Text style={styles.shortcutTitle}>{isTr ? 'Ziyaretler' : 'Vet Visits'}</Text>
+                <Text style={styles.shortcutValue}>{isTr ? 'Ac' : 'Open'}</Text>
+              </Pressable>
+
+              <Pressable onPress={onOpenHealthRecords} style={({ pressed }) => [styles.shortcutCard, pressed && styles.cardPressed]}>
+                <View style={styles.shortcutIconShell}>
+                  <FileText size={18} color="#47664a" strokeWidth={2} />
+                </View>
+                <Text style={styles.shortcutTitle}>{isTr ? 'Kayitlar' : 'Records'}</Text>
+                <Text style={styles.shortcutValue}>{isTr ? 'Ac' : 'Open'}</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={styles.section}>
+            <SectionHeader title={isTr ? 'WEIGHT' : 'WEIGHT'} />
             <Pressable
               onPress={onOpenWeightTracking}
               style={({ pressed }) => [styles.weightCard, pressed && styles.cardPressed]}
@@ -234,13 +274,11 @@ export default function PetDetailScreen({
                   <View style={[styles.weightTrackFill, { width: `${Math.round(goalRatio * 100)}%` }]} />
                   <View style={styles.weightTrackKnob} />
                 </View>
-                <Activity size={52} color="rgba(184,148,122,0.34)" strokeWidth={1.8} />
+                <Activity size={52} color="rgba(111,137,115,0.24)" strokeWidth={1.8} />
               </View>
               <Text style={styles.weightCaption}>
                 {weightGoal && currentKg != null
-                  ? isTr
-                    ? `${currentKg.toFixed(1)} kg • hedef ${weightGoal.toFixed(1)} kg`
-                    : `${currentKg.toFixed(1)} kg • goal ${weightGoal.toFixed(1)} kg`
+                  ? `${currentKg.toFixed(1)} kg • ${isTr ? 'hedef' : 'goal'} ${weightGoal.toFixed(1)} kg`
                   : isTr
                     ? 'Hedef belirlenmedi'
                     : 'No goal set'}
@@ -249,39 +287,25 @@ export default function PetDetailScreen({
           </View>
 
           <View style={styles.section}>
-            <SectionHeader title={isTr ? 'AŞILAR' : 'VACCINATIONS'} />
-            <Pressable
-              onPress={onOpenVaccinations}
-              style={({ pressed }) => [styles.inlineCard, pressed && styles.cardPressed]}
-            >
-              <View style={styles.inlineCardLead}>
-                <View style={styles.rowIconShell}>
-                  <Syringe size={18} color="#3c261a" strokeWidth={1.9} />
-                </View>
-                <Text style={styles.inlineCardTitle}>
-                  {isTr ? 'Kayıtlı aşılar' : 'Recorded vaccines'}
-                </Text>
-              </View>
-              <View style={styles.countBubble}>
-                <Text style={styles.countBubbleText}>{vaccineCount}</Text>
-              </View>
-            </Pressable>
-          </View>
-
-          <View style={styles.section}>
+            <SectionHeader title={isTr ? 'HEALTH HUB' : 'HEALTH HUB'} />
             <Pressable
               style={({ pressed }) => [styles.healthHubEntryRow, pressed && styles.cardPressed]}
               onPress={onOpenHealthHub}
             >
               <View style={styles.healthHubEntryLead}>
                 <View style={styles.rowIconShell}>
-                  <HeartPulse size={18} color="#3c261a" strokeWidth={1.9} />
+                  <HeartPulse size={18} color="#47664a" strokeWidth={1.9} />
                 </View>
-                <Text style={styles.healthHubEntryLabel}>
-                  {isTr ? 'Sağlık Merkezi' : 'Health Hub'}
-                </Text>
+                <View style={styles.healthHubEntryText}>
+                  <Text style={styles.healthHubEntryLabel}>
+                    {isTr ? 'Saglik merkezi' : 'Health hub'}
+                  </Text>
+                  <Text style={styles.healthHubEntrySubtext}>
+                    {isTr ? 'Tum kayitlar ve bagli bakim akislari' : 'All records and connected care flows'}
+                  </Text>
+                </View>
               </View>
-              <ChevronRight size={18} color="#2a1a12" strokeWidth={2.2} />
+              <ChevronRight size={18} color="#47664a" strokeWidth={2.2} />
             </Pressable>
           </View>
 
@@ -357,7 +381,7 @@ export default function PetDetailScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#ead8c8',
+    backgroundColor: '#f7f5f1',
   },
   screen: {
     flex: 1,
@@ -366,33 +390,6 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 18,
     gap: 18,
-  },
-  ribbonPrimary: {
-    position: 'absolute',
-    top: -40,
-    right: -40,
-    width: 240,
-    height: 1040,
-    opacity: 0.94,
-    transform: [{ rotate: '24deg' }],
-  },
-  ribbonSecondary: {
-    position: 'absolute',
-    top: 120,
-    left: 156,
-    width: 160,
-    height: 980,
-    opacity: 0.78,
-    transform: [{ rotate: '36deg' }],
-  },
-  ribbonAccent: {
-    position: 'absolute',
-    top: 280,
-    right: -20,
-    width: 110,
-    height: 680,
-    opacity: 0.52,
-    transform: [{ rotate: '17deg' }],
   },
   topChrome: {
     position: 'absolute',
@@ -408,7 +405,7 @@ const styles = StyleSheet.create({
     right: 0,
     overflow: 'hidden',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(100,73,52,0.16)',
+    borderBottomColor: 'rgba(104,120,114,0.12)',
   },
   topBarRow: {
     paddingHorizontal: 18,
@@ -430,14 +427,9 @@ const styles = StyleSheet.create({
     borderRadius: HEADER_BUTTON_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,250,244,0.58)',
+    backgroundColor: 'rgba(255,255,255,0.72)',
     borderWidth: 1,
-    borderColor: 'rgba(164,135,111,0.18)',
-    shadowColor: '#896347',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 3,
+    borderColor: 'rgba(104,120,114,0.12)',
   },
   iconGhost: {
     width: HEADER_BUTTON_SIZE,
@@ -447,7 +439,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 26,
     lineHeight: 32,
-    color: '#2d190f',
+    color: '#26312f',
     letterSpacing: 0.5,
     fontFamily: TITLE_FONT_FAMILY,
     paddingHorizontal: 8,
@@ -473,34 +465,29 @@ const styles = StyleSheet.create({
     borderRadius: 11,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.78)',
-    backgroundColor: '#f2e6dc',
+    backgroundColor: '#eef0eb',
   },
   topBarCompactName: {
     fontSize: 12,
     lineHeight: 15,
-    color: '#2f1b11',
+    color: '#26312f',
     fontWeight: '700',
     letterSpacing: 0.2,
   },
   heroCard: {
-    backgroundColor: 'rgba(255,250,244,0.72)',
-    borderRadius: 34,
+    backgroundColor: 'rgba(255,255,255,0.84)',
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.68)',
+    borderColor: 'rgba(104,120,114,0.10)',
     padding: 18,
     flexDirection: 'row',
     gap: 16,
-    shadowColor: '#7e5f47',
-    shadowOpacity: 0.1,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 4,
   },
   heroImage: {
     width: 108,
     height: 108,
-    borderRadius: 28,
-    backgroundColor: '#efe7df',
+    borderRadius: 24,
+    backgroundColor: '#eef0eb',
   },
   heroBody: {
     flex: 1,
@@ -519,7 +506,7 @@ const styles = StyleSheet.create({
     fontSize: 30,
     lineHeight: 34,
     fontWeight: '800',
-    color: '#2a1710',
+    color: '#26312f',
     letterSpacing: -0.9,
   },
   genderPill: {
@@ -529,24 +516,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,249,243,0.85)',
+    backgroundColor: '#f5f3ee',
     borderWidth: 1,
-    borderColor: 'rgba(169,143,118,0.18)',
+    borderColor: 'rgba(104,120,114,0.10)',
   },
   genderText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#554035',
+    color: '#5d605a',
   },
   heroBreed: {
     fontSize: 17,
     lineHeight: 23,
-    color: '#39251b',
+    color: '#33403d',
     fontWeight: '500',
   },
   heroMeta: {
     fontSize: 15,
-    color: '#5f4a3c',
+    color: '#68706b',
     fontWeight: '400',
   },
   chipPill: {
@@ -555,13 +542,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,247,238,0.82)',
+    backgroundColor: '#f5f3ee',
     borderWidth: 1,
-    borderColor: 'rgba(179,152,126,0.18)',
+    borderColor: 'rgba(104,120,114,0.10)',
   },
   chipText: {
     fontSize: 12,
-    color: '#5f4939',
+    color: '#5d605a',
     fontWeight: '500',
     letterSpacing: 0.15,
   },
@@ -578,26 +565,87 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     letterSpacing: 2.3,
-    color: '#2f1b11',
+    color: '#47664a',
   },
   sectionHeaderLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(96,67,44,0.14)',
+    backgroundColor: 'rgba(104,120,114,0.14)',
+  },
+  factsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  factCard: {
+    width: '48%',
+    minHeight: 86,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.84)',
+    borderWidth: 1,
+    borderColor: 'rgba(104,120,114,0.10)',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    gap: 6,
+  },
+  factLabel: {
+    fontSize: 11,
+    lineHeight: 14,
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+    color: '#7a827d',
+    fontWeight: '700',
+  },
+  factValue: {
+    fontSize: 16,
+    lineHeight: 21,
+    color: '#26312f',
+    fontWeight: '600',
+  },
+  shortcutsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  shortcutCard: {
+    width: '48%',
+    minHeight: 110,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.84)',
+    borderWidth: 1,
+    borderColor: 'rgba(104,120,114,0.10)',
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 10,
+  },
+  shortcutIconShell: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#eef4ef',
+  },
+  shortcutTitle: {
+    fontSize: 15,
+    lineHeight: 19,
+    color: '#26312f',
+    fontWeight: '700',
+  },
+  shortcutValue: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#66706b',
+    fontWeight: '500',
   },
   weightCard: {
-    backgroundColor: 'rgba(255,250,245,0.74)',
-    borderRadius: 30,
+    backgroundColor: 'rgba(255,255,255,0.84)',
+    borderRadius: 18,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.68)',
+    borderColor: 'rgba(104,120,114,0.10)',
     paddingHorizontal: 18,
     paddingVertical: 16,
     gap: 10,
-    shadowColor: '#7e5f47',
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
   },
   cardPressed: {
     transform: [{ scale: 0.992 }],
@@ -612,13 +660,13 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 9,
     borderRadius: 999,
-    backgroundColor: 'rgba(96,67,44,0.12)',
+    backgroundColor: 'rgba(71,102,74,0.10)',
     overflow: 'hidden',
   },
   weightTrackFill: {
     height: '100%',
     borderRadius: 999,
-    backgroundColor: '#caa27b',
+    backgroundColor: '#47664a',
   },
   weightTrackKnob: {
     position: 'absolute',
@@ -627,30 +675,25 @@ const styles = StyleSheet.create({
     width: 10,
     height: 18,
     borderRadius: 8,
-    backgroundColor: '#c79f79',
+    backgroundColor: '#6f8973',
   },
   weightCaption: {
     fontSize: 13,
-    color: '#574134',
+    color: '#5d605a',
     fontWeight: '500',
   },
   inlineCard: {
     minHeight: 72,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,249,243,0.78)',
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.84)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.7)',
+    borderColor: 'rgba(104,120,114,0.10)',
     paddingHorizontal: 16,
     paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    shadowColor: '#7e5f47',
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 3,
   },
   inlineCardLead: {
     flexDirection: 'row',
@@ -661,16 +704,16 @@ const styles = StyleSheet.create({
   inlineCardTitle: {
     flex: 1,
     fontSize: 16,
-    color: '#2d1a12',
+    color: '#26312f',
     fontWeight: '500',
   },
   rowIconShell: {
     width: 34,
     height: 34,
-    borderRadius: 17,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,248,239,0.74)',
+    backgroundColor: '#eef4ef',
   },
   countBubble: {
     minWidth: 46,
@@ -679,7 +722,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ca9769',
+    backgroundColor: '#47664a',
   },
   countBubbleText: {
     fontSize: 24,
@@ -689,21 +732,16 @@ const styles = StyleSheet.create({
   },
   healthHubEntryRow: {
     minHeight: 72,
-    borderRadius: 30,
-    backgroundColor: 'rgba(255,249,243,0.78)',
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.84)',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.7)',
+    borderColor: 'rgba(104,120,114,0.10)',
     paddingHorizontal: 16,
     paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
-    shadowColor: '#7e5f47',
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 7 },
-    elevation: 3,
   },
   healthHubEntryLead: {
     flexDirection: 'row',
@@ -711,11 +749,20 @@ const styles = StyleSheet.create({
     gap: 12,
     flex: 1,
   },
-  healthHubEntryLabel: {
+  healthHubEntryText: {
     flex: 1,
+    gap: 3,
+  },
+  healthHubEntryLabel: {
     fontSize: 17,
-    color: '#2d1a12',
+    color: '#26312f',
     fontWeight: '600',
+  },
+  healthHubEntrySubtext: {
+    fontSize: 13,
+    lineHeight: 18,
+    color: '#66706b',
+    fontWeight: '500',
   },
   vaccineHintRow: {
     paddingHorizontal: 10,
@@ -724,13 +771,14 @@ const styles = StyleSheet.create({
   vaccineHintLabel: {
     fontSize: 11,
     letterSpacing: 1.6,
-    color: '#8d7666',
+    color: '#7a827d',
     fontWeight: '700',
   },
   vaccineHintValue: {
     fontSize: 13,
     lineHeight: 18,
-    color: '#574235',
+    color: '#5d605a',
     fontWeight: '500',
   },
 });
+

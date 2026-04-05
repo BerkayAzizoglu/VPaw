@@ -1,6 +1,7 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Path } from 'react-native-svg';
 import { hap } from '../lib/haptics';
 
@@ -26,8 +27,8 @@ const TABS: TabDef[] = [
   { key: 'profile', labelTr: 'Profil', labelEn: 'Profile' },
 ];
 
-const COLOR_ACTIVE = '#47664A';
-const COLOR_INACTIVE = '#484C52';
+const COLOR_ACTIVE = '#1f3738';
+const COLOR_INACTIVE = '#6e737c';
 
 function HomeIcon({ color }: { color: string }) {
   return (
@@ -121,11 +122,61 @@ function TabIcon({ tabKey, color }: { tabKey: TabKey; color: string }) {
 
 export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) {
   const insets = useSafeAreaInsets();
-  const safeBottom = Math.max(insets.bottom - 4, 8);
-  const barHeight = 50 + safeBottom;
+  const safeBottom = Math.max(insets.bottom, 8);
+  const barHeight = 54 + safeBottom;
+  const barWidthRef = React.useRef(0);
+  const dragLastTabRef = React.useRef<TabKey | null>(null);
+
+  const pickTabFromX = React.useCallback((x: number): TabKey | null => {
+    const width = barWidthRef.current;
+    if (width <= 0) return null;
+    const slotWidth = width / TABS.length;
+    const index = Math.max(0, Math.min(TABS.length - 1, Math.floor(x / slotWidth)));
+    return TABS[index]?.key ?? null;
+  }, []);
+
+  const trySelectByX = React.useCallback((x: number) => {
+    const nextTab = pickTabFromX(x);
+    if (!nextTab) return;
+    if (dragLastTabRef.current === nextTab) return;
+    dragLastTabRef.current = nextTab;
+    if (nextTab !== activeTab) {
+      hap.light();
+      onTabPress(nextTab);
+    }
+  }, [activeTab, onTabPress, pickTabFromX]);
+
+  const panResponder = React.useMemo(
+    () => PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (_evt, gesture) => Math.abs(gesture.dx) > 6 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+      onMoveShouldSetPanResponderCapture: (_evt, gesture) => Math.abs(gesture.dx) > 6 && Math.abs(gesture.dx) > Math.abs(gesture.dy),
+      onPanResponderGrant: (evt) => {
+        trySelectByX(evt.nativeEvent.locationX);
+      },
+      onPanResponderMove: (evt) => {
+        trySelectByX(evt.nativeEvent.locationX);
+      },
+      onPanResponderRelease: () => {
+        dragLastTabRef.current = null;
+      },
+      onPanResponderTerminate: () => {
+        dragLastTabRef.current = null;
+      },
+      onPanResponderTerminationRequest: () => true,
+    }),
+    [trySelectByX],
+  );
 
   return (
-    <View style={[styles.host, { height: barHeight, paddingBottom: safeBottom }]}>
+    <View
+      style={[styles.host, { height: barHeight, paddingBottom: safeBottom }]}
+      onLayout={(event) => {
+        barWidthRef.current = event.nativeEvent.layout.width;
+      }}
+      {...panResponder.panHandlers}
+    >
       {TABS.map((tab, index) => {
         const label = locale === 'tr' ? tab.labelTr : tab.labelEn;
         const isActive = activeTab === tab.key;
@@ -140,13 +191,22 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
                 onTabPress(tab.key);
               }}
             >
-              {isActive ? <View style={styles.activeLine} /> : null}
+              {isActive ? (
+                <LinearGradient
+                  colors={['#3A8BFF', '#22D3C5']}
+                  start={{ x: 0, y: 0.5 }}
+                  end={{ x: 1, y: 0.5 }}
+                  style={styles.activeLine}
+                />
+              ) : null}
               <View style={styles.iconWrap}>
-                <View style={styles.iconScale}>
+                <View style={[styles.iconScale, isActive && styles.iconScaleActive]}>
                   <TabIcon tabKey={tab.key} color={color} />
                 </View>
               </View>
-              <Text style={[styles.tabLabel, { color }, isActive && styles.tabLabelActive]}>{label}</Text>
+              <Text style={[styles.tabLabel, { color }, isActive && styles.tabLabelActive]} numberOfLines={1}>
+                {label}
+              </Text>
             </Pressable>
           </View>
         );
@@ -158,44 +218,45 @@ export default function LensMagTabBar({ activeTab, locale, onTabPress }: Props) 
 const styles = StyleSheet.create({
   host: {
     position: 'absolute',
-    left: -1,
-    right: -1,
-    bottom: -1,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
-    backgroundColor: '#FCFDFD',
+    backgroundColor: 'rgba(250,252,254,0.98)',
     flexDirection: 'row',
     alignItems: 'flex-start',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(72,76,82,0.08)',
-    shadowColor: '#1D252D',
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: -1 },
-    elevation: 2,
+    borderTopWidth: 1.2,
+    borderTopColor: 'rgba(121,130,145,0.18)',
+    borderWidth: 1,
+    borderColor: 'rgba(121,130,145,0.06)',
+    shadowColor: '#1d252d',
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: -3 },
+    elevation: 10,
     overflow: 'hidden',
   },
   tabSlot: {
     flex: 1,
   },
   tabButton: {
-    minHeight: 46,
-    paddingTop: 6,
+    minHeight: 50,
+    paddingTop: 7,
     alignItems: 'center',
     justifyContent: 'flex-start',
     gap: 2,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     position: 'relative',
   },
   activeLine: {
     position: 'absolute',
     top: 0,
-    width: 30,
-    height: 2,
+    width: 68,
+    height: 3,
     borderRadius: 999,
-    backgroundColor: COLOR_ACTIVE,
   },
   iconWrap: {
     width: 24,
@@ -205,6 +266,9 @@ const styles = StyleSheet.create({
   },
   iconScale: {
     transform: [{ scale: 0.92 }],
+  },
+  iconScaleActive: {
+    transform: [{ scale: 1.02 }],
   },
   tabLabel: {
     fontSize: 10,

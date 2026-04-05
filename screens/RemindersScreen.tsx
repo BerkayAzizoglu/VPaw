@@ -100,6 +100,14 @@ function isValidDate(value: string) {
   return Number.isFinite(new Date(`${value}T12:00:00.000Z`).getTime());
 }
 
+function todayYmdLocal() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function isMedicalSubtype(subtype: ReminderSubtype | undefined) {
   return subtype === 'vet_visit' || subtype === 'vaccine' || subtype === 'medication';
 }
@@ -423,7 +431,7 @@ export default function RemindersScreen({
   const [createOpen, setCreateOpen] = useState(false);
   const [subtype, setSubtype] = useState<ReminderSubtype>('custom');
   const [entryTitle, setEntryTitle] = useState('');
-  const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
+  const [entryDate, setEntryDate] = useState(todayYmdLocal());
   const [entryFrequency, setEntryFrequency] = useState<'once' | 'daily'>('once');
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -498,7 +506,7 @@ export default function RemindersScreen({
   };
 
   const openCreate = (preset?: { id: string; title: string; subtype: ReminderSubtype; freq: 'once' | 'daily' }) => {
-    setEntryDate(new Date().toISOString().slice(0, 10));
+    setEntryDate(todayYmdLocal());
     setError('');
     if (preset) {
       setEntryTitle(preset.title ?? '');
@@ -538,7 +546,7 @@ export default function RemindersScreen({
     if (!item) return;
     setEditId(id);
     setEditTitle(item.title ?? '');
-    setEditDate(item.dueDate?.slice(0, 10) ?? item.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10));
+    setEditDate(item.dueDate?.slice(0, 10) ?? item.date?.slice(0, 10) ?? todayYmdLocal());
     setEditSubtype((item.subtype ?? 'custom') as ReminderSubtype);
     setEditError('');
     setEditOpen(true);

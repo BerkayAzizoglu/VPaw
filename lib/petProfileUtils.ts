@@ -160,14 +160,24 @@ export function getLocalDomainClockForPet(args: {
   remindersByPet: ByPet<Reminder>;
   medicationCoursesByPet: ByPet<MedicationCourse>;
   weightsByPet: Record<string, WeightPoint[]>;
+  weightsUpdatedAtByPet?: Record<string, string>;
 }): CloudHealthDomainUpdatedAt {
-  const { petId, vetVisitsByPet, medicalEventsByPet, remindersByPet, medicationCoursesByPet, weightsByPet } = args;
+  const {
+    petId,
+    vetVisitsByPet,
+    medicalEventsByPet,
+    remindersByPet,
+    medicationCoursesByPet,
+    weightsByPet,
+    weightsUpdatedAtByPet,
+  } = args;
+  const weightsUpdatedAt = parseUpdatedAtMs(weightsUpdatedAtByPet?.[petId]);
   return {
     vetVisitsUpdatedAt: getLatestTimestampMs((vetVisitsByPet[petId] ?? []).flatMap((item) => [item.updatedAt, item.createdAt, item.visitDate])),
     medicalEventsUpdatedAt: getLatestTimestampMs((medicalEventsByPet[petId] ?? []).flatMap((item) => [item.updatedAt, item.createdAt, item.eventDate, item.dueDate])),
     remindersUpdatedAt: getLatestTimestampMs((remindersByPet[petId] ?? []).flatMap((item) => [item.updatedAt, item.createdAt, item.scheduledAt, item.completedAt])),
     medicationCoursesUpdatedAt: getLatestTimestampMs((medicationCoursesByPet[petId] ?? []).flatMap((item) => [item.updatedAt, item.createdAt, item.startDate, item.endDate])),
-    weightsUpdatedAt: getLatestTimestampMs((weightsByPet[petId] ?? []).map((item) => item.date)),
+    weightsUpdatedAt: weightsUpdatedAt ?? getLatestTimestampMs((weightsByPet[petId] ?? []).map((item) => item.date)),
   };
 }
 

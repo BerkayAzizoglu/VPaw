@@ -388,7 +388,9 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
   const [pickerField, setPickerField] = useState<PickerField>(null);
   const [birthPicker, setBirthPicker] = useState(() => parseBirthDate(pet.birthDate));
   const [otherSurgeryText, setOtherSurgeryText] = useState('');
+  const [otherAllergyText, setOtherAllergyText] = useState('');
   const [otherDiabetesText, setOtherDiabetesText] = useState('');
+  const [showOtherComposer, setShowOtherComposer] = useState<'surgeries' | 'allergies' | 'diabetes' | null>(null);
   const [nameDraft, setNameDraft] = useState(pet.name);
   const [microchipDraft, setMicrochipDraft] = useState(pet.microchip || '');
   const swipePanResponder = useEdgeSwipeBack({ onBack, enabled: pickerField === null });
@@ -398,7 +400,20 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
     setBirthPicker(parseBirthDate(pet.birthDate));
     setNameDraft(pet.name);
     setMicrochipDraft(pet.microchip || '');
+    setOtherSurgeryText('');
+    setOtherAllergyText('');
+    setOtherDiabetesText('');
+    setShowOtherComposer(null);
   }, [pet]);
+
+  useEffect(() => {
+    if (pickerField !== 'surgeries' && pickerField !== 'allergies' && pickerField !== 'diabetes') {
+      setShowOtherComposer(null);
+      setOtherSurgeryText('');
+      setOtherAllergyText('');
+      setOtherDiabetesText('');
+    }
+  }, [pickerField]);
 
   const handleBirthDatePickerChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') {
@@ -478,6 +493,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
       return { ...prev, surgeriesLog };
     }
     if (field === 'allergies') {
+      if (value === 'Other') return prev;
       const exists = prev.allergiesLog.some((a) => a.category === value);
       const allergiesLog = exists
         ? prev.allergiesLog.filter((a) => a.category !== value)
@@ -499,13 +515,27 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
   const applySelection = (value: string) => {
     if (!pickerField) return;
     const field = pickerField;
+    if (field === 'surgeries' && value === 'Other') {
+      setShowOtherComposer('surgeries');
+      return;
+    }
+    if (field === 'allergies' && value === 'Other') {
+      setShowOtherComposer('allergies');
+      return;
+    }
+    if (field === 'diabetes' && value === 'Other') {
+      setShowOtherComposer('diabetes');
+      return;
+    }
     const next = getNextDraft(draft, field, value);
     const multiFields: Array<Exclude<PickerField, null>> = ['vaccines', 'surgeries', 'allergies', 'diabetes'];
     if (multiFields.includes(field)) {
+      setShowOtherComposer(null);
       setDraft(next);
       return;
     }
     setPickerField(null);
+    setShowOtherComposer(null);
 
     const basicInfoFields: Array<Exclude<PickerField, null>> = ['name', 'microchip', 'petType', 'gender', 'breed', 'coatPattern', 'birthDate'];
     const requiresConfirm = basicInfoFields.includes(field);
@@ -550,6 +580,21 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
       };
     });
     setOtherSurgeryText('');
+    setShowOtherComposer(null);
+  };
+
+  const addOtherAllergy = () => {
+    const value = otherAllergyText.trim();
+    if (!value) return;
+    setDraft((prev) => {
+      if (prev.allergiesLog.some((a) => a.category.toLowerCase() === value.toLowerCase())) return prev;
+      return {
+        ...prev,
+        allergiesLog: [...prev.allergiesLog, { category: value, date: toBirthDateIso(birthPicker), severity: 'medium', status: 'active' } as AllergyRecord],
+      };
+    });
+    setOtherAllergyText('');
+    setShowOtherComposer(null);
   };
 
   const addOtherDiabetes = () => {
@@ -563,6 +608,7 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
       };
     });
     setOtherDiabetesText('');
+    setShowOtherComposer(null);
   };
 
   const vaccineSummary = draft.vaccinations.length === 0 ? 'None selected' : String(draft.vaccinations.length) + ' selected';
@@ -888,6 +934,57 @@ export default function PetEditScreen({ pet, onBack, onSaved, isNewPet = false, 
                       </Pressable>
                     );
                   })}
+
+                  {showOtherComposer === 'surgeries' ? (
+                    <View style={styles.otherWrap}>
+                      <TextInput
+                        value={otherSurgeryText}
+                        onChangeText={setOtherSurgeryText}
+                        placeholder={isTr ? 'Ameliyat adını yaz' : 'Enter surgery name'}
+                        placeholderTextColor="rgba(45,45,45,0.35)"
+                        returnKeyType="done"
+                        onSubmitEditing={addOtherSurgery}
+                        style={styles.otherInput}
+                      />
+                      <Pressable style={styles.otherBtn} onPress={addOtherSurgery}>
+                        <Text style={styles.otherBtnText}>{isTr ? 'Ekle' : 'Add'}</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+
+                  {showOtherComposer === 'allergies' ? (
+                    <View style={styles.otherWrap}>
+                      <TextInput
+                        value={otherAllergyText}
+                        onChangeText={setOtherAllergyText}
+                        placeholder={isTr ? 'Alerji tipini yaz' : 'Enter allergy type'}
+                        placeholderTextColor="rgba(45,45,45,0.35)"
+                        returnKeyType="done"
+                        onSubmitEditing={addOtherAllergy}
+                        style={styles.otherInput}
+                      />
+                      <Pressable style={styles.otherBtn} onPress={addOtherAllergy}>
+                        <Text style={styles.otherBtnText}>{isTr ? 'Ekle' : 'Add'}</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+
+                  {showOtherComposer === 'diabetes' ? (
+                    <View style={styles.otherWrap}>
+                      <TextInput
+                        value={otherDiabetesText}
+                        onChangeText={setOtherDiabetesText}
+                        placeholder={isTr ? 'Diyabet tipini yaz' : 'Enter diabetes type'}
+                        placeholderTextColor="rgba(45,45,45,0.35)"
+                        returnKeyType="done"
+                        onSubmitEditing={addOtherDiabetes}
+                        style={styles.otherInput}
+                      />
+                      <Pressable style={styles.otherBtn} onPress={addOtherDiabetes}>
+                        <Text style={styles.otherBtnText}>{isTr ? 'Ekle' : 'Add'}</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
                 </ScrollView>
               )}
             </Pressable>

@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import {
@@ -8,6 +8,7 @@ import {
   KeyboardAvoidingView,
   LayoutAnimation,
   UIManager,
+  Image,
   Modal,
   PanResponder,
   Platform,
@@ -24,6 +25,7 @@ import Svg, { Circle, Line, Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import DateTimePicker, { type DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useLocale } from '../hooks/useLocale';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import { getWording } from '../lib/wording';
@@ -31,6 +33,7 @@ import ScreenStateCard, { type ScreenStateMode } from '../components/ScreenState
 import type { VetVisitReasonCategory } from '../lib/healthMvpModel';
 import StickyBlurTopBar, { getStickyHeaderContentTop } from '../components/StickyBlurTopBar';
 import PullRefreshIndicator from '../components/PullRefreshIndicator';
+const vetVisitsHeaderLogo = require('../assets/illustrations/vetvisits-logo.png');
 
 export type VisitActionType = 'vaccine' | 'diagnosis' | 'procedure' | 'test' | 'prescription';
 type ReminderPreset = 'same_day' | 'one_day_before' | 'custom';
@@ -100,17 +103,65 @@ type Region = {
   longitudeDelta: number;
 };
 
+function toYmdLocal(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseFlexibleDateToYmd(value: string) {
+  const raw = value.trim();
+  if (!raw) return null;
+
+  const ymd = raw.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/);
+  if (ymd) {
+    const year = Number(ymd[1]);
+    const month = Number(ymd[2]);
+    const day = Number(ymd[3]);
+    const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+    if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) {
+      return toYmdLocal(date);
+    }
+    return null;
+  }
+
+  const dmy = raw.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const month = Number(dmy[2]);
+    const year = Number(dmy[3]);
+    const date = new Date(year, month - 1, day, 12, 0, 0, 0);
+    if (date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day) {
+      return toYmdLocal(date);
+    }
+    return null;
+  }
+
+  const fallback = new Date(raw);
+  if (!Number.isFinite(fallback.getTime())) return null;
+  return toYmdLocal(fallback);
+}
+
+function getVisitYmd(item: VisitItem) {
+  const source = (item.rawDate && item.rawDate.trim().length > 0 ? item.rawDate : item.date).trim();
+  if (!source) return null;
+  return parseFlexibleDateToYmd(source) ?? source.slice(0, 10);
+}
+
 let NativeMapView: React.ComponentType<any> | null = null;
 let NativeMarker: React.ComponentType<any> | null = null;
+let NativeMapInitError: string | null = null;
 const IS_EXPO_GO_RUNTIME = Constants.appOwnership === 'expo';
 
 try {
   const ReactNativeMaps = require('react-native-maps');
   NativeMapView = ReactNativeMaps.default;
   NativeMarker = ReactNativeMaps.Marker;
-} catch {
+} catch (error) {
   NativeMapView = null;
   NativeMarker = null;
+  NativeMapInitError = error instanceof Error ? error.message : 'unknown-map-init-error';
 }
 
 type ClinicSuggestion = {
@@ -169,6 +220,54 @@ function dedupeClinicSuggestions(items: ClinicSuggestion[]) {
     seen.add(key);
     return true;
   });
+}
+
+function getStaticMapZoom(region: Region) {
+  const maxDelta = Math.max(region.latitudeDelta, region.longitudeDelta);
+  if (maxDelta <= 0.008) return 15;
+  if (maxDelta <= 0.02) return 14;
+  if (maxDelta <= 0.05) return 13;
+  return 12;
+}
+
+function buildStaticClinicMapUrl({
+  region,
+  clinics,
+  selectedClinic,
+  userCoords,
+}: {
+  region: Region;
+  clinics: ClinicSuggestion[];
+  selectedClinic: ClinicSuggestion | null;
+  userCoords: { latitude: number; longitude: number } | null;
+}) {
+  if (!GOOGLE_MAPS_WEB_API_KEY) return null;
+
+  const params = new URLSearchParams({
+    center: `${region.latitude},${region.longitude}`,
+    zoom: String(getStaticMapZoom(region)),
+    size: '1000x500',
+    scale: '2',
+    maptype: 'roadmap',
+    key: GOOGLE_MAPS_WEB_API_KEY,
+  });
+
+  params.append('style', 'feature:poi|visibility:off');
+  params.append('style', 'feature:transit|visibility:off');
+
+  clinics.slice(0, 12).forEach((clinic) => {
+    const selected = selectedClinic?.id === clinic.id;
+    const marker = selected
+      ? `size:mid|color:0x47664a|${clinic.latitude},${clinic.longitude}`
+      : `size:small|color:0x7f9a70|${clinic.latitude},${clinic.longitude}`;
+    params.append('markers', marker);
+  });
+
+  if (userCoords) {
+    params.append('markers', `size:mid|color:0x1f6fff|${userCoords.latitude},${userCoords.longitude}`);
+  }
+
+  return `https://maps.googleapis.com/maps/api/staticmap?${params.toString()}`;
 }
 
 async function fetchNearbyClinicSuggestions(latitude: number, longitude: number, locale: 'en' | 'tr') {
@@ -267,7 +366,7 @@ async function fetchSearchClinicSuggestions(query: string, locale: 'en' | 'tr', 
   return dedupeClinicSuggestions(items.filter((item): item is ClinicSuggestion => item != null));
 }
 
-function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethoscope' | 'wallet' | 'clinic' | 'file' | 'plus' | 'pulse' | 'edit' | 'check' | 'camera' | 'map'; size?: number; color?: string }) {
+function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethoscope' | 'wallet' | 'clinic' | 'file' | 'plus' | 'pulse' | 'edit' | 'check' | 'camera' | 'map' | 'calendar'; size?: number; color?: string }) {
   if (kind === 'edit') {
     return (
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -356,6 +455,14 @@ function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethosc
     );
   }
 
+  if (kind === 'calendar') {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path d="M7.2 5.8V8M16.8 5.8V8M5.8 9H18.2M7 19H17C18.1 19 19 18.1 19 17V8C19 6.9 18.1 6 17 6H7C5.9 6 5 6.9 5 8V17C5 18.1 5.9 19 7 19Z" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    );
+  }
+
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M12 6V18M6 12H18" stroke={color} strokeWidth={2.1} strokeLinecap="round" />
@@ -365,7 +472,7 @@ function Icon({ kind, size = 18, color = '#7a7a7a' }: { kind: 'back' | 'stethosc
 
 
 const MONTHS_EN = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-const MONTHS_TR = ['OCA','ÅUB','MAR','NÄ°S','MAY','HAZ','TEM','AÄU','EYL','EKÄ°','KAS','ARA'];
+const MONTHS_TR = ['OCA','ŞUB','MAR','NİS','MAY','HAZ','TEM','AĞU','EYL','EKİ','KAS','ARA'];
 
 function VisitCard({
   item,
@@ -377,7 +484,7 @@ function VisitCard({
 }: {
   item: VisitItem;
   isTr: boolean;
-  tone: 'upcoming' | 'completed' | 'canceled';
+  tone: 'upcoming' | 'completed' | 'canceled' | 'overdue';
   onPress?: () => void;
   onEdit?: () => void;
   onOpenDocuments?: () => void;
@@ -385,46 +492,54 @@ function VisitCard({
   const isoDate = item.rawDate ?? '';
   const parts = isoDate.split('-');
   const monthIdx = parseInt(parts[1] ?? '1', 10) - 1;
-  const day = parts[2] ?? 'â€”';
-  const mon = (isTr ? MONTHS_TR : MONTHS_EN)[monthIdx] ?? 'â€”';
-  const year = parts[0]?.slice(2) ?? 'â€”';
+  const day = parts[2] ?? '—';
+  const mon = (isTr ? MONTHS_TR : MONTHS_EN)[monthIdx] ?? '—';
+  const year = parts[0]?.slice(2) ?? '—';
   const isUpcoming = tone === 'upcoming';
   const isCanceled = tone === 'canceled';
+  const isOverdue = tone === 'overdue';
   const hasAmount = item.amount != null;
-  const dateTone = isUpcoming
-    ? styles.visitCardDateColUpcoming
-    : isCanceled
-      ? styles.visitCardDateColCanceled
-      : styles.visitCardDateColCompleted;
-  const monTone = isUpcoming
-    ? styles.visitCardMonUpcoming
-    : isCanceled
-      ? styles.visitCardMonCanceled
-      : styles.visitCardMonCompleted;
-  const dayTone = isUpcoming
-    ? styles.visitCardDayUpcoming
-    : isCanceled
-      ? styles.visitCardDayCanceled
-      : styles.visitCardDayCompleted;
-  const editBtnTone = isUpcoming
-    ? styles.visitCardEditBtnUpcoming
-    : isCanceled
-      ? styles.visitCardEditBtnCanceled
-      : styles.visitCardEditBtnCompleted;
-  const editIconColor = isUpcoming ? '#4b6d4d' : isCanceled ? '#7d604e' : '#55635a';
+  const dateTone = isOverdue
+    ? styles.visitCardDateColOverdue
+    : isUpcoming
+      ? styles.visitCardDateColUpcoming
+      : isCanceled
+        ? styles.visitCardDateColCanceled
+        : styles.visitCardDateColCompleted;
+  const monTone = isOverdue
+    ? styles.visitCardMonOverdue
+    : isUpcoming
+      ? styles.visitCardMonUpcoming
+      : isCanceled
+        ? styles.visitCardMonCanceled
+        : styles.visitCardMonCompleted;
+  const dayTone = isOverdue
+    ? styles.visitCardDayOverdue
+    : isUpcoming
+      ? styles.visitCardDayUpcoming
+      : isCanceled
+        ? styles.visitCardDayCanceled
+        : styles.visitCardDayCompleted;
+  const editBtnTone = isOverdue
+    ? styles.visitCardEditBtnOverdue
+    : isUpcoming
+      ? styles.visitCardEditBtnUpcoming
+      : isCanceled
+        ? styles.visitCardEditBtnCanceled
+        : styles.visitCardEditBtnCompleted;
+  const editIconColor = isOverdue ? '#9a7220' : isUpcoming ? '#4b6d4d' : isCanceled ? '#7d604e' : '#55635a';
 
   return (
     <Pressable
       style={({ pressed }) => [
         styles.visitCardNew,
-        isUpcoming ? styles.visitCardUpcoming : null,
-        isCanceled ? styles.visitCardCanceled : styles.visitCardCompleted,
+        isOverdue ? styles.visitCardOverdue : isUpcoming ? styles.visitCardUpcoming : isCanceled ? styles.visitCardCanceled : styles.visitCardCompleted,
         pressed ? styles.visitCardPressed : null,
       ]}
       onPress={onPress}
       disabled={!onPress}
     >
-      <View style={[styles.visitCardSideAccent, isUpcoming ? styles.visitCardSideAccentUpcoming : null, isCanceled ? styles.visitCardSideAccentCanceled : styles.visitCardSideAccentCompleted]} />
+      <View style={[styles.visitCardSideAccent, isOverdue ? styles.visitCardSideAccentOverdue : isUpcoming ? styles.visitCardSideAccentUpcoming : isCanceled ? styles.visitCardSideAccentCanceled : styles.visitCardSideAccentCompleted]} />
       {/* Date column */}
       <View style={[styles.visitCardDateCol, dateTone]}>
         <Text style={[styles.visitCardMon, monTone]}>{mon}</Text>
@@ -438,7 +553,7 @@ function VisitCard({
       {/* Body */}
       <View style={styles.visitCardBody}>
         <Text style={styles.visitCardClinic} numberOfLines={1}>
-          {item.clinic || (isTr ? 'Veteriner KliniÄŸi' : 'Vet Clinic')}
+          {item.clinic || (isTr ? 'Veteriner Kliniği' : 'Vet Clinic')}
         </Text>
         <View style={styles.visitCardTitleRow}>
           {item.title ? (
@@ -454,13 +569,13 @@ function VisitCard({
         </View>
         {item.followUpContext ? (
           <Text style={styles.visitCardFollowUpCtx} numberOfLines={1}>
-            {`â†© ${item.followUpContext}`}
+            {`↩ ${item.followUpContext}`}
           </Text>
         ) : null}
         <View style={styles.visitCardMeta}>
           {isUpcoming ? (
             <View style={[styles.visitCardPlannedBadge, styles.visitCardPlannedBadgeUpcoming]}>
-              <Text style={[styles.visitCardPlannedText, styles.visitCardPlannedTextUpcoming]}>{isTr ? 'PlanlandÄ±' : 'Planned'}</Text>
+              <Text style={[styles.visitCardPlannedText, styles.visitCardPlannedTextUpcoming]}>{isTr ? 'Planlandı' : 'Planned'}</Text>
             </View>
           ) : (
             <>
@@ -507,27 +622,104 @@ function StaticClinicMapPreview({
   clinics,
   isTr,
   isExpoGo,
+  initError,
+  region,
+  selectedClinic,
+  userCoords,
 }: {
   clinics: ClinicSuggestion[];
   isTr: boolean;
   isExpoGo: boolean;
+  initError?: string | null;
+  region: Region;
+  selectedClinic: ClinicSuggestion | null;
+  userCoords: { latitude: number; longitude: number } | null;
 }) {
+  const [staticMapFailed, setStaticMapFailed] = useState(false);
+  const staticMapUrl = useMemo(
+    () => buildStaticClinicMapUrl({ region, clinics, selectedClinic, userCoords }),
+    [region, clinics, selectedClinic, userCoords],
+  );
+
+  const latMin = region.latitude - region.latitudeDelta / 2;
+  const latMax = region.latitude + region.latitudeDelta / 2;
+  const lngMin = region.longitude - region.longitudeDelta / 2;
+  const lngMax = region.longitude + region.longitudeDelta / 2;
+
+  const mapPoints = clinics.slice(0, 20).map((clinic) => {
+    const latRange = Math.max(latMax - latMin, 0.0001);
+    const lngRange = Math.max(lngMax - lngMin, 0.0001);
+    const xRaw = ((clinic.longitude - lngMin) / lngRange) * 100;
+    const yRaw = (1 - (clinic.latitude - latMin) / latRange) * 100;
+    return {
+      id: clinic.id,
+      selected: selectedClinic?.id === clinic.id,
+      x: Math.max(7, Math.min(93, xRaw)),
+      y: Math.max(8, Math.min(92, yRaw)),
+    };
+  });
+
+  const userDot = userCoords
+    ? {
+        x: Math.max(7, Math.min(93, ((userCoords.longitude - lngMin) / Math.max(lngMax - lngMin, 0.0001)) * 100)),
+        y: Math.max(8, Math.min(92, (1 - (userCoords.latitude - latMin) / Math.max(latMax - latMin, 0.0001)) * 100)),
+      }
+    : null;
+
+  const helperText = isExpoGo
+    ? (isTr ? 'Expo Go fallback map preview' : 'Expo Go fallback map preview')
+    : (isTr ? 'Native map fallback preview' : 'Native map fallback preview');
+
   return (
     <View style={styles.clinicMapFallback}>
+      <View style={styles.staticClinicMap}>
+        {staticMapUrl && !staticMapFailed ? (
+          <View style={styles.staticClinicMapSurface}>
+            <Image
+              source={{ uri: staticMapUrl }}
+              style={styles.staticClinicMapImage}
+              resizeMode="cover"
+              onError={() => setStaticMapFailed(true)}
+            />
+            <View pointerEvents="none" style={styles.staticClinicMapFade} />
+            <View style={styles.staticClinicPreviewBadge}>
+              <Text style={styles.staticClinicPreviewBadgeText}>{helperText}</Text>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.staticClinicMapSurface}>
+            <View style={[styles.staticClinicMapTile, { top: -50, left: -12, backgroundColor: 'rgba(126,154,136,0.08)' }]} />
+            <View style={[styles.staticClinicMapTile, { top: 36, left: 128, backgroundColor: 'rgba(126,154,136,0.06)' }]} />
+            <View style={[styles.staticClinicMapTile, { top: 132, left: 24, backgroundColor: 'rgba(126,154,136,0.05)' }]} />
+            {mapPoints.map((point) => (
+              <View
+                key={point.id}
+                style={[
+                  styles.staticClinicMarkerAnchor,
+                  { left: `${point.x}%`, top: `${point.y}%` },
+                ]}
+              >
+                <View style={[styles.staticClinicMarker, point.selected ? styles.staticClinicMarkerSelected : null]} />
+              </View>
+            ))}
+            {userDot ? (
+              <View style={[styles.staticClinicUserDot, { left: `${userDot.x}%`, top: `${userDot.y}%`, marginLeft: -5, marginTop: -5 }]} />
+            ) : null}
+            <View pointerEvents="none" style={styles.staticClinicMapFade} />
+            <View style={styles.staticClinicPreviewBadge}>
+              <Text style={styles.staticClinicPreviewBadgeText}>{helperText}</Text>
+            </View>
+          </View>
+        )}
+      </View>
       <Text style={styles.clinicMapFallbackTitle}>
-        {isExpoGo
-          ? (isTr ? 'Expo Go icinde native harita kullanilamaz' : 'Native map is unavailable in Expo Go')
-          : (isTr ? 'Bu buildde native harita hazir degil' : 'Native map is not ready in this build')}
+        {isTr ? `${clinics.length} klinik onizlemede listelendi` : `${clinics.length} clinics shown in preview`}
       </Text>
-      <Text style={styles.clinicMapFallbackText}>
-        {isExpoGo
-          ? (isTr
-            ? `${clinics.length} klinik listede gosteriliyor. Harita onizlemesi icin development build acin.`
-            : `${clinics.length} clinics are available in the list. Use a development build for map preview.`)
-          : (isTr
-            ? `${clinics.length} klinik listede gosteriliyor. Harita icin uygulamayi yeniden build et.`
-            : `${clinics.length} clinics are available in the list. Rebuild app to enable map view.`)}
-      </Text>
+      {initError ? (
+        <Text style={styles.clinicMapFallbackHint}>
+          {isTr ? 'Native modul yuklenmedigi icin statik onizleme gosteriliyor.' : 'Native module is unavailable, so static preview is shown.'}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -541,7 +733,7 @@ function SectionHeader({
   title: string;
   subtitle?: string;
   count: number;
-  tone?: 'neutral' | 'success' | 'muted';
+  tone?: 'neutral' | 'success' | 'muted' | 'warn';
 }) {
   return (
     <View style={styles.sectionHeaderBlock}>
@@ -555,6 +747,7 @@ function SectionHeader({
             styles.sectionCountPill,
             tone === 'success' ? styles.sectionCountPillSuccess : null,
             tone === 'muted' ? styles.sectionCountPillMuted : null,
+            tone === 'warn' ? styles.sectionCountPillWarn : null,
           ]}
         >
           <Text
@@ -562,6 +755,7 @@ function SectionHeader({
               styles.sectionCountText,
               tone === 'success' ? styles.sectionCountTextSuccess : null,
               tone === 'muted' ? styles.sectionCountTextMuted : null,
+              tone === 'warn' ? styles.sectionCountTextWarn : null,
             ]}
           >
             {count}
@@ -601,6 +795,7 @@ export default function VetVisitsScreen({
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, []);
   const [visitDate, setVisitDate] = useState(today);
+  const [showVisitDatePicker, setShowVisitDatePicker] = useState(false);
   const [visitClinic, setVisitClinic] = useState('');
   const [visitReason, setVisitReason] = useState<VetVisitReasonCategory>('checkup');
   const [visitStatus, setVisitStatus] = useState<'planned' | 'completed' | 'canceled'>('completed');
@@ -663,15 +858,18 @@ export default function VetVisitsScreen({
   const clinicBackdropOpacity = useRef(new Animated.Value(0)).current;
   const clinicSheetHeightRef = useRef(560);
   const clinicDismissLock = useRef(false);
+  const visitClinicInputRef = useRef<TextInput | null>(null);
+  const visitAmountInputRef = useRef<TextInput | null>(null);
+  const visitNoteInputRef = useRef<TextInput | null>(null);
 
   const actionOrder: VisitActionType[] = ['vaccine', 'diagnosis', 'procedure', 'test', 'prescription'];
   const actionLabels: Record<VisitActionType, string> = isTr
     ? {
-      vaccine: 'AÅŸÄ±',
-      diagnosis: 'TanÄ±',
-      procedure: 'ProsedÃ¼r',
+      vaccine: 'Aşı',
+      diagnosis: 'Tanı',
+      procedure: 'Prosedür',
       test: 'Test',
-      prescription: 'ReÃ§ete',
+      prescription: 'Reçete',
     }
     : {
       vaccine: 'Vaccine',
@@ -688,35 +886,35 @@ export default function VetVisitsScreen({
         { value: 'dhpp', label: 'DHPP' },
         { value: 'bordetella', label: 'Bordetella' },
         { value: 'leptospirosis', label: 'Leptospirosis' },
-        { value: 'other', label: 'DiÄŸer' },
+        { value: 'other', label: 'Diğer' },
       ],
       diagnosis: [
         { value: 'allergy', label: 'Alerji' },
         { value: 'infection', label: 'Enfeksiyon' },
         { value: 'gastro', label: 'Gastrointestinal' },
         { value: 'dermatology', label: 'Dermatoloji' },
-        { value: 'other', label: 'DiÄŸer' },
+        { value: 'other', label: 'Diğer' },
       ],
       procedure: [
-        { value: 'neutering', label: 'KÄ±sÄ±rlaÅŸtÄ±rma' },
-        { value: 'dental_cleaning', label: 'DiÅŸ TemizliÄŸi' },
+        { value: 'neutering', label: 'Kısırlaştırma' },
+        { value: 'dental_cleaning', label: 'Diş Temizliği' },
         { value: 'minor_surgery', label: 'Minor Cerrahi' },
-        { value: 'wound_care', label: 'Yara BakÄ±mÄ±' },
-        { value: 'other', label: 'DiÄŸer' },
+        { value: 'wound_care', label: 'Yara Bakımı' },
+        { value: 'other', label: 'Diğer' },
       ],
       test: [
         { value: 'blood_test', label: 'Kan Testi' },
-        { value: 'fecal_test', label: 'DÄ±ÅŸkÄ± Testi' },
-        { value: 'xray', label: 'RÃ¶ntgen' },
+        { value: 'fecal_test', label: 'Dışkı Testi' },
+        { value: 'xray', label: 'Röntgen' },
         { value: 'ultrasound', label: 'Ultrason' },
-        { value: 'other', label: 'DiÄŸer' },
+        { value: 'other', label: 'Diğer' },
       ],
       prescription: [
         { value: 'antibiotic', label: 'Antibiyotik' },
         { value: 'anti_inflammatory', label: 'Anti-inflamatuar' },
         { value: 'antiparasitic', label: 'Antiparaziter' },
         { value: 'supplement', label: 'Takviye' },
-        { value: 'other', label: 'DiÄŸer' },
+        { value: 'other', label: 'Diğer' },
       ],
     }
     : {
@@ -760,11 +958,11 @@ export default function VetVisitsScreen({
   const reasonOptions: Array<{ value: VetVisitReasonCategory; label: string }> = isTr
     ? [
       { value: 'checkup', label: 'Kontrol' },
-      { value: 'vaccine', label: 'AÅŸÄ±' },
-      { value: 'illness', label: 'HastalÄ±k' },
+      { value: 'vaccine', label: 'Aşı' },
+      { value: 'illness', label: 'Hastalık' },
       { value: 'injury', label: 'Yaralanma' },
       { value: 'follow_up', label: 'Takip' },
-      { value: 'other', label: 'DiÄŸer' },
+      { value: 'other', label: 'Diğer' },
     ]
     : [
       { value: 'checkup', label: 'Checkup' },
@@ -819,6 +1017,23 @@ export default function VetVisitsScreen({
         afterClose?.();
       });
     });
+  };
+
+  const restoreClinicPickerSheet = () => {
+    Animated.parallel([
+      Animated.spring(clinicSheetTranslateY, {
+        toValue: 0,
+        damping: 30,
+        stiffness: 320,
+        mass: 0.95,
+        useNativeDriver: true,
+      }),
+      Animated.timing(clinicBackdropOpacity, {
+        toValue: 1,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+    ]).start();
   };
 
   const selectClinicSuggestion = (clinic: ClinicSuggestion) => {
@@ -904,49 +1119,26 @@ export default function VetVisitsScreen({
         gestureState.dy > 2
       ),
       onPanResponderMove: (_evt, gestureState) => {
-        if (gestureState.dy > 0) {
-          clinicSheetTranslateY.setValue(gestureState.dy);
-          clinicBackdropOpacity.setValue(Math.max(0, 1 - gestureState.dy / Math.max(clinicSheetHeightRef.current, 1)));
-        }
+        const rawDy = gestureState.dy;
+        const translateY = rawDy <= 0
+          ? rawDy * 0.14
+          : rawDy < 120
+            ? rawDy * 0.92
+            : 110 + (rawDy - 120) * 0.36;
+        clinicSheetTranslateY.setValue(translateY);
+        clinicBackdropOpacity.setValue(Math.max(0, 1 - translateY / Math.max(clinicSheetHeightRef.current * 0.72, 1)));
       },
       onPanResponderRelease: (_evt, gestureState) => {
-        if (gestureState.dy > 64 || gestureState.vy > 0.58) {
+        const shouldDismiss = gestureState.dy > 92 || gestureState.vy > 1.15;
+        if (shouldDismiss) {
           closeClinicPickerSheet();
           return;
         }
-        Animated.parallel([
-          Animated.spring(clinicSheetTranslateY, {
-            toValue: 0,
-            damping: 26,
-            stiffness: 360,
-            mass: 0.9,
-            useNativeDriver: true,
-          }),
-          Animated.timing(clinicBackdropOpacity, {
-            toValue: 1,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-        ]).start();
+        restoreClinicPickerSheet();
       },
       onPanResponderTerminationRequest: () => false,
       onShouldBlockNativeResponder: () => true,
-      onPanResponderTerminate: () => {
-        Animated.parallel([
-          Animated.spring(clinicSheetTranslateY, {
-            toValue: 0,
-            damping: 26,
-            stiffness: 360,
-            mass: 0.9,
-            useNativeDriver: true,
-          }),
-          Animated.timing(clinicBackdropOpacity, {
-            toValue: 1,
-            duration: 150,
-            useNativeDriver: true,
-          }),
-        ]).start();
-      },
+      onPanResponderTerminate: restoreClinicPickerSheet,
     }),
   ).current;
 
@@ -1029,6 +1221,7 @@ export default function VetVisitsScreen({
 
   const resetCreateForm = () => {
     setVisitDate(today);
+    setShowVisitDatePicker(false);
     setVisitClinic('');
     setVisitReason('checkup');
     setVisitStatus('completed');
@@ -1187,9 +1380,9 @@ export default function VetVisitsScreen({
 
   const reminderPresetOptions: Array<{ value: ReminderPreset; label: string }> = isTr
     ? [
-      { value: 'one_day_before', label: '1 gÃ¼n Ã¶nce' },
-      { value: 'same_day', label: 'AynÄ± gÃ¼n' },
-      { value: 'custom', label: 'Ã–zel tarih' },
+      { value: 'one_day_before', label: '1 gün önce' },
+      { value: 'same_day', label: 'Aynı gün' },
+      { value: 'custom', label: 'Özel tarih' },
     ]
     : [
       { value: 'one_day_before', label: '1 day before' },
@@ -1322,8 +1515,20 @@ export default function VetVisitsScreen({
     };
   }, [clinicPickerVisible, clinicSearchQuery, clinicUserCoords, isTr, locale]);
 
+  const visitDatePickerValue = useMemo(() => {
+    const ymd = parseFlexibleDateToYmd(visitDate) ?? today;
+    const parsed = new Date(`${ymd}T12:00:00`);
+    return Number.isFinite(parsed.getTime()) ? parsed : new Date(`${today}T12:00:00`);
+  }, [today, visitDate]);
+
+  const handleVisitDatePickerChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') setShowVisitDatePicker(false);
+    if (!selectedDate || !Number.isFinite(selectedDate.getTime())) return;
+    setVisitDate(toYmdLocal(selectedDate));
+  };
+
   const parseInputDate = (value: string) => {
-    const normalized = value.trim();
+    const normalized = parseFlexibleDateToYmd(value);
     if (!normalized) return null;
     const parsed = new Date(`${normalized}T12:00:00.000Z`);
     if (!Number.isFinite(parsed.getTime())) return null;
@@ -1389,8 +1594,8 @@ export default function VetVisitsScreen({
     const visitDateIso = parseInputDate(visitDate);
     if (!visitDateIso) {
       Alert.alert(
-        isTr ? 'GeÃ§ersiz tarih' : 'Invalid date',
-        isTr ? 'Tarihi YYYY-AA-GG formatÄ±nda girin.' : 'Please enter date as YYYY-MM-DD.',
+        isTr ? 'Geçersiz tarih' : 'Invalid date',
+        isTr ? 'Tarihi gecerli formatta girin (ornek: 2026-03-22 veya 22.03.2026).' : 'Enter a valid date (e.g. 2026-03-22 or 22/03/2026).',
       );
       return;
     }
@@ -1421,8 +1626,8 @@ export default function VetVisitsScreen({
     });
     if (hasInvalidStructuredSelection) {
       Alert.alert(
-        isTr ? 'Eksik seÃ§im' : 'Missing selection',
-        isTr ? 'SeÃ§ili iÅŸlemler iÃ§in kategori seÃ§in. DiÄŸer seÃ§tiyseniz kÄ±sa bir baÅŸlÄ±k yazÄ±n.' : 'Select a category for each chosen action. If you picked Other, add a short title.',
+        isTr ? 'Eksik seçim' : 'Missing selection',
+        isTr ? 'Seçili işlemler için kategori seçin. Diğer seçtiyseniz kısa bir başlık yazın.' : 'Select a category for each chosen action. If you picked Other, add a short title.',
       );
       return;
     }
@@ -1469,7 +1674,11 @@ export default function VetVisitsScreen({
     () => visitsData.filter((v) => (v.status === 'completed' || !v.status) && (v.rawDate ?? v.date) <= today),
     [visitsData, today],
   );
-  const plannedVisits = useMemo(() => visitsData.filter((v) => v.status !== 'canceled' && (v.rawDate ?? v.date) > today), [visitsData, today]);
+  const plannedVisits = useMemo(() => visitsData.filter((v) => v.status === 'planned' && (v.rawDate ?? v.date) > today), [visitsData, today]);
+  const overdueVisits = useMemo(
+    () => visitsData.filter((v) => v.status === 'planned' && (v.rawDate ?? v.date) <= today),
+    [visitsData, today],
+  );
   const visibleCompletedVisits = useMemo(
     () => showAllCompleted ? completedVisits : completedVisits.slice(0, 3),
     [completedVisits, showAllCompleted],
@@ -1483,22 +1692,22 @@ export default function VetVisitsScreen({
   const visitsCountText = isTr ? `${visitsData.length} Ziyaret` : `${visitsData.length} Visits`;
 
   const now = new Date();
-  const nowMs = now.getTime();
-  const currentYearStartMs = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0).getTime();
-  const prevYearSamePointMs = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
-  const prevYearStartMs = new Date(now.getFullYear() - 1, 0, 1, 0, 0, 0, 0).getTime();
-  const isSpendEligible = (item: VisitItem) => item.status !== 'planned' && item.status !== 'canceled' && (item.amount ?? 0) > 0;
+  const currentYearStartYmd = `${now.getFullYear()}-01-01`;
+  const prevYearStartYmd = `${now.getFullYear() - 1}-01-01`;
+  const prevYearSamePointYmd = toYmdLocal(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate(), 23, 59, 59, 999));
+  const isCompletedVisit = (item: VisitItem) => item.status === 'completed' || !item.status;
+  const isSpendEligible = (item: VisitItem) => isCompletedVisit(item) && (item.amount ?? 0) > 0;
   const annualEntries = visitsData.filter((item) => {
     if (!isSpendEligible(item)) return false;
-    const dateMs = parseVisitDateMs(item);
-    if (dateMs == null) return false;
-    return dateMs >= currentYearStartMs && dateMs <= nowMs;
+    const dateYmd = getVisitYmd(item);
+    if (!dateYmd) return false;
+    return dateYmd >= currentYearStartYmd && dateYmd <= today;
   });
   const prevYearEntries = visitsData.filter((item) => {
     if (!isSpendEligible(item)) return false;
-    const dateMs = parseVisitDateMs(item);
-    if (dateMs == null) return false;
-    return dateMs >= prevYearStartMs && dateMs <= prevYearSamePointMs;
+    const dateYmd = getVisitYmd(item);
+    if (!dateYmd) return false;
+    return dateYmd >= prevYearStartYmd && dateYmd <= prevYearSamePointYmd;
   });
   const annualAmount = annualEntries.reduce((sum, v) => sum + (v.amount ?? 0), 0);
   const prevYearAmount = prevYearEntries.reduce((sum, v) => sum + (v.amount ?? 0), 0);
@@ -1508,27 +1717,29 @@ export default function VetVisitsScreen({
     if (prevYearAmount <= 0 && annualAmount <= 0) return isTr ? 'BU YIL' : 'THIS YEAR';
     if (prevYearAmount <= 0) return isTr ? 'BU YIL' : 'THIS YEAR';
     const pct = Math.round(((annualAmount - prevYearAmount) / prevYearAmount) * 100);
-    const arrow = pct >= 0 ? 'â†‘' : 'â†“';
+    const arrow = pct >= 0 ? '↑' : '↓';
     return isTr
       ? `${arrow} %${Math.abs(pct)} GECEN YILA GORE`
       : `${arrow} ${Math.abs(pct)}% VS LAST YEAR`;
   })();
 
-  const totalCostText = annualAmount > 0 ? `${annualAmount.toLocaleString('tr-TR')} ${annualCurrency}` : copy.totalCost;
+  const totalCostText = annualAmount > 0
+    ? `${annualAmount.toLocaleString(locale === 'tr' ? 'tr-TR' : 'en-US')} ${annualCurrency}`
+    : copy.totalCost;
 
   const screenState = status;
   const showMainContent = screenState === 'ready';
   const showAddButton = screenState !== 'loading' && screenState !== 'error';
   const stateTitle = screenState === 'loading'
-    ? (isTr ? 'Ziyaretler yÃ¼kleniyor' : 'Loading vet visits')
+    ? (isTr ? 'Ziyaretler yükleniyor' : 'Loading vet visits')
     : screenState === 'empty'
-      ? (isTr ? 'HenÃ¼z ziyaret kaydÄ± yok' : 'No vet visits yet')
-      : (isTr ? 'Ziyaret kayÄ±tlarÄ± alÄ±namadÄ±' : 'Could not load vet visits');
+      ? (isTr ? 'Henüz ziyaret kaydı yok' : 'No vet visits yet')
+      : (isTr ? 'Ziyaret kayıtları alınamadı' : 'Could not load vet visits');
   const stateBody = screenState === 'loading'
-    ? (isTr ? 'GeÃ§miÅŸ kayÄ±tlar hazÄ±rlanÄ±yor, lÃ¼tfen bekleyin.' : 'Preparing your medical history, please wait.')
+    ? (isTr ? 'Geçmiş kayıtlar hazırlanıyor, lütfen bekleyin.' : 'Preparing your medical history, please wait.')
     : screenState === 'empty'
-      ? (isTr ? 'Ä°lk veteriner ziyaretinizi eklediÄŸinizde bu alan otomatik olarak dolacaktÄ±r.' : 'This area will fill automatically once your first visit is added.')
-      : (isTr ? 'BaÄŸlantÄ±yÄ± kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
+      ? (isTr ? 'İlk veteriner ziyaretinizi eklediğinizde bu alan otomatik olarak dolacaktır.' : 'This area will fill automatically once your first visit is added.')
+      : (isTr ? 'Bağlantıyı kontrol edip tekrar deneyin.' : 'Please check your connection and try again.');
 
   const swipePanResponder = useEdgeSwipeBack({
     onBack,
@@ -1574,15 +1785,39 @@ export default function VetVisitsScreen({
 
         {showMainContent ? (
           <>
-            {/* â”€â”€ Upcoming visits â”€â”€ */}
-            {plannedVisits.length > 0 ? (
+            {/* �� Overdue / needs-update visits �� */}
+            {overdueVisits.length > 0 ? (
               <>
                 <SectionHeader
-                  title={isTr ? 'Yaklasan ziyaretler' : 'Upcoming visits'}
-                  subtitle={isTr ? 'Planli veteriner randevulari' : 'Scheduled clinic appointments'}
-                  count={plannedVisits.length}
-                  tone="success"
+                  title={isTr ? 'Sonu� bekleniyor' : 'Needs update'}
+                  subtitle={isTr ? 'Planl� ama sonu�lanmam�� ziyaretler' : 'Planned visits that passed without a result'}
+                  count={overdueVisits.length}
+                  tone="warn"
                 />
+                {overdueVisits.map((item) => (
+                  <VisitCard
+                    key={item.id}
+                    item={item}
+                    isTr={isTr}
+                    tone="overdue"
+                    onPress={() => setDetailItem(item)}
+                    onEdit={() => openEditModal(item)}
+                  />
+                ))}
+              </>
+            ) : null}
+
+            {/* ── Upcoming visits ── */}
+            {plannedVisits.length > 0 ? (
+              <>
+                <View style={overdueVisits.length > 0 ? styles.sectionGap : null}>
+                  <SectionHeader
+                    title={isTr ? 'Yaklasan ziyaretler' : 'Upcoming visits'}
+                    subtitle={isTr ? 'Planli veteriner randevulari' : 'Scheduled clinic appointments'}
+                    count={plannedVisits.length}
+                    tone="success"
+                  />
+                </View>
                 {plannedVisits.map((item) => (
                   <VisitCard
                     key={item.id}
@@ -1596,10 +1831,10 @@ export default function VetVisitsScreen({
               </>
             ) : null}
 
-            {/* â”€â”€ Completed visits â”€â”€ */}
+            {/* ── Completed visits ── */}
             {completedVisits.length > 0 ? (
               <>
-                <View style={plannedVisits.length > 0 ? styles.sectionGap : null}>
+                <View style={(plannedVisits.length > 0 || overdueVisits.length > 0) ? styles.sectionGap : null}>
                   <SectionHeader
                     title={isTr ? 'Tamamlanan ziyaretler' : 'Completed visits'}
                     subtitle={isTr ? 'Son islemler' : 'Latest care'}
@@ -1638,7 +1873,7 @@ export default function VetVisitsScreen({
               </>
             ) : null}
 
-            {/* â”€â”€ Canceled visits â”€â”€ */}
+            {/* ── Canceled visits ── */}
             {canceledVisits.length > 0 ? (
               <>
                 <View style={styles.sectionGap}>
@@ -1680,7 +1915,7 @@ export default function VetVisitsScreen({
               </>
             ) : null}
 
-            {/* â”€â”€ Stats grid â”€â”€ */}
+            {/* ── Stats grid ── */}
             {visitsData.length > 0 ? (
               <View style={styles.statsGrid}>
                 <View style={styles.statGridCard}>
@@ -1689,9 +1924,9 @@ export default function VetVisitsScreen({
                   <Text style={[styles.statGridSub, annualAmount !== prevYearAmount && prevYearAmount > 0 ? styles.statGridSubGreen : null]}>{yearChangeLabel}</Text>
                 </View>
                 <View style={styles.statGridCard}>
-                  <Text style={styles.statGridLabel}>{isTr ? 'TOPLAM ZÄ°YARET' : 'TOTAL VISITS'}</Text>
+                  <Text style={styles.statGridLabel}>{isTr ? 'TOPLAM ZİYARET' : 'TOTAL VISITS'}</Text>
                   <Text style={styles.statGridValue}>{String(visitsData.length)}</Text>
-                  <Text style={styles.statGridSub}>{isTr ? 'KATILIMDAN BERÄ°' : 'SINCE JOINING'}</Text>
+                  <Text style={styles.statGridSub}>{isTr ? 'KATILIMDAN BERİ' : 'SINCE JOINING'}</Text>
                 </View>
               </View>
             ) : null}
@@ -1702,7 +1937,7 @@ export default function VetVisitsScreen({
             title={stateTitle}
             body={stateBody}
             actionLabel={screenState === 'error' ? (isTr ? 'Tekrar Dene' : 'Retry') : screenState === 'empty' ? (isTr ? 'Ziyaret Ekle' : 'Add Visit') : undefined}
-            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'LÃ¼tfen kÄ±sa bir sÃ¼re sonra tekrar deneyin.' : 'Please try again in a moment.'))) : screenState === 'empty' ? (onAddVisit ?? (() => Alert.alert(isTr ? 'Yeni Ziyaret' : 'New Visit', isTr ? 'Ilk ziyareti ekleyerek bu alani doldurun.' : 'Add your first visit to populate this area.'))) : undefined}
+            onAction={screenState === 'error' ? (onRetry ?? (() => Alert.alert(isTr ? 'Tekrar Dene' : 'Retry', isTr ? 'Lütfen kısa bir süre sonra tekrar deneyin.' : 'Please try again in a moment.'))) : screenState === 'empty' ? (onAddVisit ?? (() => Alert.alert(isTr ? 'Yeni Ziyaret' : 'New Visit', isTr ? 'Ilk ziyareti ekleyerek bu alani doldurun.' : 'Add your first visit to populate this area.'))) : undefined}
           />
         )}
       </Animated.ScrollView>
@@ -1711,9 +1946,14 @@ export default function VetVisitsScreen({
         title={isTr ? 'VETERINER ZIYARETLERI' : 'VET VISITS'}
         topInset={topInset}
         scrollY={scrollY}
+        titleVariant="hub"
         titleColor="#2f352f"
         overlayColors={['rgba(63,93,71,0.56)', 'rgba(63,93,71,0.38)', 'rgba(63,93,71,0.18)', 'rgba(63,93,71,0)']}
         borderColor="rgba(49,73,56,0.24)"
+        centerLogoSource={vetVisitsHeaderLogo}
+        centerLogoWidth={102}
+        centerLogoHeight={102}
+        centerLogoOffsetY={-8}
         leftSlot={(
           <Pressable style={styles.backBtn} onPress={onBack}>
             <Icon kind="back" size={22} color="#5d605a" />
@@ -1736,14 +1976,14 @@ export default function VetVisitsScreen({
         ) : undefined}
       />
 
-      {/* â”€â”€ Visit Detail Sheet â”€â”€ */}
+      {/* ── Visit Detail Sheet ── */}
       <Modal
         visible={detailItem !== null}
         transparent
         animationType="none"
         onRequestClose={() => closeDetailSheet()}
       >
-        <View style={styles.detailBackdrop} {...detailSheetPanResponder.panHandlers}>
+        <View style={styles.detailBackdrop}>
           <Animated.View pointerEvents="none" style={[styles.detailBackdropTint, { opacity: detailBackdropOpacity }]} />
           <Pressable style={StyleSheet.absoluteFillObject} onPress={() => closeDetailSheet()} />
           <Animated.View
@@ -1751,6 +1991,7 @@ export default function VetVisitsScreen({
               styles.detailSheet,
               { transform: [{ translateY: detailSheetTranslateY }] },
             ]}
+            {...detailSheetPanResponder.panHandlers}
             onLayout={(e) => { detailSheetHeightRef.current = e.nativeEvent.layout.height; }}
           >
             <View style={styles.detailHandleWrap}>
@@ -1760,7 +2001,7 @@ export default function VetVisitsScreen({
               <Pressable onPress={() => closeDetailSheet()} hitSlop={12} style={styles.detailSideBtn}>
                 <Text style={styles.detailCloseTxt}>{isTr ? 'Kapat' : 'Close'}</Text>
               </Pressable>
-              <Text style={styles.detailHeaderTitle}>{isTr ? 'Ziyaret DetayÄ±' : 'Visit Detail'}</Text>
+              <Text style={styles.detailHeaderTitle}>{isTr ? 'Ziyaret Detayı' : 'Visit Detail'}</Text>
               {detailItem && onEditVisit ? (
                 <Pressable
                   hitSlop={12}
@@ -1772,7 +2013,7 @@ export default function VetVisitsScreen({
                     });
                   }}
                 >
-                  <Text style={styles.detailEditTxt}>{isTr ? 'DÃ¼zenle' : 'Edit'}</Text>
+                  <Text style={styles.detailEditTxt}>{isTr ? 'Düzenle' : 'Edit'}</Text>
                 </Pressable>
               ) : (
                 <View style={styles.detailSideBtn} />
@@ -1785,14 +2026,14 @@ export default function VetVisitsScreen({
                 const isoDate = d.rawDate ?? '';
                 const parts = isoDate.split('-');
                 const monthIdx = parseInt(parts[1] ?? '1', 10) - 1;
-                const day = parts[2] ?? 'â€”';
-                const mon = (isTr ? MONTHS_TR : MONTHS_EN)[monthIdx] ?? 'â€”';
-                const year = parts[0] ?? 'â€”';
+                const day = parts[2] ?? '—';
+                const mon = (isTr ? MONTHS_TR : MONTHS_EN)[monthIdx] ?? '—';
+                const year = parts[0] ?? '—';
                 const statusLabel = d.status === 'planned'
-                  ? (isTr ? 'PlanlandÄ±' : 'Planned')
+                  ? (isTr ? 'Planlandı' : 'Planned')
                   : d.status === 'canceled'
-                    ? (isTr ? 'Ä°ptal' : 'Canceled')
-                    : (isTr ? 'TamamlandÄ±' : 'Completed');
+                    ? (isTr ? 'İptal' : 'Canceled')
+                    : (isTr ? 'Tamamlandı' : 'Completed');
                 const statusColor = d.status === 'canceled' ? '#a73b21' : d.status === 'planned' ? '#9b6400' : '#416d49';
                 const statusBg = d.status === 'canceled' ? '#fde8e3' : d.status === 'planned' ? '#fdf2dd' : '#eaf4ec';
                 return (
@@ -1808,7 +2049,7 @@ export default function VetVisitsScreen({
                       <View style={styles.detailInfoRow}>
                         <Icon kind="clinic" size={15} color="#7a7c78" />
                         <Text style={styles.detailInfoLabel}>{isTr ? 'Klinik' : 'Clinic'}</Text>
-                        <Text style={styles.detailInfoValue}>{d.clinic || (isTr ? 'Veteriner KliniÄŸi' : 'Vet Clinic')}</Text>
+                        <Text style={styles.detailInfoValue}>{d.clinic || (isTr ? 'Veteriner Kliniği' : 'Vet Clinic')}</Text>
                       </View>
                       <View style={[styles.detailInfoRow, styles.detailInfoRowBorder]}>
                         <Icon kind="check" size={15} color="#7a7c78" />
@@ -1906,36 +2147,87 @@ export default function VetVisitsScreen({
         <View style={styles.modalOverlay}>
           <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalKeyboardWrap}>
             <View style={styles.modalCard}>
-              <Text style={styles.modalTitle}>{editingVisitId ? (isTr ? 'Ziyareti DÃ¼zenle' : 'Edit Visit') : (isTr ? 'Veteriner Ziyareti Ekle' : 'Create Vet Visit')}</Text>
+              <Text style={styles.modalTitle}>{editingVisitId ? (isTr ? 'Ziyareti Düzenle' : 'Edit Visit') : (isTr ? 'Veteriner Ziyareti Ekle' : 'Create Vet Visit')}</Text>
               <ScrollView style={styles.modalMainScroll} showsVerticalScrollIndicator={false}>
                 <View style={styles.modalSection}>
                   <Text style={styles.modalSectionTitle}>{isTr ? 'Ziyaret Bilgisi' : 'Visit info'}</Text>
                   <Text style={styles.modalHelperText}>
-                    {isTr ? 'Veteriner gÃ¶rÃ¼ÅŸmesinin tarihini ve ana nedenini seÃ§in.' : 'Set the encounter date and the primary reason for this visit.'}
+                    {isTr ? 'Veteriner görüşmesinin tarihini ve ana nedenini seçin.' : 'Set the encounter date and the primary reason for this visit.'}
                   </Text>
 
-                  <Text style={styles.modalLabel}>{isTr ? 'Tarih (YYYY-AA-GG)' : 'Date (YYYY-MM-DD)'}</Text>
-                  <TextInput
-                    style={[styles.modalInput, focusedField === 'visitDate' ? styles.modalInputFocused : null]}
-                    value={visitDate}
-                    onChangeText={setVisitDate}
-                    placeholder="2026-03-22"
-                    placeholderTextColor="#a4a4a4"
-                    autoCapitalize="none"
-                    onFocus={() => setFocusedField('visitDate')}
-                    onBlur={() => setFocusedField(null)}
-                  />
+                  <Text style={styles.modalLabel}>{isTr ? 'Tarih (serbest giri� + takvim)' : 'Date (free write + calendar)'}</Text>
+                  <View style={[styles.inputWithIconRow, focusedField === 'visitDate' ? styles.modalInputFocused : null]}>
+                    <View style={styles.inputLeadIconWrap}>
+                      <Icon kind="calendar" size={14} color="#6f7771" />
+                    </View>
+                    <TextInput
+                      style={styles.inputWithIconField}
+                      value={visitDate}
+                      onChangeText={setVisitDate}
+                      placeholder="2026-03-22"
+                      placeholderTextColor="#a4a4a4"
+                      autoCapitalize="none"
+                      returnKeyType="next"
+                      onSubmitEditing={() => visitClinicInputRef.current?.focus()}
+                      onFocus={() => {
+                        setFocusedField('visitDate');
+                        setShowVisitDatePicker(true);
+                      }}
+                      onBlur={() => {
+                        const normalized = parseFlexibleDateToYmd(visitDate);
+                        if (normalized) setVisitDate(normalized);
+                        setFocusedField(null);
+                      }}
+                    />
+                    <Pressable style={styles.inputTrailBtn} onPress={() => setShowVisitDatePicker((prev) => !prev)}>
+                      <Icon kind="calendar" size={16} color="#47664a" />
+                    </Pressable>
+                  </View>
+                  {showVisitDatePicker ? (
+                    <View style={styles.inlineDatePickerCard}>
+                      <DateTimePicker
+                        value={visitDatePickerValue}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                        onChange={handleVisitDatePickerChange}
+                      />
+                      {Platform.OS === 'ios' ? (
+                        <Pressable style={styles.inlineDatePickerDoneBtn} onPress={() => setShowVisitDatePicker(false)}>
+                          <Text style={styles.inlineDatePickerDoneText}>{isTr ? 'Tamam' : 'Done'}</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ) : null}
 
-                  <Text style={styles.modalLabel}>{isTr ? 'Klinik (opsiyonel)' : 'Clinic (optional)'}</Text>
-                  <TextInput
-                    style={[styles.modalInput, focusedField === 'visitClinic' ? styles.modalInputFocused : null]}
-                    value={visitClinic}
-                    onChangeText={handleClinicInputChange}
-                    placeholder={isTr ? 'Ã–rn: Harmony Vet Clinic' : 'e.g. Harmony Vet Clinic'}
-                    placeholderTextColor="#a4a4a4"
-                    onFocus={() => setFocusedField('visitClinic')}
-                    onBlur={() => setFocusedField(null)}
-                  />
+                  <Text style={styles.modalLabel}>{isTr ? 'Klinik (Maps)' : 'Clinic (Maps)'}</Text>
+                  <View style={[styles.inputWithIconRow, focusedField === 'visitClinic' ? styles.modalInputFocused : null]}>
+                    <View style={styles.inputLeadIconWrap}>
+                      <Icon kind="map" size={14} color={selectedClinic ? '#47664a' : '#6f7771'} />
+                    </View>
+                    <TextInput
+                      ref={visitClinicInputRef}
+                      style={styles.inputWithIconField}
+                      value={visitClinic}
+                      onChangeText={handleClinicInputChange}
+                      placeholder={isTr ? 'Haritadan secilen klinik burada gorunur' : 'Clinic selected from map appears here'}
+                      placeholderTextColor="#a4a4a4"
+                      returnKeyType="next"
+                      onSubmitEditing={() => visitAmountInputRef.current?.focus()}
+                      onFocus={() => setFocusedField('visitClinic')}
+                      onBlur={() => setFocusedField(null)}
+                    />
+                    <Pressable style={styles.inputTrailBtn} onPress={openClinicPicker}>
+                      <Icon kind="map" size={16} color="#47664a" />
+                    </Pressable>
+                  </View>
+                  <View style={styles.mapIndicatorRow}>
+                    <View style={[styles.mapIndicatorDot, selectedClinic ? styles.mapIndicatorDotActive : null]} />
+                    <Text style={styles.mapIndicatorText}>
+                      {selectedClinic
+                        ? (isTr ? 'Haritadan secildi' : 'Selected from map')
+                        : (isTr ? 'Haritadan klinik secmeniz onerilir' : 'Selecting clinic from map is recommended')}
+                    </Text>
+                  </View>
                   <View style={styles.clinicToolsRow}>
                     <Pressable style={styles.clinicPickerBtn} onPress={openClinicPicker}>
                       <Icon kind="map" size={14} color="#47664a" />
@@ -1961,15 +2253,18 @@ export default function VetVisitsScreen({
                     </View>
                   ) : null}
 
-                  <Text style={styles.modalLabel}>{isTr ? 'Ãœcret (opsiyonel)' : 'Cost (optional)'}</Text>
+                  <Text style={styles.modalLabel}>{isTr ? 'Ücret (opsiyonel)' : 'Cost (optional)'}</Text>
                   <View style={styles.amountRow}>
                     <TextInput
+                      ref={visitAmountInputRef}
                       style={[styles.modalInput, styles.amountInput, focusedField === 'visitAmount' ? styles.modalInputFocused : null]}
                       value={visitAmount}
                       onChangeText={setVisitAmount}
                       keyboardType="decimal-pad"
-                      placeholder={isTr ? 'Ã–rn: 1200' : 'e.g. 1200'}
+                      placeholder={isTr ? 'Örn: 1200' : 'e.g. 1200'}
                       placeholderTextColor="#a4a4a4"
+                      returnKeyType="next"
+                      onSubmitEditing={() => visitNoteInputRef.current?.focus()}
                       onFocus={() => setFocusedField('visitAmount')}
                       onBlur={() => setFocusedField(null)}
                     />
@@ -1985,10 +2280,10 @@ export default function VetVisitsScreen({
                   <View style={styles.chipsRow}>
                     {(['completed', 'planned', 'canceled'] as const).map((s) => {
                       const label = s === 'completed'
-                        ? (isTr ? 'TamamlandÄ±' : 'Completed')
+                        ? (isTr ? 'Tamamlandı' : 'Completed')
                         : s === 'planned'
-                          ? (isTr ? 'PlanlandÄ±' : 'Planned')
-                          : (isTr ? 'Ä°ptal Edildi' : 'Canceled');
+                          ? (isTr ? 'Planlandı' : 'Planned')
+                          : (isTr ? 'İptal Edildi' : 'Canceled');
                       return (
                         <Pressable
                           key={s}
@@ -2029,12 +2324,15 @@ export default function VetVisitsScreen({
 
                   <Text style={styles.modalLabel}>{isTr ? 'Not (opsiyonel)' : 'Note (optional)'}</Text>
                   <TextInput
+                    ref={visitNoteInputRef}
                     style={[styles.modalInput, styles.modalInputTall, focusedField === 'visitNote' ? styles.modalInputFocused : null]}
                     value={visitNote}
                     onChangeText={setVisitNote}
                     placeholder={isTr ? 'Muayene notu, oneriler, takip bilgisi...' : 'Clinical notes, recommendations, follow-up details...'}
                     placeholderTextColor="#a4a4a4"
                     multiline
+                    returnKeyType="next"
+                    onSubmitEditing={() => setFocusedField(null)}
                     onFocus={() => setFocusedField('visitNote')}
                     onBlur={() => setFocusedField(null)}
                   />
@@ -2326,7 +2624,7 @@ export default function VetVisitsScreen({
                   </View>
 
                   <View style={styles.clinicMapCard}>
-                    {NativeMapView && NativeMarker && !IS_EXPO_GO_RUNTIME ? (
+                    {NativeMapView && NativeMarker ? (
                       <NativeMapView
                         style={styles.clinicMap}
                         region={clinicRegion}
@@ -2351,6 +2649,10 @@ export default function VetVisitsScreen({
                         clinics={visibleClinicResults}
                         isTr={isTr}
                         isExpoGo={IS_EXPO_GO_RUNTIME}
+                        initError={NativeMapInitError}
+                        region={clinicRegion}
+                        selectedClinic={selectedClinic}
+                        userCoords={clinicUserCoords}
                       />
                     )}
                     {(clinicPickerBusy || clinicSearchBusy) ? (
@@ -2361,9 +2663,9 @@ export default function VetVisitsScreen({
                     ) : null}
                     <View pointerEvents="none" style={styles.clinicMapAttribution}>
                       <Text style={styles.clinicMapAttributionText}>
-                        {NativeMapView && NativeMarker && !IS_EXPO_GO_RUNTIME
+                        {NativeMapView && NativeMarker
                           ? (isTr ? 'Yerel harita onizlemesi' : 'Native map preview')
-                          : (isTr ? 'Native map gerekli' : 'Native map required')}
+                          : (isTr ? 'Statik harita onizlemesi' : 'Static map preview')}
                       </Text>
                     </View>
                   </View>
@@ -2468,7 +2770,7 @@ export default function VetVisitsScreen({
 }
 
 const styles = StyleSheet.create({
-  // â”€â”€ shell â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── shell ──────────────────────────────────────────────────────────────────
   screen: {
     flex: 1,
     backgroundColor: '#f6f4f0',
@@ -2487,7 +2789,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
 
-  // â”€â”€ header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── header ─────────────────────────────────────────────────────────────────
   headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2535,7 +2837,7 @@ const styles = StyleSheet.create({
     color: '#e9ffe6',
   },
 
-  // â”€â”€ section headers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── section headers ────────────────────────────────────────────────────────
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2584,6 +2886,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1ebe7',
     borderColor: 'rgba(122,99,85,0.14)',
   },
+  sectionCountPillWarn: {
+    backgroundColor: '#fdf3dc',
+    borderColor: 'rgba(180,140,50,0.18)',
+  },
   sectionCountText: {
     fontSize: 13,
     lineHeight: 15,
@@ -2596,6 +2902,9 @@ const styles = StyleSheet.create({
   sectionCountTextMuted: {
     color: '#7b6659',
   },
+  sectionCountTextWarn: {
+    color: '#8a6415',
+  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
@@ -2604,12 +2913,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 
-  // â”€â”€ completed visits list wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── completed visits list wrapper ────────────────────────────────────────
   completedList: {
     gap: 8,
   },
 
-  // â”€â”€ unified visit card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── unified visit card ────────────────────────────────────────────────────
   visitCardNew: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2642,6 +2951,9 @@ const styles = StyleSheet.create({
   visitCardSideAccentCanceled: {
     backgroundColor: '#ad836f',
   },
+  visitCardSideAccentOverdue: {
+    backgroundColor: '#c49a30',
+  },
   visitCardUpcoming: {
     backgroundColor: '#fbfdfb',
     borderColor: 'rgba(88,121,91,0.10)',
@@ -2653,6 +2965,10 @@ const styles = StyleSheet.create({
   visitCardCanceled: {
     backgroundColor: '#fdfaf8',
     borderColor: 'rgba(133,105,87,0.10)',
+  },
+  visitCardOverdue: {
+    backgroundColor: '#fdfbf3',
+    borderColor: 'rgba(180,140,50,0.13)',
   },
   visitCardPressed: {
     transform: [{ scale: 0.992 }],
@@ -2679,6 +2995,9 @@ const styles = StyleSheet.create({
   visitCardDateColCanceled: {
     backgroundColor: '#f8f4f1',
   },
+  visitCardDateColOverdue: {
+    backgroundColor: '#fdf7e6',
+  },
   visitCardMon: {
     fontSize: 11,
     fontWeight: '700',
@@ -2695,6 +3014,9 @@ const styles = StyleSheet.create({
   visitCardMonCanceled: {
     color: '#8a715f',
   },
+  visitCardMonOverdue: {
+    color: '#9a7820',
+  },
   visitCardDay: {
     fontSize: 24,
     fontWeight: '800',
@@ -2710,6 +3032,9 @@ const styles = StyleSheet.create({
   },
   visitCardDayCanceled: {
     color: '#4b3a30',
+  },
+  visitCardDayOverdue: {
+    color: '#5c3f0a',
   },
   visitCardYear: {
     fontSize: 11,
@@ -2881,8 +3206,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3ece8',
     borderColor: 'rgba(120,92,73,0.12)',
   },
+  visitCardEditBtnOverdue: {
+    backgroundColor: '#fdf4d8',
+    borderColor: 'rgba(180,140,50,0.16)',
+  },
 
-  // ── visit detail sheet ────────────────────────────────────────────────────
+  // �� visit detail sheet ����������������������������������������������������
   detailBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -3042,7 +3371,7 @@ const styles = StyleSheet.create({
     color: '#3b5a3f',
   },
 
-  // â”€â”€ view all history button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── view all history button ────────────────────────────────────────────────
   viewAllHistoryBtn: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -3058,7 +3387,7 @@ const styles = StyleSheet.create({
     color: '#47664a',
   },
 
-  // â”€â”€ stats bento grid â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── stats bento grid ───────────────────────────────────────────────────────
   statsGrid: {
     flexDirection: 'row',
     gap: 12,
@@ -3186,6 +3515,92 @@ const styles = StyleSheet.create({
   },
   modalInputTall: {
     minHeight: 56,
+  },
+  inputWithIconRow: {
+    minHeight: 44,
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  inputLeadIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    backgroundColor: '#f3f6f2',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inputWithIconField: {
+    flex: 1,
+    minHeight: 42,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#2d2d2d',
+    paddingHorizontal: 2,
+  },
+  inputTrailBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#edf4ed',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.12)',
+  },
+  inlineDatePickerCard: {
+    marginTop: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.14)',
+    backgroundColor: '#f8fbf7',
+    paddingHorizontal: 8,
+    paddingTop: 6,
+    paddingBottom: 8,
+  },
+  inlineDatePickerDoneBtn: {
+    alignSelf: 'flex-end',
+    marginTop: 4,
+    height: 30,
+    borderRadius: 9,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#edf4ed',
+    borderWidth: 1,
+    borderColor: 'rgba(71,102,74,0.14)',
+  },
+  inlineDatePickerDoneText: {
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '700',
+    color: '#47664a',
+  },
+  mapIndicatorRow: {
+    marginTop: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  mapIndicatorDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+    backgroundColor: '#b4bab3',
+  },
+  mapIndicatorDotActive: {
+    backgroundColor: '#4f8054',
+  },
+  mapIndicatorText: {
+    fontSize: 11,
+    lineHeight: 15,
+    color: '#6f756f',
+    fontWeight: '600',
   },
   attachmentComposerRow: {
     flexDirection: 'row',
@@ -3852,13 +4267,18 @@ const styles = StyleSheet.create({
   },
   clinicPickerSheet: {
     backgroundColor: '#f6f4f0',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
+    borderTopLeftRadius: 26,
+    borderTopRightRadius: 26,
     paddingHorizontal: 16,
     paddingTop: 14,
     paddingBottom: 20,
     minHeight: '78%',
     maxHeight: '86%',
+    shadowColor: '#000',
+    shadowOpacity: 0.12,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: -4 },
+    elevation: 18,
   },
   clinicPickerHandleWrap: {
     alignItems: 'center',
@@ -3866,10 +4286,10 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   clinicPickerHandle: {
-    width: 42,
-    height: 5,
+    width: 44,
+    height: 6,
     borderRadius: 999,
-    backgroundColor: 'rgba(65,73,68,0.26)',
+    backgroundColor: 'rgba(65,73,68,0.22)',
   },
   clinicPickerHeader: {
     flexDirection: 'row',
@@ -3954,6 +4374,14 @@ const styles = StyleSheet.create({
   },
   staticClinicMap: {
     flex: 1,
+    width: '100%',
+    overflow: 'hidden',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.05)',
+  },
+  staticClinicMapImage: {
+    width: '100%',
+    height: '100%',
   },
   staticClinicMapSurface: {
     flex: 1,
@@ -3982,6 +4410,11 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+  },
+  staticClinicMarkerAnchor: {
+    position: 'absolute',
+    marginLeft: -6,
+    marginTop: -6,
   },
   staticClinicMarkerSelected: {
     width: 16,
@@ -4034,6 +4467,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
     color: '#667068',
+    textAlign: 'center',
+  },
+  clinicMapFallbackHint: {
+    marginTop: 10,
+    fontSize: 11,
+    lineHeight: 16,
+    color: '#4b544d',
     textAlign: 'center',
   },
   clinicMapLoading: {
@@ -4149,3 +4589,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 });
+

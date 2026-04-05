@@ -1,7 +1,7 @@
 import React, { useMemo, useState, type ReactNode } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { ChevronRight, FileText, Files, FlaskConical, Image as ImageIcon, Paperclip, Pill } from 'lucide-react-native';
+import { ChevronRight, FileText, Files, FlaskConical, Image as ImageIcon, Paperclip, Pill, Search } from 'lucide-react-native';
 import { useEdgeSwipeBack } from '../hooks/useEdgeSwipeBack';
 import type { HealthDocumentItem, HealthDocumentType } from '../lib/healthDocumentsVault';
 import AppleTopBar from '../components/AppleTopBar';
@@ -37,16 +37,16 @@ function normalizeText(value: string) {
 
 function getTypeLabel(type: HealthDocumentType, locale: 'en' | 'tr') {
   if (type === 'lab') return locale === 'tr' ? 'Lab' : 'Lab';
-  if (type === 'prescription') return locale === 'tr' ? 'Recete' : 'Prescription';
-  if (type === 'image') return locale === 'tr' ? 'Gorsel' : 'Image';
+  if (type === 'prescription') return locale === 'tr' ? 'Reçete' : 'Prescription';
+  if (type === 'image') return locale === 'tr' ? 'Görsel' : 'Image';
   if (type === 'document') return locale === 'tr' ? 'Belge' : 'Document';
-  return locale === 'tr' ? 'Diger' : 'Other';
+  return locale === 'tr' ? 'Diğer' : 'Other';
 }
 
 function getSourceLabel(sourceType: HealthDocumentItem['sourceType'], locale: 'en' | 'tr') {
   return sourceType === 'vet_visit'
-    ? (locale === 'tr' ? 'Vet ziyareti' : 'Vet visit')
-    : (locale === 'tr' ? 'Saglik kaydi' : 'Health record');
+    ? (locale === 'tr' ? 'Veteriner ziyareti' : 'Vet visit')
+    : (locale === 'tr' ? 'Sağlık kaydı' : 'Health record');
 }
 
 function iconForType(type: HealthDocumentType) {
@@ -114,6 +114,7 @@ export default function DocumentsScreen({
         <StatusBar style="dark" />
         <AppleTopBar
           title={isTr ? 'Belgeler' : 'Documents'}
+          titleVariant="hub"
           onBack={onBack}
           backgroundColor="rgba(246, 244, 240, 0.66)"
           rightSlot={
@@ -128,24 +129,29 @@ export default function DocumentsScreen({
           showsVerticalScrollIndicator={false}
           scrollEnabled={!swipePan.isSwiping}
         >
-          <View style={styles.heroBlock}>
-            <Text style={styles.heroTitle}>{isTr ? 'Belge kasasi' : 'Document Vault'}</Text>
-            <Text style={styles.heroBody}>
-              {isTr
-                ? `${petName} icin lab, recete ve ziyaret eklerini kaynagina gore duzenli gosterir.`
-                : `Keeps ${petName}'s labs, prescriptions, and visit attachments organized by source.`}
-            </Text>
-          </View>
+          <View style={styles.introCard}>
+            <View style={styles.heroBlock}>
+              <Text style={styles.heroTitle}>{isTr ? 'Belge Kasası' : 'Document Vault'}</Text>
+              <Text style={styles.heroBody}>
+                {isTr
+                  ? `${petName} için lab, reçete ve ziyaret eklerini tek yerde düzenli tutar.`
+                  : `Keeps ${petName}'s labs, prescriptions, and visit attachments in one calm, tidy place.`}
+              </Text>
+            </View>
 
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder={isTr ? 'Belge veya not ara...' : 'Search documents or notes...'}
-            placeholderTextColor="#99a09a"
-            style={styles.searchInput}
-            autoCorrect={false}
-            autoCapitalize="none"
-          />
+            <View style={styles.searchShell}>
+              <Search size={16} color="#73817d" strokeWidth={2.2} />
+              <TextInput
+                value={query}
+                onChangeText={setQuery}
+                placeholder={isTr ? 'Belge veya not ara...' : 'Search documents or notes...'}
+                placeholderTextColor="#99a09a"
+                style={styles.searchInput}
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+            </View>
+          </View>
 
           {typeSummary.length > 0 ? (
             <View style={styles.summaryGrid}>
@@ -176,7 +182,7 @@ export default function DocumentsScreen({
                   {iconForType(highlightDocument.type)}
                 </View>
                 <View style={styles.featuredBody}>
-                  <Text style={styles.featuredEyebrow}>{isTr ? 'EN GUNCEL DOSYA' : 'LATEST FILE'}</Text>
+                  <Text style={styles.featuredEyebrow}>{isTr ? 'Son eklenen' : 'Latest file'}</Text>
                   <Text style={styles.featuredTitle} numberOfLines={2}>
                     {highlightDocument.title}
                   </Text>
@@ -195,7 +201,7 @@ export default function DocumentsScreen({
                   </Text>
                 ) : (
                   <Text style={styles.featuredNoteMuted}>
-                    {isTr ? 'Kayit acilmadan kaynagi net gorunur.' : 'Source context stays clear before opening.'}
+                    {isTr ? 'Kayıt açılmadan kaynağı net görünür.' : 'Source context stays clear before opening.'}
                   </Text>
                 )}
               </View>
@@ -205,7 +211,7 @@ export default function DocumentsScreen({
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
             {typeFilters.map((item) => {
               const selected = typeFilter === item;
-              const label = item === 'all' ? (isTr ? 'Tumu' : 'All') : getTypeLabel(item, locale);
+              const label = item === 'all' ? (isTr ? 'Tümü' : 'All') : getTypeLabel(item, locale);
               return (
                 <Pressable
                   key={item}
@@ -251,16 +257,16 @@ export default function DocumentsScreen({
               </View>
               <Text style={styles.emptyTitle}>
                 {query || typeFilter !== 'all'
-                  ? (isTr ? 'Belge bulunamadi' : 'No documents found')
-                  : (isTr ? 'Henuz belge yok' : 'No documents yet')}
+                  ? (isTr ? 'Belge bulunamadı' : 'No documents found')
+                  : (isTr ? 'Henüz belge yok' : 'No documents yet')}
               </Text>
               <Text style={styles.emptyBody}>
                 {query || typeFilter !== 'all'
-                  ? (isTr ? 'Filtreleri temizleyin veya farkli bir arama deneyin.' : 'Try clearing filters or using a different search.')
-                  : (isTr ? 'Vet ziyaretleri ve saglik kayitlarina eklenen dosyalar burada toplanir.' : 'Files linked to visits and records will gather here.')}
+                  ? (isTr ? 'Filtreleri temizleyin veya farklı bir arama deneyin.' : 'Try clearing filters or using a different search.')
+                  : (isTr ? 'Veteriner ziyaretleri ve sağlık kayıtlarına eklenen dosyalar burada toplanır.' : 'Files linked to visits and records will gather here.')}
               </Text>
               <Pressable style={styles.emptyCta} onPress={onBack}>
-                <Text style={styles.emptyCtaText}>{isTr ? 'Saglik Merkezine Don' : 'Back to Health Hub'}</Text>
+                <Text style={styles.emptyCtaText}>{isTr ? 'Sağlık Merkezine Dön' : 'Back to Health Hub'}</Text>
               </Pressable>
             </View>
           )}
@@ -291,30 +297,46 @@ const styles = StyleSheet.create({
     color: '#5f6a66',
     fontWeight: '700',
   },
+  introCard: {
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.82)',
+    borderWidth: 1,
+    borderColor: 'rgba(104,120,114,0.08)',
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 14,
+  },
   heroBlock: {
-    gap: 6,
+    gap: 4,
   },
   heroTitle: {
-    fontSize: 31,
-    lineHeight: 35,
+    fontSize: 29,
+    lineHeight: 33,
     fontWeight: '800',
     color: '#26312f',
     letterSpacing: -0.8,
   },
   heroBody: {
-    maxWidth: 320,
-    fontSize: 15,
-    lineHeight: 21,
+    maxWidth: 328,
+    fontSize: 14,
+    lineHeight: 20,
     color: '#6a726d',
     fontWeight: '500',
   },
-  searchInput: {
-    height: 46,
+  searchShell: {
+    minHeight: 48,
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#d9ddd5',
-    backgroundColor: 'rgba(255,255,255,0.82)',
+    backgroundColor: '#f9f8f4',
     paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  searchInput: {
+    flex: 1,
+    height: 46,
     color: '#30332e',
     fontSize: 14,
   },
@@ -325,21 +347,17 @@ const styles = StyleSheet.create({
   },
   summaryTile: {
     width: '48.5%',
-    minHeight: 104,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.84)',
+    minHeight: 96,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.9)',
     borderWidth: 1,
     borderColor: 'rgba(102,118,113,0.08)',
     padding: 14,
-    gap: 8,
+    gap: 6,
   },
   summaryTileActive: {
     borderColor: 'rgba(62,102,96,0.20)',
-    shadowColor: '#64827b',
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
+    backgroundColor: '#f7faf8',
   },
   summaryTilePressed: {
     transform: [{ scale: 0.986 }],
@@ -352,8 +370,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   summaryCount: {
-    fontSize: 28,
-    lineHeight: 31,
+    fontSize: 26,
+    lineHeight: 29,
     color: '#2f3432',
     fontWeight: '800',
     letterSpacing: -0.8,
@@ -365,17 +383,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   featuredCard: {
-    borderRadius: 30,
+    borderRadius: 20,
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: 'rgba(104,120,114,0.08)',
-    padding: 18,
-    gap: 14,
-    shadowColor: '#71857e',
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
-    elevation: 2,
+    padding: 16,
+    gap: 12,
   },
   featuredTopRow: {
     flexDirection: 'row',
@@ -393,15 +406,14 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   featuredEyebrow: {
-    fontSize: 10,
+    fontSize: 11,
     lineHeight: 14,
     color: '#7d847f',
-    fontWeight: '800',
-    letterSpacing: 1.1,
+    fontWeight: '700',
   },
   featuredTitle: {
-    fontSize: 21,
-    lineHeight: 26,
+    fontSize: 19,
+    lineHeight: 24,
     color: '#2d3330',
     fontWeight: '700',
     letterSpacing: -0.3,
@@ -417,12 +429,12 @@ const styles = StyleSheet.create({
   },
   featuredDatePill: {
     alignSelf: 'flex-start',
-    height: 28,
-    borderRadius: 999,
+    height: 26,
+    borderRadius: 10,
     paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f2f1eb',
+    backgroundColor: '#f4f3ee',
   },
   featuredDateText: {
     fontSize: 12,
@@ -448,7 +460,7 @@ const styles = StyleSheet.create({
   },
   filterChip: {
     height: 32,
-    borderRadius: 16,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#d2d6cf',
     backgroundColor: 'rgba(255,255,255,0.72)',
@@ -469,14 +481,14 @@ const styles = StyleSheet.create({
     color: '#315d58',
   },
   listShell: {
-    borderRadius: 30,
+    borderRadius: 20,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
     borderWidth: 1,
     borderColor: 'rgba(104,120,114,0.08)',
   },
   row: {
-    minHeight: 88,
+    minHeight: 84,
     paddingHorizontal: 16,
     paddingVertical: 14,
     flexDirection: 'row',
@@ -518,9 +530,9 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   rowChevronShell: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#f4f4ef',
@@ -528,7 +540,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(108,121,116,0.08)',
   },
   emptyWrap: {
-    marginTop: 32,
+    marginTop: 28,
     alignItems: 'center',
     paddingHorizontal: 24,
   },
@@ -556,7 +568,7 @@ const styles = StyleSheet.create({
   },
   emptyCta: {
     marginTop: 12,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(90,116,110,0.22)',
     backgroundColor: '#eef4f1',

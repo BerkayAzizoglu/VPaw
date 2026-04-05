@@ -10,6 +10,7 @@ type AppleTopBarProps = {
   rightSlot?: ReactNode;
   blurIntensity?: number;
   backgroundColor?: string;
+  titleVariant?: 'default' | 'hub';
 };
 
 export function TopBarCircleButton({
@@ -32,6 +33,7 @@ export default function AppleTopBar({
   rightSlot,
   blurIntensity = 26,
   backgroundColor = 'rgba(246, 244, 240, 0.72)',
+  titleVariant = 'default',
 }: AppleTopBarProps) {
   const insets = useSafeAreaInsets();
 
@@ -49,7 +51,7 @@ export default function AppleTopBar({
             )}
           </View>
 
-          <Text numberOfLines={1} style={styles.title}>
+          <Text numberOfLines={1} style={[styles.title, titleVariant === 'hub' ? styles.titleHub : null]}>
             {title}
           </Text>
 
@@ -120,5 +122,12 @@ const styles = StyleSheet.create({
     color: '#224641',
     letterSpacing: -0.28,
     paddingHorizontal: 10,
+  },
+  titleHub: {
+    textAlign: 'left',
+    fontSize: 33,
+    lineHeight: 39,
+    letterSpacing: -0.75,
+    color: '#24342d',
   },
 });

@@ -1,6 +1,6 @@
 import React from 'react';
 import PawLottie from '../components/PawLottie';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import { LinearGradient as ExpoLinearGradient } from 'expo-linear-gradient';
@@ -40,6 +40,8 @@ const C = {
   onSurface: '#30332e',
   onSurfaceVariant: '#626863',
 };
+
+const insightsLogo = require('../assets/illustrations/insights-logo.png');
 
 function IconSvg({
   kind,
@@ -87,6 +89,40 @@ function IconSvg({
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
       <Path d="M12 4L13.3 8L17.5 9.3L13.3 10.6L12 14.6L10.7 10.6L6.5 9.3L10.7 8L12 4Z" stroke={color} strokeWidth={1.8} strokeLinejoin="round" />
+    </Svg>
+  );
+}
+
+function BreedPetIcon({ color = '#9dd7bd' }: { color?: string }) {
+  return (
+    <Svg width={34} height={22} viewBox="0 0 34 22" fill="none">
+      <Path
+        d="M3 18.5H8.8C11.7 18.5 14.1 16.1 14.1 13.2V8.2C14.1 7.5 14.8 7 15.4 7.3L18.6 8.9C19 9.1 19.5 9.1 19.9 8.9L22.7 7.4C23.4 7 24.2 7.5 24.2 8.3V13.9C24.2 16.4 26.2 18.5 28.7 18.5H31"
+        stroke={color}
+        strokeWidth={2.1}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path d="M6.7 18.4C7.7 18.4 8.5 17.6 8.5 16.6C8.5 15.6 7.7 14.8 6.7 14.8C5.7 14.8 4.9 15.6 4.9 16.6C4.9 17.6 5.7 18.4 6.7 18.4Z" stroke={color} strokeWidth={1.8} />
+    </Svg>
+  );
+}
+
+function SmartOverviewBadgeArt() {
+  return (
+    <Svg width={88} height={88} viewBox="0 0 64 64" fill="none">
+      <Path d="M17.8 26.3L15.3 25.1" stroke="#b2aed2" strokeWidth={2.3} strokeLinecap="round" />
+      <Path d="M20.5 20.5L18.8 18.3" stroke="#b2aed2" strokeWidth={2.3} strokeLinecap="round" />
+      <Path d="M26.2 17.6L25.9 14.9" stroke="#b2aed2" strokeWidth={2.3} strokeLinecap="round" />
+      <Path d="M32 16.7V14.1" stroke="#b2aed2" strokeWidth={2.3} strokeLinecap="round" />
+      <Path d="M40.2 17.8L41.4 15.3" stroke="#b2aed2" strokeWidth={2.3} strokeLinecap="round" />
+      <Path d="M45.4 22.2L47.7 20.6" stroke="#b2aed2" strokeWidth={2.3} strokeLinecap="round" />
+      <Path d="M46.5 28.9L49.2 28.8" stroke="#b2aed2" strokeWidth={2.3} strokeLinecap="round" />
+      <Path d="M32 19.1C27.1 19.1 23.2 23 23.2 27.9C23.2 31 24.8 33.8 27.4 35.4V38.2C27.4 40 28.9 41.5 30.7 41.5H33.3C35.1 41.5 36.6 40 36.6 38.2V35.4C39.2 33.8 40.8 31 40.8 27.9C40.8 23 36.9 19.1 32 19.1Z" stroke="#706aab" strokeWidth={2.2} />
+      <Path d="M32 41.6V44.2" stroke="#615c98" strokeWidth={2.4} strokeLinecap="round" />
+      <Path d="M29.2 44.6H34.9" stroke="#615c98" strokeWidth={2.4} strokeLinecap="round" />
+      <Circle cx="45.5" cy="40.8" r="9.8" fill="#8b89c6" stroke="#f3f2fd" strokeWidth={1.4} />
+      <Path d="M45.5 35.8V40.8L48.7 43" stroke="#f4f3ff" strokeWidth={2.1} strokeLinecap="round" strokeLinejoin="round" />
     </Svg>
   );
 }
@@ -147,9 +183,34 @@ export default function InsightsScreen({
     outputRange: [0, 0.55, 1],
     extrapolate: 'clamp',
   });
-  const headerTitleScale = scrollY.interpolate({
-    inputRange: [0, 84, 180],
-    outputRange: [1.05, 0.97, 0.9],
+  const headerLogoOpacity = scrollY.interpolate({
+    inputRange: [0, 4, 22, 66],
+    outputRange: [0, 0.22, 0.78, 1],
+    extrapolate: 'clamp',
+  });
+  const headerLogoScale = scrollY.interpolate({
+    inputRange: [0, 28, 90],
+    outputRange: [0.95, 0.985, 1],
+    extrapolate: 'clamp',
+  });
+  const headerLogoTranslateY = scrollY.interpolate({
+    inputRange: [0, 28, 90],
+    outputRange: [-4, 0, 0],
+    extrapolate: 'clamp',
+  });
+  const headerTitleOpacity = scrollY.interpolate({
+    inputRange: [0, 8, 34, 76],
+    outputRange: [1, 0.88, 0.26, 0],
+    extrapolate: 'clamp',
+  });
+  const headerTitleTranslateY = scrollY.interpolate({
+    inputRange: [0, 76, 160],
+    outputRange: [0, -1, -4],
+    extrapolate: 'clamp',
+  });
+  const headerTitleTranslateX = scrollY.interpolate({
+    inputRange: [0, 76, 160],
+    outputRange: [0, -4, -8],
     extrapolate: 'clamp',
   });
 
@@ -169,27 +230,43 @@ export default function InsightsScreen({
         directionalLockEnabled
       >
         <View style={styles.heroCard}>
-          <Text style={styles.heroEyebrow}>{isTr ? 'INSIGHTS' : 'INSIGHTS'}</Text>
-          <Text style={styles.heroTitle}>{screenTitle}</Text>
-          <Text style={styles.heroText}>
-            {headline?.message
-              ? headline.message
-              : isTr
-                ? 'Kayitlar arttikca daha net saglik baglami ve takip oncelikleri gosteririz.'
-                : 'As more records arrive, this view turns them into clearer health context and priorities.'}
-          </Text>
+          <ExpoLinearGradient
+            pointerEvents="none"
+            colors={['#f6f5fe', '#eeebfb', '#e7e3f8']}
+            locations={[0.05, 0.55, 1]}
+            start={{ x: 0.15, y: 0.2 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.heroRightOval}
+          />
+          <View pointerEvents="none" style={styles.heroRightCut} />
+          <View style={styles.heroCardRow}>
+            <View style={styles.heroTextCol}>
+              <Text style={styles.heroTitleCompact}>{screenTitle}:</Text>
+              <Text style={styles.heroTextCompact}>
+                {headline?.message
+                  ? headline.message
+                  : isTr
+                    ? 'Aktif hatırlatıcı yok. Daha iyi bakım için ekleyin.'
+                    : 'No active reminders yet. Tap to add for better care.'}
+              </Text>
+            </View>
+          </View>
+          <View pointerEvents="none" style={styles.heroBadge}>
+            <SmartOverviewBadgeArt />
+          </View>
         </View>
 
         {breedCard ? (
           <View style={styles.breedInsightCard}>
-            <View style={styles.breedInsightTop}>
-              <View style={styles.breedInsightIconWrap}>
-                <IconSvg kind="spark" size={16} color="#43688d" />
+            <View style={styles.breedInsightHeaderRow}>
+              <View style={styles.breedInsightHeaderText}>
+                <Text style={styles.breedInsightBreed}>{breedCard.breed}</Text>
+                {breedCard.meta ? <Text style={styles.breedInsightMeta}>{breedCard.meta}</Text> : null}
               </View>
-              <Text style={styles.breedInsightTitle}>{breedCard.title}</Text>
+              <View style={styles.breedIconPill}>
+                <BreedPetIcon />
+              </View>
             </View>
-            <Text style={styles.breedInsightBreed}>{breedCard.breed}</Text>
-            {breedCard.meta ? <Text style={styles.breedInsightMeta}>{breedCard.meta}</Text> : null}
             <Text style={styles.breedInsightBody}>{breedCard.text}</Text>
           </View>
         ) : null}
@@ -279,9 +356,34 @@ export default function InsightsScreen({
           />
         </Animated.View>
         <View style={[styles.topBarRow, { height: topBarHeight + 2, paddingTop: topInset + 2 }]}>
-          <Animated.Text numberOfLines={1} style={[styles.topBarTitleText, { transform: [{ scale: headerTitleScale }] }]}>
-            {isTr ? 'Analiz' : 'Insights'}
+          <Animated.Text
+            numberOfLines={1}
+            style={[
+              styles.topBarTitle,
+              {
+                opacity: headerTitleOpacity,
+                transform: [
+                  { translateX: headerTitleTranslateX },
+                  { translateY: headerTitleTranslateY },
+                ],
+              },
+            ]}
+          >
+            {isTr ? 'Insights' : 'Insights'}
           </Animated.Text>
+          <Animated.View
+            pointerEvents="none"
+            style={[
+              styles.topBarCenterIconWrap,
+              { top: topInset + 2, height: 56 },
+              {
+                opacity: headerLogoOpacity,
+                transform: [{ translateY: headerLogoTranslateY }, { scale: headerLogoScale }],
+              },
+            ]}
+          >
+            <Image source={insightsLogo} style={styles.topBarCenterIcon} resizeMode="contain" />
+          </Animated.View>
           <View style={styles.topBarGhost} />
         </View>
       </View>
@@ -314,101 +416,157 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+    position: 'relative',
   },
-  topBarTitleText: {
+  topBarTitle: {
     flex: 1,
     fontSize: 34,
-    lineHeight: 38,
+    lineHeight: 40,
     fontWeight: '800',
-    color: '#30332e',
-    letterSpacing: -1,
+    letterSpacing: -0.8,
+    color: '#24342d',
+  },
+  topBarCenterIconWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+  },
+  topBarCenterIcon: {
+    width: 102,
+    height: 102,
+    marginTop: -8,
+    opacity: 0.98,
+    shadowColor: '#0f2019',
+    shadowOpacity: 0.26,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 7 },
+    elevation: 9,
   },
   topBarGhost: {
     width: 42,
     height: 42,
   },
   heroCard: {
-    borderRadius: 30,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-    backgroundColor: '#ffffff',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#f2effd',
     borderWidth: 1,
-    borderColor: 'rgba(110,120,116,0.08)',
-    shadowColor: '#6f7f79',
-    shadowOpacity: 0.07,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 6 },
+    borderColor: 'rgba(134,129,171,0.24)',
+    shadowColor: '#000',
+    shadowOpacity: 0.1,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 2 },
     elevation: 2,
+    overflow: 'hidden',
   },
-  heroEyebrow: {
-    fontSize: 10,
-    lineHeight: 14,
-    color: '#767d79',
-    fontWeight: '800',
-    letterSpacing: 1.2,
+  heroCardRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
   },
-  heroTitle: {
-    marginTop: 6,
-    fontSize: 31,
-    lineHeight: 35,
+  heroTextCol: {
+    flex: 1,
+    paddingTop: 2,
+    paddingRight: 104,
+  },
+  heroTitleCompact: {
+    fontSize: 18,
+    lineHeight: 23,
     fontWeight: '800',
     color: C.onSurface,
-    letterSpacing: -0.9,
+    letterSpacing: -0.2,
   },
-  heroText: {
-    marginTop: 10,
-    fontSize: 15,
-    lineHeight: 22,
-    color: C.onSurfaceVariant,
-    fontWeight: '500',
+  heroTextCompact: {
+    marginTop: 2,
+    fontSize: 14,
+    lineHeight: 20,
+    color: '#4f4e63',
+    fontWeight: '700',
   },
-  breedInsightCard: {
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: 'rgba(74,114,148,0.14)',
-    gap: 6,
+  heroRightOval: {
+    position: 'absolute',
+    right: -64,
+    top: -18,
+    width: 176,
+    height: 128,
+    borderRadius: 88,
+    borderWidth: 1.4,
+    borderColor: 'rgba(156,148,200,0.42)',
   },
-  breedInsightTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  heroRightCut: {
+    position: 'absolute',
+    right: 118,
+    top: 0,
+    width: 12,
+    height: 100,
+    backgroundColor: '#f2effd',
   },
-  breedInsightIconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: 10,
+  heroBadge: {
+    position: 'absolute',
+    right: 2,
+    top: 2,
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#e7f0fb',
   },
-  breedInsightTitle: {
-    fontSize: 12,
-    lineHeight: 16,
-    color: '#5a6982',
-    fontWeight: '800',
-    letterSpacing: 0.2,
+  breedInsightCard: {
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(93,103,99,0.16)',
+    gap: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.08,
+    shadowRadius: 7,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  breedInsightHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  breedInsightHeaderText: {
+    flex: 1,
+  },
+  breedIconPill: {
+    marginTop: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: '#f3faf6',
+    borderWidth: 1,
+    borderColor: 'rgba(141, 198, 170, 0.22)',
   },
   breedInsightBreed: {
     fontSize: 19,
     lineHeight: 24,
-    color: '#233244',
+    color: '#1f2329',
     fontWeight: '800',
-    letterSpacing: -0.3,
+    letterSpacing: -0.25,
   },
   breedInsightMeta: {
+    marginTop: 1,
     fontSize: 12,
     lineHeight: 16,
-    color: '#6e7b89',
+    color: '#585d63',
     fontWeight: '600',
   },
   breedInsightBody: {
-    marginTop: 2,
+    marginTop: 1,
     fontSize: 13,
-    lineHeight: 19,
-    color: '#4c5866',
+    lineHeight: 20,
+    color: '#353a40',
     fontWeight: '500',
   },
   metricsShell: {
